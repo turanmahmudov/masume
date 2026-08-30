@@ -1,0 +1,147 @@
+// Command masume is a database client for the terminal. It opens PostgreSQL, MySQL, SQLite,
+// Redis and MongoDB, and the servers that speak their protocols.
+//
+// This is the only entry point, and the only place that chooses between the two clients: the
+// screen for a user, or the protocol for an agent. Neither one starts before it is chosen.
+package main
+
+import (
+	"fmt"
+	"os"
+	"runtime/debug"
+	"slices"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/turanmahmudov/masume/internal/cfg"
+	"github.com/turanmahmudov/masume/internal/db/engines"
+	"github.com/turanmahmudov/masume/internal/hist"
+	"github.com/turanmahmudov/masume/internal/mcp"
+	"github.com/turanmahmudov/masume/internal/ui"
+)
+
+// version is what this client reports to the client of an agent, and what `--version`
+// returns. A release build stamps it with `-ldflags "-X main.version=…"`; a build from the
+// tree reads the revision the toolchain records instead.
+var version = "dev"
+
+// usage is what `--help` writes. It names every argument this command reads.
+const usage = `masume - a database client for the terminal
+
+usage:
+  masume                     open the client
+  masume --mcp               serve the profiles to an agent over JSON-RPC on stdio
+  masume --mcp --profile=NAME  serve that one profile alone
+  masume --mcp --check       open every profile once, report, and exit
+  masume --version           write the version and exit
+  masume --help              write this and exit
+
+The config file is read from $XDG_CONFIG_HOME/masume/config.toml, and the history
+from $XDG_STATE_HOME/masume/history.sqlite.`
+
+func main() {
+	argv := os.Args[1:]
+	if slices.Contains(argv, "--help") || slices.Contains(argv, "-h") {
+		fmt.Println(usage)
+		return
+	}
+	if slices.Contains(argv, "--version") || slices.Contains(argv, "-v") {
+		fmt.Println("masume " + resolveVersion())
+		return
+	}
+	if slices.Contains(argv, "--mcp") {
+		os.Exit(mcp.RunServer(argv, resolveVersion()))
+	}
+	if unknown := findUnknownArgument(argv); unknown != "" {
+		fmt.Fprintln(os.Stderr, "masume: "+unknown+" is not an argument this command reads")
+		fmt.Fprintln(os.Stderr, "run masume --help to see the ones it does")
+		os.Exit(2)
+	}
+	if err := runApp(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// resolveVersion returns what this build calls itself. A build that was stamped keeps its
+// stamp; any other reads the revision of the tree it was built from.
+func resolveVersion() string {
+	if version != "dev" {
+		return version
+	}
+	info, read := debug.ReadBuildInfo()
+	if !read {
+		return version
+	}
+	revision, modified := "", false
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			modified = setting.Value == "true"
+		}
+	}
+	if revision == "" {
+		return version
+	}
+	if len(revision) > 12 {
+		revision = revision[:12]
+	}
+	if modified {
+		return version + "+" + revision + "-dirty"
+	}
+	return version + "+" + revision
+}
+
+// findUnknownArgument returns the first argument the client does not read, so a typed flag is
+// reported rather than swallowed by a screen that then looks stuck.
+func findUnknownArgument(argv []string) string {
+	for _, argument := range argv {
+		if strings.HasPrefix(argument, "-") {
+			return argument
+		}
+	}
+	return ""
+}
+
+func runApp() error {
+	configPath := cfg.ResolveConfigPath()
+
+	// Written to stderr and kept for the app to show. Only the app reaches the user, because
+	// the renderer takes the alternate screen a moment later.
+	problems := []string{}
+
+	// A first run has no config file. Writing the starter gives the user something to edit
+	// and the connection form something to write into. A client that cannot write it still
+	// opens every connection it was given.
+	if _, err := cfg.EnsureConfigFile(configPath); err != nil {
+		problems = append(problems, "config: "+err.Error())
+	}
+
+	loaded := cfg.LoadConfig(configPath)
+	for _, problem := range loaded.Problems {
+		problems = append(problems,
+			fmt.Sprintf("skipped profile %q: %s", problem.Name, problem.Reason))
+	}
+	for _, problem := range loaded.ThemeProblems {
+		problems = append(problems, "theme: "+problem)
+	}
+
+	// The history file is opened whatever it returns: a client that cannot write its history
+	// still opens every connection.
+	historyStore, err := hist.Open(hist.DefaultPath())
+	if err != nil {
+		problems = append(problems, "history: "+err.Error())
+	}
+	defer func() { _ = historyStore.Close() }()
+
+	for _, problem := range problems {
+		fmt.Fprintln(os.Stderr, problem)
+	}
+
+	model := ui.NewModel(loaded, engines.CreateAdapters(), historyStore, problems)
+	_, runErr := tea.NewProgram(model).Run()
+	return runErr
+}

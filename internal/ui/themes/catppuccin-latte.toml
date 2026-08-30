@@ -1,0 +1,35 @@
+# Catppuccin Latte. Five of its accents sit under 3:1 against its own base, so each
+# of those is stepped toward black until it clears 4:1. The hue is the palette's;
+# only the weight moved.
+
+title = "Catppuccin Latte"
+appearance = "light"
+
+[palette]
+mauve = "#8839ef"
+red = "#d20f39"
+maroon = "#d43f4c"
+peach = "#c64e09"
+yellow = "#a56915"
+green = "#368624"
+sky = "#037dae"
+blue = "#1e66f5"
+
+[colors]
+background = "#e6e9ef"
+panel = "#eff1f5"
+header = "#ccd0da"
+zebra = "#dce0e8"
+border = "#bcc0cc"
+border_focus = "blue"
+text = "#4c4f69"
+muted = "#5c5f77"
+faint = "#7c7f93"
+accent = "blue"
+accent_alt = "mauve"
+accent_warm = "peach"
+info = "sky"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "maroon"

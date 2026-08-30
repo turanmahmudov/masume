@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or idea
+    url: https://github.com/turanmahmudov/masume/discussions
+    about: Ask how to do something, or talk about an idea before it becomes an issue.
+  - name: Security report
+    url: https://github.com/turanmahmudov/masume/security/advisories/new
+    about: Report a vulnerability in private. Never open a public issue for one.

@@ -1,0 +1,34 @@
+# Tokyo Night, the night variant of folke/tokyonight.nvim. Its two reds are red and
+# red1, which is what keeps a failure off a production mark here.
+
+title = "Tokyo Night"
+appearance = "dark"
+
+[palette]
+blue = "#7aa2f7"
+cyan = "#7dcfff"
+magenta = "#bb9af7"
+orange = "#ff9e64"
+yellow = "#e0af68"
+green = "#9ece6a"
+red = "#f7768e"
+red1 = "#db4b4b"
+
+[colors]
+background = "#16161e"
+panel = "#1a1b26"
+header = "#292e42"
+zebra = "#202331"
+border = "#3b4261"
+border_focus = "blue"
+text = "#c0caf5"
+muted = "#8b95bf"
+faint = "#6b74a0"
+accent = "blue"
+accent_alt = "magenta"
+accent_warm = "orange"
+info = "cyan"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "red1"

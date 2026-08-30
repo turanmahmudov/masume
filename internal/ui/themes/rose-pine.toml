@@ -1,0 +1,38 @@
+# Rosé Pine. It names no green, so what stands for success is its foam, which is
+# what the theme's own ports colour a string with. It names one red; the second is
+# its love stepped toward its gold.
+
+title = "Rosé Pine"
+appearance = "dark"
+
+[palette]
+love = "#eb6f92"
+love-warm = "#ee8480"
+gold = "#f6c177"
+rose = "#ebbcba"
+pine = "#5b93ad"
+foam = "#9ccfd8"
+iris = "#c4a7e7"
+peach = "#f1a082"
+ink = "#e0def4"
+ink-subtle = "#908caa"
+ink-quiet = "#6e6a86"
+
+[colors]
+background = "#191724"
+panel = "#1f1d2e"
+header = "#26233a"
+zebra = "#21202e"
+border = "#403d52"
+border_focus = "iris"
+text = "ink"
+muted = "ink-subtle"
+faint = "ink-quiet"
+accent = "iris"
+accent_alt = "rose"
+accent_warm = "peach"
+info = "pine"
+success = "foam"
+warning = "gold"
+danger = "love"
+error = "love-warm"

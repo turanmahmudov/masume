@@ -1,0 +1,38 @@
+# Rosé Pine Dawn, the light one of the three. Its gold and its rose sit under 3:1
+# against its own base, so each is stepped toward black until it clears 4:1. As in
+# the dark theme, foam stands for success, since Rosé Pine names no green.
+
+title = "Rosé Pine Dawn"
+appearance = "light"
+
+[palette]
+love = "#b4637a"
+love-deep = "#983f58"
+gold = "#a86e12"
+rose = "#b45f5b"
+pine = "#286983"
+foam = "#437e88"
+iris = "#8c76a4"
+peach = "#a85b32"
+ink = "#575279"
+ink-subtle = "#716d89"
+ink-quiet = "#8b8699"
+
+[colors]
+background = "#f2e9e1"
+panel = "#faf4ed"
+header = "#dfdad9"
+zebra = "#f4ede8"
+border = "#cecacd"
+border_focus = "iris"
+text = "ink"
+muted = "ink-subtle"
+faint = "ink-quiet"
+accent = "iris"
+accent_alt = "rose"
+accent_warm = "peach"
+info = "pine"
+success = "foam"
+warning = "gold"
+danger = "love"
+error = "love-deep"

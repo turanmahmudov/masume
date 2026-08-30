@@ -1,0 +1,198 @@
+[tools]
+# Pinned so the toolchain that builds the tools below is the one go.mod asks for. A tool
+# built with an older Go cannot read a package this tree compiles.
+go = "1.27"
+staticcheck = "2026.2.1"
+"go:golang.org/x/tools/cmd/goimports" = "latest"
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
+"go:golang.org/x/tools/cmd/deadcode" = "latest"
+"go:github.com/kisielk/errcheck" = "latest"
+
+[env]
+GOIMPORTS_LOCAL = "github.com/turanmahmudov/masume"
+
+[tasks.build]
+description = "Build every package"
+run = "go build ./..."
+
+[tasks.release]
+description = "Build a stripped release binary, stamped with the version"
+run = """
+set -eu
+version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+go build -trimpath -ldflags "-s -w -X main.version=$version" -o masume ./cmd/masume
+echo "built masume $version"
+ls -la masume
+"""
+
+[tasks.install]
+description = "Install a release binary into the Go bin directory"
+run = """
+set -eu
+version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+go install -trimpath -ldflags "-s -w -X main.version=$version" ./cmd/masume
+echo "installed masume $version to $(go env GOBIN GOPATH | head -1)"
+"""
+
+[tasks.test]
+description = "Run the tests that need no server"
+run = "go test ./..."
+
+[tasks.race]
+description = "Run the tests with the race detector"
+run = "go test -race ./..."
+
+# The servers live in compose.yaml. These tasks start and stop them; the tests only read
+# the URLs below. Nothing in Go knows a container is involved.
+[tasks.servers-up]
+description = "Start the test servers and wait until each is healthy"
+run = "docker compose up -d --wait"
+
+[tasks.servers-down]
+description = "Stop the test servers and discard their data"
+run = "docker compose down -v"
+
+# Run on their own, never as part of `check`: they need a server, so they are asked for.
+[tasks.test-integration]
+description = "Run the integration tests. Start the servers first with servers-up."
+env = { MASUME_TEST_POSTGRES = "postgres://postgres:secret@127.0.0.1:55432/shop", MASUME_TEST_MYSQL = "mysql://root:secret@127.0.0.1:55306/shop", MASUME_TEST_REDIS = "redis://127.0.0.1:55379/0", MASUME_TEST_MONGO = "mongodb://127.0.0.1:55017/shop", MASUME_TEST_MONGO_AUTH = "mongodb://root:secret@127.0.0.1:55018/shop", MASUME_TEST_MONGO_RS = "mongodb://127.0.0.1:55020/shop", MASUME_TEST_REQUIRE = "1" }
+run = "go test -tags=integration -count=1 ./..."
+
+[tasks.test-integration-full]
+description = "Start the servers, run the integration tests, then stop them"
+run = """
+set -eu
+trap 'docker compose down -v >/dev/null 2>&1 || true' EXIT
+docker compose up -d --wait
+mise run test-integration
+"""
+
+[tasks.fmt]
+description = "Format the source and group the imports"
+run = "goimports -local $GOIMPORTS_LOCAL -w $(git ls-files '*.go')"
+
+[tasks.fmt-check]
+description = "Report unformatted files"
+run = '''
+out=$(gofmt -l $(git ls-files '*.go'))
+if [ -n "$out" ]; then echo "gofmt needs to run on:"; echo "$out"; exit 1; fi
+'''
+
+[tasks.imports-check]
+description = "Report ungrouped imports"
+run = '''
+out=$(goimports -local $GOIMPORTS_LOCAL -l $(git ls-files '*.go'))
+if [ -n "$out" ]; then echo "imports are not grouped in:"; echo "$out"; exit 1; fi
+'''
+
+[tasks.errcheck]
+description = "Report unchecked errors"
+run = "errcheck ./..."
+
+[tasks.vuln]
+description = "Report known vulnerabilities"
+run = "govulncheck ./..."
+
+# Roots are the command, the tests, and the integration tests. Without `-test` every
+# test-only helper is reported, and without the tag the dbtest package is.
+[tasks.deadcode]
+description = "Report dead code"
+run = '''
+out=$(deadcode -test -tags=integration ./...)
+if [ -n "$out" ]; then echo "dead code:"; echo "$out"; exit 1; fi
+'''
+
+[tasks.cover]
+description = "Report coverage, per package and in total"
+run = '''
+go test -coverpkg=./internal/... -coverprofile=coverage.out ./... >/dev/null
+go tool cover -func=coverage.out | tail -1
+echo
+go test -cover ./... 2>&1 \
+  | grep -oE '^ok[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+coverage: [0-9.]+%' \
+  | sed -E 's|github.com/turanmahmudov/masume/||' \
+  | awk '{printf "%-34s %s\n", $2, $NF}' | sort -k2 -rn
+'''
+
+[tasks.cover-html]
+description = "Write an HTML coverage report"
+run = '''
+go test -coverpkg=./internal/... -coverprofile=coverage.out ./... >/dev/null
+go tool cover -html=coverage.out -o coverage.html
+echo "written to coverage.html"
+'''
+
+[tasks.cover-gaps]
+description = "Report uncovered functions, per package"
+run = '''
+go test -coverpkg=./internal/... -coverprofile=coverage.out ./... >/dev/null
+go tool cover -func=coverage.out | awk '$NF=="0.0%"' \
+  | sed -E 's|github.com/turanmahmudov/masume/||' \
+  | awk '{split($1,p,":"); n=split(p[1],d,"/"); pkg=""; for(i=1;i<n;i++) pkg=pkg d[i] "/"; count[pkg]++} END {for (k in count) printf "%-34s %d\n", k, count[k]}' \
+  | sort -k2 -rn
+'''
+
+[tasks.vet]
+description = "Run go vet"
+run = "go vet ./..."
+
+[tasks.staticcheck]
+description = "Run staticcheck with the settings in staticcheck.conf"
+run = "staticcheck ./..."
+
+[tasks.lint]
+description = "Run every check that needs no server"
+depends = [
+  "fmt-check",
+  "imports-check",
+  "vet",
+  "staticcheck",
+  "errcheck",
+  "deadcode",
+]
+
+[tasks.check]
+description = "The gate for every change: lint, vulnerabilities, race suite. No server."
+depends = ["lint", "vuln", "race"]
+
+# The README recording and the still frames. Both need docker for the database, and vhs,
+# ttyd and ffmpeg for the capture. Only someone rebuilding them runs these, so none of it
+# is in [tools].
+[tasks.demo-fixture]
+description = "Start the demo database and build the binary the tapes record"
+hide = true
+run = """
+set -eu
+docker compose up -d --wait postgres
+docker compose exec -T postgres psql -q -U postgres -d shop < vhs/seed.sql
+rm -rf .demo
+mkdir -p .demo/config/masume .demo/state .demo/bin
+cp vhs/config.toml .demo/config/masume/config.toml
+go build -o .demo/bin/masume ./cmd/masume
+"""
+
+[tasks.demo]
+description = "Rebuild the recording in the README"
+depends = ["demo-fixture"]
+run = """
+set -eu
+PATH="$PWD/.demo/bin:$PATH" mise exec \\
+  "go:github.com/charmbracelet/vhs@latest" ttyd@latest ffmpeg@latest \\
+  -- vhs vhs/demo.tape
+rm -rf .demo
+ls -la vhs/demo.gif
+"""
+
+[tasks.shots]
+description = "Rebuild the still frames in vhs/shots"
+depends = ["demo-fixture"]
+run = """
+set -eu
+rm -rf vhs/shots
+mkdir -p vhs/shots
+PATH="$PWD/.demo/bin:$PATH" mise exec \\
+  "go:github.com/charmbracelet/vhs@latest" ttyd@latest ffmpeg@latest \\
+  -- vhs vhs/shots.tape
+rm -rf .demo
+ls -la vhs/shots
+"""

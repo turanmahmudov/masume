@@ -1,0 +1,121 @@
+# masume config. This file was written on the first run.
+#
+# Every setting below is shown at its default, so nothing here changes how masume behaves.
+# Edit a line to change one. `config.example.toml` in the repository lists the rest,
+# including the key presets and the colour names, and docs/configuration.md explains them.
+#
+# masume rewrites only the `[profile.…]` block it manages when a connection is added or
+# edited in the form, so every other line here is kept, comments included.
+#
+# Never write a shared or a production password into a file that is tracked in git. Use
+# `auth = "prompt"`, `password_command`, or `password_env` instead.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Connections
+#
+# One profile is one connection, and the name after `profile.` is what the picker
+# lists. Uncomment a block and edit it, or press Ctrl+N then n and let the form
+# write it for you.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# [profile.shop]
+# engine               = "postgres"   # postgres mysql sqlite redis mongodb cockroach
+#                                     # timescale redshift neon supabase mariadb tidb
+#                                     # planetscale aurora-mysql
+# host                 = "127.0.0.1"
+# port                 = 5432         # the port of the engine where none is written
+# database             = "shop"       # the file, for sqlite; the number, for redis
+# user                 = "you"
+# auth                 = "password"   # password command prompt
+# password_env         = "PGPASSWORD" # read the password from the environment
+# password_command     = "pass db/shop"   # or from what this command writes
+# env                  = "dev"        # dev test prod. prod colours the whole title bar
+# mode                 = "write"      # write read-only
+# confirm_writes       = "off"        # off delete write. unset: off on dev, delete on test, write on prod
+# sslmode              = "prefer"     # disable allow prefer require verify-ca verify-full
+# statement_timeout_ms = 0            # 0 leaves the timeout to the server
+# keepalive_s          = 30           # seconds between two checks. 0 sends no keepalive
+# page_size            = 200          # the rows one page of the grid reads
+# autocommit           = true         # false holds a transaction open by hand
+# mcp                  = "read-only"  # off read-only read-write full. Never above
+#                                     # `[mcp] access` below
+# description          = "what this connection is"
+# ai_instructions      = "what the model should know about this database"
+
+# A file needs no host, no port and no user.
+#
+# [profile.notes]
+# engine   = "sqlite"
+# database = "~/Documents/notes.db"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Interface
+# ─────────────────────────────────────────────────────────────────────────────
+
+[ui]
+theme               = "ayu-dark"   # a theme masume ships, one of your own in the themes
+                                   # directory beside this file, or "system" to take the
+                                   # colours from the terminal and follow them
+icons               = "plain"      # plain ascii
+hide_system_schemas = true         # false lists pg_catalog and the rest in the tree
+
+# A glyph for one kind of row in the tree, which a Nerd Font can fill. A glyph written
+# as "" turns that one off. `config.example.toml` lists every kind.
+#
+# [ui.icon_glyphs]
+# table = ""
+# view  = ""
+
+# Colours laid over the theme, without writing a theme file.
+#
+# [ui.colors]
+# accent = "#7aa2f7"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Keys
+#
+# Every action has a chord in the default preset. A line you write replaces what
+# the preset bound; a line you leave out keeps it. `config.example.toml` names
+# every action, under the scope that handles it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[keys]
+preset = "default"
+
+# [keys.global]
+# run-at-cursor = ["ctrl+r", "f5"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The model the chat asks
+#
+# The key is read from the environment, which keeps it out of this file.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[ai]
+enabled              = true          # false removes every AI feature: no chat, no key,
+                                     # nothing about AI drawn or offered anywhere
+default_provider     = "anthropic"   # anthropic openai
+statement_timeout_ms = 30000         # how long a statement the model runs may take
+
+[ai.providers.anthropic]
+model        = "claude-opus-5"
+api_key_env  = "ANTHROPIC_API_KEY"
+# base_url_env = "ANTHROPIC_BASE_URL"   # point at a gateway rather than the provider
+
+[ai.providers.openai]
+model        = "gpt-5"
+api_key_env  = "OPENAI_API_KEY"
+# base_url_env = "OPENAI_BASE_URL"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# What an agent reaches through `masume --mcp`
+#
+# `profiles` is empty, so no profile is served until you name one here. A profile
+# may lower itself with `mcp` above; none may raise itself past `access`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[mcp]
+profiles   = []            # name a profile to serve it, such as ["shop"]
+access     = "read-only"   # off read-only read-write full
+row_limit  = 500           # the rows one read returns
+timeout_ms = 30000         # how long one read may take

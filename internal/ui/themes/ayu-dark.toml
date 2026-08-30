@@ -1,0 +1,60 @@
+# Ayu Dark, from `themes/dark.yaml` of ayu-theme/ayu-colors. `muted` is added: Ayu
+# names two text steps and this needs three, at 6:1 against a pane. `error` is kept
+# off the production red so the two never match.
+#
+# This is the theme every other one inherits from, so the `[syntax]` table below is
+# what a theme gets when it writes none of its own. Every rule in it names a colour
+# rather than a hex value, which is why it carries over to any theme.
+
+title = "Ayu Dark"
+appearance = "dark"
+
+[palette]
+gold = "#e6b450"
+purple = "#d2a6ff"
+sky = "#59c2ff"
+tangerine = "#ff8f40"
+lime = "#aad94c"
+amber = "#ffb454"
+rose = "#f07178"
+brick = "#d95757"
+
+[colors]
+background = "#0b0e14"
+panel = "#0d1017"
+header = "#141821"
+zebra = "#10141c"
+border = "#1b1f29"
+border_focus = "gold"
+text = "#bfbdb6"
+muted = "#8a9199"
+faint = "#5a6378"
+accent = "gold"
+accent_alt = "purple"
+accent_warm = "tangerine"
+info = "sky"
+success = "lime"
+warning = "amber"
+danger = "rose"
+error = "brick"
+
+[syntax]
+keyword = { fg = "accent", bold = true }
+type = { fg = "accent_alt" }
+string = { fg = "success" }
+comment = { fg = "muted", italic = true }
+number = { fg = "warning" }
+identifier = { fg = "text" }
+quoted = { fg = "text" }
+operator = { fg = "muted" }
+parameter = { fg = "danger" }
+problem = { fg = "error", underline = true }
+# A ground rather than a colour: the pair has to read as one mark across two
+# places, and the bracket already carries the operator colour.
+bracket = { fg = "on_accent", bg = "accent_alt" }
+# A ground and nothing else: the cell holds a space of the statement's own, and
+# nothing may be written into a buffer the server is sent.
+guide = { bg = "header" }
+# What a search found. It is a ground, because a match keeps the colour its token
+# already has and only the cell behind it changes.
+match = { fg = "on_accent", bg = "accent_warm" }

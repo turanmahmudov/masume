@@ -1,0 +1,37 @@
+name: duplicates
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  similarity:
+    name: duplicates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - id: analysis
+        uses: actions-cool/issues-similarity-analysis@v1
+        with:
+          filter-threshold: 0.6
+          since-days: 180
+          title-excludes: 'bug, error, issue, masume, feature, request, support, question, when, does, with'
+          comment-title: '### Possible duplicates'
+          comment-body: '- #${number} (${similarity})'
+          show-footer: false
+
+      - if: steps.analysis.outputs.similar-issues-found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh label create "possible duplicate" \
+            --repo "$REPOSITORY" \
+            --color d4c5f9 \
+            --description "May be a duplicate" \
+            --force
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPOSITORY" --add-label "possible duplicate"

@@ -1,0 +1,6 @@
+/dist/
+/masume
+*.test
+coverage.out
+coverage.html
+/.demo/

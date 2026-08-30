@@ -1,0 +1,43 @@
+# Solarized Dark. Its base ramp is the theme, so the three text steps are base2,
+# base1 and base0 as Ethan Schoonover set them: base1 as body text reads at 4.9:1
+# against base02, which is under what this app asks of ordinary text. Its accents
+# are tuned for base03 rather than base02, so the violet, the orange and the two
+# reds are stepped toward base2 until each of them can be read on a pane.
+
+title = "Solarized Dark"
+appearance = "dark"
+
+[palette]
+base03 = "#002b36"
+base02 = "#073642"
+base01 = "#586e75"
+base00 = "#657b83"
+base0 = "#839496"
+base1 = "#93a1a1"
+base2 = "#eee8d5"
+yellow = "#b58900"
+orange = "#d2693a"
+red = "#e05c55"
+violet = "#7e82c6"
+blue = "#268bd2"
+cyan = "#2aa198"
+green = "#859900"
+
+[colors]
+background = "base03"
+panel = "base02"
+header = "#104250"
+zebra = "#0a3b47"
+border = "base01"
+border_focus = "blue"
+text = "base2"
+muted = "base1"
+faint = "base0"
+accent = "blue"
+accent_alt = "violet"
+accent_warm = "orange"
+info = "cyan"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "#e58d82"

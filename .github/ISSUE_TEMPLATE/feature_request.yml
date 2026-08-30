@@ -1,0 +1,58 @@
+name: Feature request
+description: Ask for something the client does not do yet.
+labels: ["enhancement", "needs triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what stops you today.
+      placeholder: |
+        I read a table with 300 columns, and I cannot ... .
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What it should do
+      description: >
+        What you want, as the user would meet it: the key, the card, the row of the bar, or
+        the setting in the config file.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - The object tree
+        - The editor
+        - The grid and the staged edits
+        - The views of a result and the plan
+        - Export and copy
+        - The history and the saved queries
+        - The keys and the palette
+        - The themes and the colours
+        - The AI chat
+        - The MCP server
+        - The config file
+        - An engine
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do now
+      description: The way around it you use now, if there is one.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you open it
+      options:
+        - label: I searched the open and closed issues for the same request.
+          required: true

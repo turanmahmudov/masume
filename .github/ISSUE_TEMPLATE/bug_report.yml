@@ -1,0 +1,106 @@
+name: Bug report
+description: Report something the client gets wrong.
+labels: ["bug", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report. Please do not put a password, a host name of a private
+        server, or any row of real data into this issue.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What the client did, and what you expected instead.
+      placeholder: |
+        The grid drew ... , and I expected it to draw ... .
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce it
+      description: The smallest set of steps that shows the problem every time.
+      placeholder: |
+        1. Open a PostgreSQL profile.
+        2. Run `select 1`.
+        3. Press `s` on the first column.
+        4. The header marks no sort.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What `masume --version` writes.
+      placeholder: masume v0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      description: The engine of the profile the problem happens on.
+      options:
+        - PostgreSQL
+        - MySQL
+        - SQLite
+        - Redis
+        - MongoDB
+        - CockroachDB
+        - TimescaleDB
+        - Redshift
+        - Neon
+        - Supabase
+        - MariaDB
+        - TiDB
+        - PlanetScale
+        - Aurora MySQL
+        - Not about an engine
+    validations:
+      required: true
+
+  - type: input
+    id: server-version
+    attributes:
+      label: Server version
+      description: What the server reports, where the problem needs one.
+      placeholder: PostgreSQL 17.2
+
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and terminal
+      description: The system, the terminal program and its version.
+      placeholder: Linux 6.12, WezTerm 20240203
+    validations:
+      required: true
+
+  - type: textarea
+    id: frame
+    attributes:
+      label: What the screen showed
+      description: >
+        A screenshot, or the text of the frame. `tmux capture-pane -p` writes the frame as
+        text. Remove any value you cannot share before you paste it.
+
+  - type: textarea
+    id: config
+    attributes:
+      label: The profile, without its password
+      description: The `[profile.…]` block the problem happens on. Remove every password.
+      render: toml
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you open it
+      options:
+        - label: I searched the open and closed issues for the same report.
+          required: true
+        - label: This issue holds no password, no private host name and no real data.
+          required: true

@@ -1,0 +1,82 @@
+name: Engine problem
+description: A server the client opens wrongly, or will not open.
+labels: ["engine", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for a server that will not connect, a catalog read that returns the wrong
+        thing, a plan the client cannot read, or a flavour of an engine that behaves apart
+        from the standard one. Please put no password and no private host name in this issue.
+
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      options:
+        - PostgreSQL
+        - MySQL
+        - SQLite
+        - Redis
+        - MongoDB
+        - CockroachDB
+        - TimescaleDB
+        - Redshift
+        - Neon
+        - Supabase
+        - MariaDB
+        - TiDB
+        - PlanetScale
+        - Aurora MySQL
+        - An engine the client does not open yet
+    validations:
+      required: true
+
+  - type: input
+    id: server-version
+    attributes:
+      label: Server version
+      description: What the server reports.
+      placeholder: MariaDB 11.4.3
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What goes wrong
+      options:
+        - The connection is refused or never opens
+        - A catalog read returns the wrong data
+        - The plan cannot be read
+        - A statement is refused that the server accepts
+        - The DDL is written wrongly
+        - A type is drawn wrongly
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What the client did, what the server answered, and what you expected.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: >
+        The statements that set the case up, where they can be shared, and the steps in the
+        client. A case that runs against a container from `compose.yaml` is the most useful.
+      render: sql
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What `masume --version` writes.
+    validations:
+      required: true

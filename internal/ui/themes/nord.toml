@@ -1,0 +1,38 @@
+# Nord. Its Polar Night has four steps and none of them is a mid grey, so the two
+# quieter text steps are stepped between nord3 and nord4, which Nord itself leaves
+# empty. Its aurora red sits at 3:1 against nord0, so both reds here are that red
+# lightened: one for a production mark and a lighter one for a failure.
+
+title = "Nord"
+appearance = "dark"
+
+[palette]
+nord1 = "#3b4252"
+nord3 = "#4c566a"
+nord6 = "#eceff4"
+frost-green = "#8fbcbb"
+frost-cyan = "#88c0d0"
+aurora-red = "#c5737c"
+aurora-orange = "#d08770"
+aurora-yellow = "#ebcb8b"
+aurora-green = "#a3be8c"
+aurora-purple = "#b48ead"
+
+[colors]
+background = "#242933"
+panel = "#2e3440"
+header = "nord1"
+zebra = "#333a47"
+border = "nord3"
+border_focus = "frost-cyan"
+text = "nord6"
+muted = "#9ba5b8"
+faint = "#79839a"
+accent = "frost-cyan"
+accent_alt = "aurora-purple"
+accent_warm = "aurora-orange"
+info = "frost-green"
+success = "aurora-green"
+warning = "aurora-yellow"
+danger = "aurora-red"
+error = "#d3848c"

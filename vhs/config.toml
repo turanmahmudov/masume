@@ -1,0 +1,59 @@
+# The config the demo recording runs with. It points at the postgres container in
+# compose.yaml, so the password here opens nothing else.
+[ui]
+icons               = "plain"
+theme               = "ayu-dark"
+hide_system_schemas = true
+
+# Nerd Font glyphs. vhs/demo.tape renders with JetBrainsMono Nerd Font, which has them.
+[ui.icon_glyphs]
+schema            = ""
+table             = ""
+view              = ""
+materialized-view = ""
+function          = ""
+sequence          = ""
+type              = ""
+trigger           = ""
+column            = ""
+index             = "▤"
+primary-key       = ""
+foreign-key       = ""
+role              = ""
+roles             = ""
+
+favourites = ""
+recent     = ""
+query      = "≡"
+folder     = "▸"
+
+plan = "⊳"
+
+note    = ""
+problem = "✗"
+ai      = "✦"
+
+fold-closed = "▸"
+fold-open   = "▾"
+field       = "▸"
+close       = "×"
+dot         = "●"
+sort-up     = "↑"
+sort-down   = "↓"
+prompt      = "❯"
+step-back   = "‹"
+step-on     = "›"
+banner      = "⚑"
+new-tab     = "+"
+
+[profile.shop]
+engine      = "postgres"
+host        = "127.0.0.1"
+port        = 55432
+database    = "shop"
+user        = "postgres"
+auth        = "password"
+password    = "secret"
+env         = "dev"
+mode        = "write"
+description = "the demo shop database"

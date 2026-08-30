@@ -1,0 +1,106 @@
+# The servers the integration tests read. Nothing in Go knows this file exists: the tests
+# take a connection URL from the environment and open it like any other connection.
+#
+# `docker compose up -d --wait` comes back only once every health check passes, so whatever
+# starts the containers waits, and the tests never race a server that is still opening.
+#
+# The ports are not the usual ones, so these containers never take the port of a server
+# already running on the machine. Each one binds 127.0.0.1, because these servers hold no
+# real data and one of them has no password.
+name: masume-test
+
+services:
+  postgres:
+    image: ${MASUME_TEST_POSTGRES_IMAGE:-postgres:18-alpine}
+    environment:
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: shop
+    ports:
+      - "127.0.0.1:55432:5432"
+    # tmpfs, because a test database is thrown away and never needs to survive a restart.
+    # Postgres 18 keeps its data under a subdirectory of this mount, not in it.
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d shop"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
+  mysql:
+    image: ${MASUME_TEST_MYSQL_IMAGE:-mysql:8.4}
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: shop
+    ports:
+      - "127.0.0.1:55306:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      # MariaDB 11 ships mariadb-admin and no longer ships mysqladmin, so try both.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -psecret || mariadb-admin ping -h 127.0.0.1 -psecret"]
+      interval: 1s
+      timeout: 5s
+      retries: 120
+
+  redis:
+    image: ${MASUME_TEST_REDIS_IMAGE:-redis:8-alpine}
+    ports:
+      - "127.0.0.1:55379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
+  mongo:
+    image: ${MASUME_TEST_MONGO_IMAGE:-mongo:8}
+    ports:
+      - "127.0.0.1:55017:27017"
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
+  # A second MongoDB, with authentication turned on. A hosted deployment always has it,
+  # and the client behaves differently there: the server accepts a ping from anyone and
+  # refuses every other command, so a connection has to be checked with one of those.
+  mongo-auth:
+    image: ${MASUME_TEST_MONGO_IMAGE:-mongo:8}
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: secret
+      MONGO_INITDB_DATABASE: shop
+    ports:
+      - "127.0.0.1:55018:27017"
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "-u", "root", "-p", "secret",
+             "--eval", "db.adminCommand('ping')"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
+  # A third MongoDB, as a replica set of one server. A transaction needs one: a standalone
+  # server holds none. The server listens on the published port rather than the usual one,
+  # because a replica set advertises the address its members are reached by and the tests
+  # reach it from outside the container.
+  mongo-rs:
+    image: ${MASUME_TEST_MONGO_IMAGE:-mongo:8}
+    command: ["--replSet", "rs0", "--port", "55020", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:55020:55020"
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --port 55020 --eval \"
+             try { rs.status().ok } catch (e) {
+               rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'localhost:55020'}]}).ok
+             }\" | grep -q 1"]
+      interval: 2s
+      timeout: 10s
+      retries: 60

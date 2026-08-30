@@ -1,0 +1,412 @@
+# masume config. Copy this to ~/.config/masume/config.toml and edit it.
+#
+# The path is $XDG_CONFIG_HOME/masume/config.toml, and the themes of the user sit beside it
+# in a `themes` directory. A connection written in the client is written back into this file,
+# and every other line of it is kept.
+#
+# Never write a shared or a production password into a file that is tracked in git. Use
+# `auth = "prompt"`, `password_command`, or `password_env` instead.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Example profiles. One profile is one connection, and the name after `profile.`
+# is what the picker lists.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# A local server, asked for its password at connect.
+[profile.shop]
+engine   = "postgres"
+host     = "127.0.0.1"
+port     = 5432
+database = "shop"
+user     = "you"
+auth     = "prompt"
+env      = "dev"
+mode     = "write"
+sslmode  = "prefer"
+
+# A file. SQLite needs no host, no port and no user.
+[profile.notes]
+engine      = "sqlite"
+database    = "~/Documents/notes.db"
+env         = "dev"
+mode        = "write"
+description = "The notes database"
+
+# A production server, read only, with its password read from a password manager.
+[profile.shop-prod]
+engine               = "postgres"
+host                 = "db.example.com"
+port                 = 5432
+database             = "shop"
+user                 = "reader"
+auth                 = "command"
+password_command     = "pass db/shop-prod"
+env                  = "prod"
+mode                 = "read-only"
+sslmode              = "verify-full"
+statement_timeout_ms = 30000
+mcp                  = "read-only"
+
+# A server behind a jump host. The command runs before the connection opens, the client
+# waits for the port, and the command is stopped with the connection.
+[profile.shop-tunnel]
+engine          = "postgres"
+host            = "127.0.0.1"
+port            = 15432
+database        = "shop"
+user            = "reader"
+auth            = "prompt"
+env             = "prod"
+mode            = "read-only"
+command         = "ssh -N -L 15432:db.internal:5432 jump.example.com"
+command_timeout = 10
+wait_for_port   = 15432
+
+[ui]
+icons               = "plain"
+theme               = "system"
+hide_system_schemas = true
+
+[keys]
+preset = "default"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Everything else the config file reads. Uncomment a line to set it. The value
+# shown after a setting is the one the client uses when the line is left out.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# A profile is one connection. The name after `profile.` is what the picker lists.
+#
+# [profile.a-name]
+# engine               = "postgres"   # postgres mysql sqlite redis mongodb cockroach
+#                                     # timescale redshift neon supabase mariadb tidb
+#                                     # planetscale aurora-mysql
+# host                 = "127.0.0.1"
+# port                 = 5432         # the port the engine uses where none is written
+# database             = "shop"       # the file, for sqlite; the number, for redis
+# user                 = "you"
+# auth                 = "password"   # password command prompt
+# password             = "secret"     # written here, which the file has to be yours alone
+# password_env         = "PGPASSWORD" # read from the environment instead
+# password_command     = "pass db/shop"   # read from what this command writes
+# env                  = "dev"        # dev test prod. prod colours the whole title bar
+# mode                 = "write"      # write read-only
+# confirm_writes       = "off"        # off delete write. unset: off on dev, delete on test, write on prod
+# sslmode              = "prefer"     # disable allow prefer require verify-ca verify-full
+# statement_timeout_ms = 0            # 0 leaves the timeout to the server
+# keepalive_s          = 30           # seconds between two checks. 0 sends no keepalive
+# page_size            = 200          # the rows one page of the grid reads
+# command              = "ssh -N -L 5432:db:5432 jump"   # run before the connection opens
+# command_timeout      = 10           # seconds the command has to open its port
+# wait_for_port        = 5432         # the port the command must open
+# autocommit           = true         # false holds a transaction open by hand
+# mcp                  = "read-only"  # off read-only read-write full. What an agent may do
+#                                     # on this profile, never more than `[mcp] access`
+# description          = "what this connection is"
+# ai_instructions      = "what the model should know about this database"
+
+# [ui]
+# icons               = "plain"   # plain ascii. A glyph below written as nothing turns
+#                                 # that one kind off
+# theme               = "system"  # system, or a theme the client ships, or one of your own
+#                                 # in ~/.config/masume/themes
+# hide_system_schemas = true      # false lists pg_catalog and the rest in the tree
+
+# Every glyph the client draws for a kind of thing. A glyph written as nothing
+# turns that one kind off.
+#
+# [ui.icon_glyphs]
+# # what a row of the tree is
+# schema            = ""
+# table             = ""
+# view              = ""
+# materialized-view = ""
+# function          = ""
+# sequence          = ""
+# type              = ""
+# trigger           = ""
+# column            = ""
+# index             = "▤"
+# primary-key       = ""
+# foreign-key       = ""
+# role              = ""
+# roles             = ""
+#
+# # what the client keeps for you
+# favourites = ""
+# recent     = ""
+# query      = "≡"
+# folder     = "▸"
+#
+# # what a view of the result is
+# plan = "⊳"
+#
+# # what the client says
+# note    = ""
+# problem = "✗"
+# ai      = "✦"
+#
+# # the marks of a control
+# fold-closed = "▸"
+# fold-open   = "▾"
+# field       = "▸"
+# close       = "×"
+# dot         = "●"
+# sort-up     = "↑"
+# sort-down   = "↓"
+# prompt      = "❯"
+# step-back   = "‹"
+# step-on     = "›"
+# banner      = "⚑"
+# new-tab     = "+"
+
+# Colours laid over the theme, without writing a theme file. Every name the themes
+# use is allowed here.
+#
+# [ui.colors]
+# background   = "#16161e"
+# panel        = "#1a1b26"
+# header       = "#292e42"
+# zebra        = "#202331"
+# border       = "#3b4261"
+# border_focus = "#7aa2f7"
+# selection    = "#2a2f45"
+# text         = "#c0caf5"
+# muted        = "#8b95bf"
+# faint        = "#6b74a0"
+# accent       = "#7aa2f7"
+# accent_alt   = "#bb9af7"
+# accent_warm  = "#ff9e64"
+# on_accent    = "#16161e"
+# info         = "#7dcfff"
+# success      = "#9ece6a"
+# warning      = "#e0af68"
+# danger       = "#f7768e"
+# error        = "#db4b4b"
+# env_dev      = "#9ece6a"
+# env_test     = "#e0af68"
+# env_prod     = "#f7768e"
+
+# The keys. Every action the client has is named below, under the scope that
+# answers it, with the chords the default preset binds. A line you uncomment
+# replaces what the preset bound; a line left out keeps it. An action with no
+# chord after it is bound to none until you write one.
+#
+# [keys]
+# preset = "default"
+#
+# [keys.global]   # every pane answers these
+# activate-tab         = ["meta+digit"]
+# ai-fix-error         = ["ctrl+h"]
+# begin-transaction    = ["ctrl+b"]
+# cancel-query         = ["ctrl+x"]
+# close-connection     = ["ctrl+w"]
+# close-tab            = ["meta+w"]
+# commit-transaction   = ["ctrl+l"]
+# explain              = ["ctrl+e"]
+# explain-analyze      = ["ctrl+y"]
+# export-csv           = ["ctrl+s"]
+# export-json          = ["ctrl+g"]
+# focus-editor         = ["meta+p e"]
+# focus-next-pane      = ["tab"]
+# focus-previous-pane  = ["shift+tab"]
+# focus-result         = ["meta+p r"]
+# focus-sidebar        = ["meta+p s"]
+# name-tab             = ["meta+t"]
+# new-query-tab        = ["meta+n"]
+# next-connection      = ["}", "meta+right"]
+# next-page            = ["ctrl+f"]
+# next-statement       = ["'"]
+# next-tab             = ["]", "meta+down"]
+# next-view            = ["."]
+# open-picker          = ["ctrl+n"]
+# previous-connection  = ["{", "meta+left"]
+# previous-statement   = [";"]
+# previous-tab         = ["[", "meta+up"]
+# previous-view        = [","]
+# refresh-objects      = ["f5"]
+# reopen-tab           = ["meta+shift+w"]
+# reveal-sql           = ["meta+e"]
+# rollback-transaction = ["ctrl+u"]
+# run-at-cursor        = ["ctrl+r"]
+# run-batch            = ["meta+r"]
+# save-query           = ["ctrl+p"]
+# select-view          = ["digit"]
+# send-to-ai           = ["meta+i"]
+# show-activity        = ["meta+o a"]
+# show-ai-chat         = ["ctrl+i"]
+# show-help            = ["?"]
+# show-history         = ["ctrl+t"]
+# show-palette         = ["ctrl+k"]
+# show-saved           = ["ctrl+q"]
+# show-themes          = ["meta+o t"]
+# toggle-autocommit    = ["ctrl+o"]
+# toggle-result        = ["meta+d"]
+# toggle-sidebar       = ["meta+s"]
+#
+# [keys.grid]   # the rows of the result
+# add-sort-column    = ["shift+s"]
+# clear-rewrites     = ["c"]
+# copy-csv           = ["shift+c c"]
+# copy-inserts       = ["shift+c i"]
+# copy-json          = ["shift+c j"]
+# copy-markdown      = ["shift+c m"]
+# copy-menu          = ["y"]
+# count-rows         = ["t"]
+# cursor-down        = ["down"]
+# cursor-first-row   = ["home"]
+# cursor-last-row    = ["end"]
+# cursor-left        = ["left"]
+# cursor-page-down   = ["pagedown"]
+# cursor-page-up     = ["pageup"]
+# cursor-right       = ["right"]
+# cursor-up          = ["up"]
+# discard-changes    = ["shift+x"]
+# duplicate-row      = ["shift+d"]
+# edit-cell          = ["e"]
+# exclude-cell       = ["x"]
+# filter-by-cell     = ["f"]
+# filter-by-values   = ["shift+f"]
+# filter-where       = ["w"]
+# follow-foreign-key = ["g"]
+# freeze-columns     = ["z"]
+# go-to-column       = ["a"]
+# insert-row         = ["n"]
+# open-menu          = ["m"]
+# open-row           = ["return"]
+# pop-filter         = ["u"]
+# redo-change        = ["ctrl+shift+z", "shift+z"]
+# review-changes     = ["p"]
+# search-columns     = ["/"]
+# sort-column        = ["s"]
+# toggle-delete      = ["d"]
+# toggle-masking     = ["shift+m"]
+# undo-change        = ["ctrl+z"]
+# view-cell          = ["v"]
+#
+# [keys.plan]   # the plan of a statement
+# ai-check-plan   = ["i"]
+# copy-plan       = ["y"]
+# toggle-raw-plan = ["r"]
+#
+# [keys.tree]   # the object tree
+# cursor-down           = ["down"]
+# cursor-first-row      = ["home"]
+# cursor-last-row       = ["end"]
+# cursor-page-down      = ["pagedown"]
+# cursor-page-up        = ["pageup"]
+# cursor-up             = ["up"]
+# describe-table        = ["i"]
+# filter-tree           = ["/"]
+# fold-row              = ["left"]
+# object-menu           = ["m"]
+# open-in-new-tab       = ["o"]
+# open-node             = ["return"]
+# toggle-favourite      = ["f"]
+# toggle-system-schemas = ["h"]
+# unfold-row            = ["right"]
+#
+# [keys.editor]   # the statement, while the caret is in it
+# caret-down           = ["down", "shift+down"]
+# caret-left           = ["left", "shift+left"]
+# caret-line-end       = ["end", "shift+end"]
+# caret-line-start     = ["home", "shift+home"]
+# caret-page-down      = ["pagedown", "shift+pagedown"]
+# caret-page-up        = ["pageup", "shift+pageup"]
+# caret-right          = ["right", "shift+right"]
+# caret-text-end       = ["ctrl+end", "ctrl+shift+end"]
+# caret-text-start     = ["ctrl+home", "ctrl+shift+home"]
+# caret-up             = ["up", "shift+up"]
+# caret-word-left      = ["ctrl+left", "ctrl+shift+left"]
+# caret-word-right     = ["ctrl+right", "ctrl+shift+right"]
+# comment-lines        = ["meta+c"]
+# delete-back          = ["backspace"]
+# delete-forward       = ["delete"]
+# delete-word-back     = ["ctrl+backspace", "meta+backspace"]
+# delete-word-forward  = ["ctrl+delete", "meta+delete"]
+# find-in-statement    = ["meta+f"]
+# format-sql           = ["ctrl+d"]
+# indent-lines         = ["meta+]"]
+# next-match           = ["f3"]
+# next-problem         = ["f8"]
+# open-line            = ["return"]
+# outdent-lines        = ["meta+["]
+# paste-text           = ["ctrl+v"]
+# previous-match       = ["shift+f3"]
+# redo-edit            = ["ctrl+shift+z", "meta+z"]
+# select-all           = ["ctrl+a"]
+# undo-edit            = ["ctrl+z"]
+#
+# [keys.list]   # any list with a cursor of its own
+# choose-row       = ["return"]
+# cursor-down      = ["down"]
+# cursor-first-row = ["home"]
+# cursor-last-row  = ["end"]
+# cursor-page-down = ["pagedown"]
+# cursor-page-up   = ["pageup"]
+# cursor-up        = ["up"]
+#
+# [keys.dialog]   # the card on top
+# answer-no         = ["n"]
+# answer-yes        = ["y"]
+# apply-changes     = ["ctrl+y"]
+# close             = ["escape"]
+# copy-value        = ["ctrl+a", "y"]
+# delete-connection = ["d"]
+# discard-changes   = ["x"]
+# edit-connection   = ["e"]
+# insert-ai-sql     = ["ctrl+j"]
+# keep-all-values   = ["a"]
+# keep-only-value   = ["o"]
+# list-secondary    = ["ctrl+d"]
+# new-ai-chat       = ["ctrl+l"]
+# new-connection    = ["n"]
+# next-turn         = ["ctrl+n"]
+# open-in-new-tab   = ["meta+return"]
+# prettify-json     = ["ctrl+f"]
+# previous-turn     = ["ctrl+p"]
+# replace-in-statement = ["ctrl+r"]   # in the find field, replace instead of marking
+# run-with-values   = ["ctrl+r"]
+# save-cell         = ["ctrl+s"]
+# save-form         = ["ctrl+s"]
+# scroll-back       = ["pageup"]
+# scroll-forward    = ["pagedown"]
+# set-default       = ["ctrl+d"]
+# set-empty         = ["ctrl+e"]
+# set-null          = ["ctrl+l"]
+# show-ai-chats     = ["ctrl+o"]
+# stop-ai-reply     = ["ctrl+x"]
+# test-connection   = ["ctrl+t"]
+# toggle-value      = ["space"]
+# write-export      = ["ctrl+s"]
+
+# The model the chat asks. A key written here is read from the environment by
+# default, which keeps it out of the file.
+#
+# [ai]
+# enabled              = true          # false removes every AI feature: the chat cannot be
+#                                      # opened, no AI action is bound, and nothing about AI
+#                                      # is drawn or offered anywhere
+# default_provider     = "anthropic"   # anthropic openai
+# statement_timeout_ms = 30000         # how long a statement the model runs may take
+#
+# [ai.providers.anthropic]
+# model        = "claude-opus-5"
+# api_key      = "sk-..."              # written here, or read from the environment below
+# api_key_env  = "ANTHROPIC_API_KEY"
+# base_url     = "https://api.anthropic.com"
+# base_url_env = "ANTHROPIC_BASE_URL"
+#
+# [ai.providers.openai]
+# model        = "gpt-5"
+# api_key_env  = "OPENAI_API_KEY"
+# base_url_env = "OPENAI_BASE_URL"
+
+# What an agent reaches through the MCP server. A profile may lower its own level
+# with `mcp` above; none may raise it past this one.
+#
+# [mcp]
+# profiles   = ["a-name"]    # the profiles the server opens. Empty means none are served
+# access     = "read-only"   # off read-only read-write full
+# row_limit  = 500           # the rows one read answers
+# timeout_ms = 30000         # how long one read may take

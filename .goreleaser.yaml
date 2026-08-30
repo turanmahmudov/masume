@@ -1,0 +1,70 @@
+version: 2
+
+project_name: masume
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: masume
+    main: ./cmd/masume
+    binary: masume
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: masume
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - config.example.toml
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  draft: false
+  prerelease: auto
+  footer: |
+    ## Install
+
+    ```sh
+    go install github.com/turanmahmudov/masume/cmd/masume@{{ .Tag }}
+    ```
+
+    Or take an archive below, unpack it, and put `masume` on the PATH.
+
+    Check what you downloaded against `checksums.txt`:
+
+    ```sh
+    sha256sum -c checksums.txt --ignore-missing
+    ```

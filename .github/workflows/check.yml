@@ -1,0 +1,139 @@
+name: check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@v4
+        with:
+          install: true
+          cache: true
+
+      - name: gofmt
+        run: mise run fmt-check
+
+      - name: goimports
+        run: mise run imports-check
+
+      - name: go vet
+        run: mise run vet
+
+      - name: staticcheck
+        run: mise run staticcheck
+
+      - name: errcheck
+        run: mise run errcheck
+
+  vuln:
+    name: vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@v4
+        with:
+          install: true
+          cache: true
+
+      - run: mise run vuln
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@v4
+        with:
+          install: true
+          cache: true
+
+      - name: race suite
+        run: mise run race
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@v4
+        with:
+          install: true
+          cache: true
+
+      - name: build and run
+        run: |
+          go build -o masume ./cmd/masume
+          ./masume --version
+          ./masume --help
+
+      - name: cross build
+        run: |
+          for target in linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/masume
+          done
+
+  integration:
+    name: integration (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: current
+            postgres: postgres:18-alpine
+            mysql: mysql:8.4
+          - name: oldest supported
+            postgres: postgres:14-alpine
+            mysql: mysql:8.0
+          - name: mariadb
+            postgres: postgres:18-alpine
+            mysql: mariadb:11
+    env:
+      MASUME_TEST_POSTGRES_IMAGE: ${{ matrix.postgres }}
+      MASUME_TEST_MYSQL_IMAGE: ${{ matrix.mysql }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@v4
+        with:
+          install: true
+          cache: true
+
+      - run: mise run test-integration-full

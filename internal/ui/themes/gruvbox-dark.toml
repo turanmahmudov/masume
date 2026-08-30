@@ -1,0 +1,36 @@
+# Gruvbox Dark, medium contrast. Its bright red carries the production mark. Its
+# plain red sits at 2.7:1 against its own base, so the failure red is that red
+# stepped toward the foreground until it can be read there.
+
+title = "Gruvbox Dark"
+appearance = "dark"
+
+[palette]
+red = "#fb4934"
+red-lifted = "#d45444"
+green = "#b8bb26"
+yellow = "#fabd2f"
+yellow-plain = "#d79921"
+blue = "#83a598"
+purple = "#d3869b"
+aqua = "#8ec07c"
+orange = "#fe8019"
+
+[colors]
+background = "#1d2021"
+panel = "#282828"
+header = "#3c3836"
+zebra = "#32302f"
+border = "#504945"
+border_focus = "yellow"
+text = "#ebdbb2"
+muted = "#bdae93"
+faint = "#928374"
+accent = "yellow"
+accent_alt = "purple"
+accent_warm = "orange"
+info = "aqua"
+success = "green"
+warning = "yellow-plain"
+danger = "red"
+error = "red-lifted"

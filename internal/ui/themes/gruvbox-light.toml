@@ -1,0 +1,34 @@
+# Gruvbox Light, medium contrast. The faded set is what reads on a light ground, so
+# every mark here comes from it rather than from the neutral set of the dark theme.
+
+title = "Gruvbox Light"
+appearance = "light"
+
+[palette]
+red = "#9d0006"
+red-warm = "#af3a03"
+green = "#79740e"
+yellow = "#ab7117"
+blue = "#076678"
+purple = "#8f3f71"
+aqua = "#427b58"
+orange = "#af3a03"
+
+[colors]
+background = "#f2e5bc"
+panel = "#fbf1c7"
+header = "#ebdbb2"
+zebra = "#f4e8c1"
+border = "#d5c4a1"
+border_focus = "blue"
+text = "#3c3836"
+muted = "#665c54"
+faint = "#7c6f64"
+accent = "blue"
+accent_alt = "purple"
+accent_warm = "orange"
+info = "aqua"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "red-warm"

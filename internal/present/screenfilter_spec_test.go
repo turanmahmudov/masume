@@ -1,0 +1,212 @@
+package present_test
+
+import (
+	"testing"
+
+	"github.com/turanmahmudov/masume/internal/present"
+)
+
+// The banner is a summary: a column of several kept values reads as a count, so two different
+// filters read alike in it. Anything that keeps what it drew from a filter has to tell them
+// apart, which is what the fingerprint is for.
+func TestScreenFilterFingerprintTellsApartWhatTheBannerDoesNot(t *testing.T) {
+	first := present.ScreenFilter{Values: map[int]map[string]bool{
+		0: {"ada": true, "grace": true, "alan": true},
+	}}
+	second := present.ScreenFilter{Values: map[int]map[string]bool{
+		0: {"ada": true, "grace": true, "held": true},
+	}}
+
+	names := []string{"customer"}
+	if present.DescribeScreenFilter(first, names) != present.DescribeScreenFilter(second, names) {
+		t.Skip("the banner already tells these two apart, so there is nothing to guard")
+	}
+	if first.Fingerprint() == second.Fingerprint() {
+		t.Error("two filters keeping different values answer one fingerprint")
+	}
+}
+
+// The same filter answers the same fingerprint however its maps were walked, or a frame would
+// redraw for no reason.
+func TestScreenFilterFingerprintIsTheSameForTheSameFilter(t *testing.T) {
+	build := func() present.ScreenFilter {
+		return present.ScreenFilter{
+			Values: map[int]map[string]bool{
+				0: {"ada": true, "grace": true},
+				3: {"held": true},
+			},
+			Search: "or",
+		}
+	}
+	first := build().Fingerprint()
+	for range 20 {
+		if build().Fingerprint() != first {
+			t.Fatal("the same filter answered two fingerprints")
+		}
+	}
+}
+
+// Every part of a filter changes it, because each one hides a different set of rows.
+func TestScreenFilterFingerprintFollowsEveryPart(t *testing.T) {
+	base := present.ScreenFilter{
+		Values: map[int]map[string]bool{0: {"ada": true}},
+		Search: "or",
+	}
+
+	for _, held := range []struct {
+		name   string
+		change func(filter *present.ScreenFilter)
+	}{
+		{"a value kept", func(filter *present.ScreenFilter) {
+			filter.Values = map[int]map[string]bool{0: {"grace": true}}
+		}},
+		{"another value as well", func(filter *present.ScreenFilter) {
+			filter.Values = map[int]map[string]bool{0: {"ada": true, "grace": true}}
+		}},
+		{"another column", func(filter *present.ScreenFilter) {
+			filter.Values = map[int]map[string]bool{1: {"ada": true}}
+		}},
+		{"a column as well", func(filter *present.ScreenFilter) {
+			filter.Values = map[int]map[string]bool{
+				0: {"ada": true}, 1: {"grace": true},
+			}
+		}},
+		{"the text searched for", func(filter *present.ScreenFilter) {
+			filter.Search = "and"
+		}},
+		{"nothing searched for", func(filter *present.ScreenFilter) {
+			filter.Search = ""
+		}},
+		{"no filter at all", func(filter *present.ScreenFilter) {
+			*filter = present.NoScreenFilter()
+		}},
+	} {
+		t.Run(held.name, func(t *testing.T) {
+			changed := present.ScreenFilter{
+				Values: map[int]map[string]bool{0: {"ada": true}}, Search: "or",
+			}
+			held.change(&changed)
+			if changed.Fingerprint() == base.Fingerprint() {
+				t.Error("the filter changed and answers the same fingerprint")
+			}
+		})
+	}
+}
+
+func TestCountColumnValuesRanksTheMostCommonFirst(t *testing.T) {
+	rows := [][]string{
+		{"1", "new"},
+		{"2", "paid"},
+		{"3", "new"},
+		{"4", "sent"},
+		{"5", "new"},
+		{"6", "paid"},
+	}
+	counted := present.CountColumnValues(rows, 1)
+	want := []present.ValueCount{
+		{Value: "new", Count: 3},
+		{Value: "paid", Count: 2},
+		{Value: "sent", Count: 1},
+	}
+	if len(counted) != len(want) {
+		t.Fatalf("got %v, want %v", counted, want)
+	}
+	for at, held := range counted {
+		if held != want[at] {
+			t.Errorf("row %d = %v, want %v", at, held, want[at])
+		}
+	}
+}
+
+func TestCountColumnValuesKeepsTheOrderTheyWereFoundForATie(t *testing.T) {
+	rows := [][]string{{"b"}, {"a"}, {"c"}}
+	counted := present.CountColumnValues(rows, 0)
+	for at, want := range []string{"b", "a", "c"} {
+		if counted[at].Value != want {
+			t.Errorf("row %d = %q, want %q", at, counted[at].Value, want)
+		}
+	}
+}
+
+func TestCountColumnValuesReadsAColumnOutsideTheRowAsEmpty(t *testing.T) {
+	rows := [][]string{{"1"}, {"2"}}
+	for _, columnIndex := range []int{-1, 5} {
+		counted := present.CountColumnValues(rows, columnIndex)
+		if len(counted) != 1 || counted[0].Value != "" || counted[0].Count != 2 {
+			t.Errorf("column %d gave %v", columnIndex, counted)
+		}
+	}
+}
+
+func TestApplyValueFilterKeepsOnlyTheValuesChosen(t *testing.T) {
+	filter := present.ApplyValueFilter(present.NoScreenFilter(), 1,
+		map[string]bool{"new": true}, 3)
+	if !present.IsRowShown([]string{"1", "new"}, filter) {
+		t.Error("a row of a kept value was hidden")
+	}
+	if present.IsRowShown([]string{"2", "paid"}, filter) {
+		t.Error("a row of a value not kept was shown")
+	}
+}
+
+func TestApplyValueFilterClearsTheColumnWhereNothingIsHidden(t *testing.T) {
+	// Keeping every value, or none, hides nothing, so the entry goes rather than being
+	// kept as a filter that does nothing.
+	for _, held := range []struct {
+		name      string
+		kept      map[string]bool
+		available int
+	}{
+		{"no value", map[string]bool{}, 3},
+		{"every value", map[string]bool{"a": true, "b": true, "c": true}, 3},
+		{"more than are there", map[string]bool{"a": true, "b": true}, 1},
+	} {
+		t.Run(held.name, func(t *testing.T) {
+			filter := present.ApplyValueFilter(present.NoScreenFilter(), 1,
+				held.kept, held.available)
+			if !filter.IsEmpty() {
+				t.Errorf("the filter still hides something: %v", filter.Values)
+			}
+		})
+	}
+}
+
+func TestApplyValueFilterLeavesTheOtherColumnsAndTheSearchAlone(t *testing.T) {
+	first := present.ApplyValueFilter(present.NoScreenFilter(), 0,
+		map[string]bool{"1": true}, 3)
+	first = present.ApplySearchTerm(first, "ada")
+	second := present.ApplyValueFilter(first, 1, map[string]bool{"new": true}, 3)
+
+	if second.Search != "ada" {
+		t.Errorf("Search = %q, want it kept", second.Search)
+	}
+	if len(second.Values) != 2 {
+		t.Errorf("the filter holds %d columns, want 2", len(second.Values))
+	}
+	if len(first.Values) != 1 {
+		t.Error("the filter it was built from was changed")
+	}
+}
+
+func TestApplySearchTermKeepsTheTermWithoutItsBlanks(t *testing.T) {
+	filter := present.ApplySearchTerm(present.NoScreenFilter(), "  ada  ")
+	if filter.Search != "ada" {
+		t.Errorf("Search = %q, want %q", filter.Search, "ada")
+	}
+	if !present.IsRowShown([]string{"1", "Ada"}, filter) {
+		t.Error("a row holding the term was hidden")
+	}
+	if present.IsRowShown([]string{"2", "Grace"}, filter) {
+		t.Error("a row without the term was shown")
+	}
+}
+
+func TestApplySearchTermWithABlankTermClearsTheSearch(t *testing.T) {
+	filter := present.ApplySearchTerm(present.NoScreenFilter(), "ada")
+	for _, term := range []string{"", "   "} {
+		cleared := present.ApplySearchTerm(filter, term)
+		if cleared.Search != "" {
+			t.Errorf("term %q left Search = %q", term, cleared.Search)
+		}
+	}
+}

@@ -1,0 +1,36 @@
+# Catppuccin Mocha. The two quieter text steps take subtext0 and overlay1 rather
+# than overlay0 and surface1, which sit at 3.4:1 and 2:1 against the base and are
+# not text a person reads.
+
+title = "Catppuccin Mocha"
+appearance = "dark"
+
+[palette]
+rosewater = "#f5e0dc"
+mauve = "#cba6f7"
+red = "#f38ba8"
+maroon = "#eba0ac"
+peach = "#fab387"
+yellow = "#f9e2af"
+green = "#a6e3a1"
+sky = "#89dceb"
+blue = "#89b4fa"
+
+[colors]
+background = "#181825"
+panel = "#1e1e2e"
+header = "#313244"
+zebra = "#262637"
+border = "#45475a"
+border_focus = "blue"
+text = "#cdd6f4"
+muted = "#a6adc8"
+faint = "#7f849c"
+accent = "blue"
+accent_alt = "mauve"
+accent_warm = "peach"
+info = "sky"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "maroon"
