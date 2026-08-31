@@ -93,6 +93,9 @@ func formatFloat(value float64) string {
 
 // CollapseWhitespace turns every run of blank characters into one space.
 func CollapseWhitespace(text string) string {
+	if !needsCollapse(text) {
+		return text
+	}
 	var built strings.Builder
 	built.Grow(len(text))
 	blank := false
@@ -112,6 +115,31 @@ func CollapseWhitespace(text string) string {
 		built.WriteByte(' ')
 	}
 	return built.String()
+}
+
+// needsCollapse is true where a run of blanks, a blank at either end, or a blank that is
+// no space would be written differently. A document of a collection is kilobytes of text
+// with nothing to collapse, so the text of one is answered without being built again.
+func needsCollapse(text string) bool {
+	previousBlank := false
+	for at := 0; at < len(text); at++ {
+		blank := isBlankByte(text[at])
+		if blank && (previousBlank || at == 0 || at == len(text)-1 || text[at] != ' ') {
+			return true
+		}
+		previousBlank = blank
+	}
+	return false
+}
+
+// isBlankByte is true for a byte CollapseWhitespace reads as blank. Every one of them is
+// ASCII, and a byte of a longer character never is, so the bytes are read one at a time.
+func isBlankByte(held byte) bool {
+	switch held {
+	case ' ', '\t', '\n', '\r', '\v', '\f':
+		return true
+	}
+	return false
 }
 
 // FormatClockTime writes a clock time in the zone of the terminal, because the

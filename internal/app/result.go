@@ -57,8 +57,10 @@ type StatementResult struct {
 	// The read the engine composed, which paging and counting go through.
 	Read  db.ComposedRead
 	State QueryState
-	// Revision counts the times the rows of this statement changed, so a reader that
-	// keeps what it built from them knows when to build it again.
+	// Revision counts the times the rows of this statement were written again, so a
+	// reader that keeps what it built from them knows when to build it again. A page added
+	// to the end leaves it as it was: the rows before the page did not change, and their
+	// number says how many of them a reader has already seen.
 	Revision int
 	Plan     PlanState
 	// How many rows the whole result holds, once the user asked for the total.
@@ -238,13 +240,16 @@ func (store *ResultStore) AppendRows(index int, page db.QueryResult) {
 		return
 	}
 	result := held.State.Result
-	result.Rows = append(append([][]any{}, result.Rows...), page.Rows...)
+	// The rows already read stay where they are, so the page goes on the end of them and
+	// the revision holds: a reader that wrote them keeps what it wrote and writes the new
+	// ones alone. A result of many pages is written once that way, and not once per page.
+	result.Rows = append(result.Rows, page.Rows...)
 	result.Truncated = page.Truncated
 	if len(result.Columns) == 0 {
 		result.Columns = page.Columns
+		held.Revision++
 	}
 	held.State.Result = result
-	held.Revision++
 }
 
 // CanFetchMore is true where the read stopped at a page and the server holds more.

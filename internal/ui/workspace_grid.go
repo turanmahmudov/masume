@@ -183,25 +183,40 @@ func (model *Model) resolveGridShape(
 	written := strings.Join(labels, "\x00")
 
 	held, found := model.caches.readText(key)
-	if found && held.shaped && held.screen == screen && held.labels == written {
+	shapeHolds := found && held.shaped && held.screen == screen && held.labels == written &&
+		held.shapedRows <= len(formatted)
+	if shapeHolds && held.shapedRows == len(formatted) {
 		return held.shown, held.indexes, held.widths
 	}
 
-	text := make([][]string, 0, len(formatted))
-	indexes := make([]int, 0, len(formatted))
-	for at, row := range formatted {
-		if !present.IsRowShown(row, tab.Screen) {
+	// A page that went on the end of rows already shaped leaves those rows shown and as
+	// wide as they were, so only the rows after them are filtered and measured.
+	from := 0
+	text, indexes := held.shown, held.indexes
+	// The label carries the sort mark, so a sorted column keeps room for it.
+	widths := held.widths
+	if !shapeHolds {
+		text = make([][]string, 0, len(formatted))
+		indexes = make([]int, 0, len(formatted))
+		widths = present.CalculateColumnWidths(labels, nil)
+	} else {
+		from = held.shapedRows
+	}
+
+	shownBefore := len(text)
+	for at := from; at < len(formatted); at++ {
+		if !present.IsRowShown(formatted[at], tab.Screen) {
 			continue
 		}
-		text = append(text, row)
+		text = append(text, formatted[at])
 		indexes = append(indexes, at)
 	}
-	// The label carries the sort mark, so a sorted column keeps room for it.
-	widths := present.CalculateColumnWidths(labels, text)
+	widths = present.WidenColumns(widths, text[shownBefore:])
 
 	if found {
 		held.shaped, held.screen, held.labels = true, screen, written
 		held.shown, held.indexes, held.widths = text, indexes, widths
+		held.shapedRows = len(formatted)
 		model.caches.keepText(key, held)
 	}
 	return text, indexes, widths
@@ -217,6 +232,9 @@ type gridText struct {
 	// that decides what a masked cell says.
 	unmasked bool
 	rows     [][]string
+	// How many rows of the result the text was written from. A page added to the end
+	// leaves the rows before it as they were, so only the new ones are written again.
+	sourceRows int
 
 	// The shape drawn from those rows, kept for the same reason: the widths are measured
 	// from every cell of the page, which costs more than everything else in the frame.
@@ -229,6 +247,9 @@ type gridText struct {
 	shown   [][]string
 	indexes []int
 	widths  []int
+	// How many of the written rows the shape was built from, so a page added to the end
+	// is folded into it rather than measured beside all the ones before it.
+	shapedRows int
 }
 
 // resolveGridText returns the rows as text, writing them only where the ones it kept belong
@@ -237,14 +258,24 @@ func (model *Model) resolveGridText(
 	key tabKey, tab *app.Tab, active *app.StatementResult,
 	dataTypes []string, masked map[int]bool,
 ) [][]string {
+	rows := active.State.Result.Rows
 	held, found := model.caches.readText(key)
 	if found && held.result == active.ID && held.revision == active.Revision &&
-		held.unmasked == tab.Unmasked {
+		held.unmasked == tab.Unmasked && held.sourceRows <= len(rows) {
+		if held.sourceRows == len(rows) {
+			return held.rows
+		}
+		// The rows up to the ones it wrote did not change, so the page on the end is
+		// written on its own and the shape it built is kept for the same reason.
+		held.rows = append(held.rows, present.FormatRows(rows[held.sourceRows:], dataTypes, masked)...)
+		held.sourceRows = len(rows)
+		model.caches.keepText(key, held)
 		return held.rows
 	}
-	written := present.FormatRows(active.State.Result.Rows, dataTypes, masked)
+	written := present.FormatRows(rows, dataTypes, masked)
 	model.caches.keepText(key, gridText{
-		result: active.ID, revision: active.Revision, unmasked: tab.Unmasked, rows: written,
+		result: active.ID, revision: active.Revision, unmasked: tab.Unmasked,
+		rows: written, sourceRows: len(rows),
 	})
 	return written
 }

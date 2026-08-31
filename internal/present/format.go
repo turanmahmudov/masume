@@ -57,6 +57,33 @@ func MeasureText(text string) int {
 	return runewidth.StringWidth(SafeText(text))
 }
 
+// MeasureTextUpTo returns how many cells the text takes and stops counting at the limit.
+// The answer is exact below the limit, and is the limit or a little over it where the text
+// passes it. A cell of a column whose width is capped is measured this way, because a
+// value already wider than the cap is as wide as the cap allows whatever the rest holds.
+func MeasureTextUpTo(text string, limit int) int {
+	if limit <= 0 {
+		return 0
+	}
+	used := 0
+	for _, character := range text {
+		// A byte that is no text, or the replacement character itself. The exact measure
+		// reads a run of those as one character, so the whole text goes through it.
+		if character == utf8.RuneError {
+			return MeasureText(text)
+		}
+		if isControlCharacter(character) {
+			used++
+		} else {
+			used += runewidth.RuneWidth(character)
+		}
+		if used >= limit {
+			return used
+		}
+	}
+	return used
+}
+
 // SafeText returns the text a terminal can draw. A value the server sent can hold a byte
 // that is no text, or a control character: an escape would colour the rest of the frame, a
 // carriage return would move the cursor back over the border of a pane, and neither takes the

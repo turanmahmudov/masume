@@ -377,24 +377,37 @@ const (
 // CalculateColumnWidths measures each result column from its header and its cells.
 func CalculateColumnWidths(headers []string, rows [][]string) []int {
 	widths := make([]int, 0, len(headers))
-	for index, header := range headers {
-		widest := MeasureText(header)
-		for _, row := range rows {
-			if index < len(row) {
-				if measured := MeasureText(row[index]); measured > widest {
-					widest = measured
-				}
+	for _, header := range headers {
+		widths = append(widths, MeasureTextUpTo(header, maxColumnWidth))
+	}
+	return WidenColumns(widths, rows)
+}
+
+// WidenColumns widens each column for the cells of rows its widths were not measured
+// from, and answers the widths that hold both. A page read after the first is folded in
+// this way, because the rows before it are as wide as they already were.
+func WidenColumns(widths []int, rows [][]string) []int {
+	held := make([]int, len(widths))
+	copy(held, widths)
+	for _, row := range rows {
+		for index, cell := range row {
+			if index >= len(held) || held[index] >= maxColumnWidth {
+				continue
+			}
+			if measured := MeasureTextUpTo(cell, maxColumnWidth); measured > held[index] {
+				held[index] = measured
 			}
 		}
-		if widest < minColumnWidth {
-			widest = minColumnWidth
-		}
-		if widest > maxColumnWidth {
-			widest = maxColumnWidth
-		}
-		widths = append(widths, widest)
 	}
-	return widths
+	for index, width := range held {
+		if width < minColumnWidth {
+			held[index] = minColumnWidth
+		}
+		if width > maxColumnWidth {
+			held[index] = maxColumnWidth
+		}
+	}
+	return held
 }
 
 // CardChrome is the rows the border and the padding of a card take.

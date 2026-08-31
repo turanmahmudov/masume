@@ -112,6 +112,13 @@ func TestCollapseWhitespaceMakesOneCellOfAnyText(t *testing.T) {
 		{"space at the end becomes one", "a b  ", "a b "},
 		{"nothing", "", ""},
 		{"only space", "   ", ""},
+		{"one space alone", " ", ""},
+		// A document of a collection is a long line with nothing to collapse, and comes
+		// back as it stands.
+		{"a document that needs no change", `{"sku":"a-1","note":"one two three"}`,
+			`{"sku":"a-1","note":"one two three"}`},
+		{"a wide character beside a space", "漢 字", "漢 字"},
+		{"a wide character beside a run", "漢  字", "漢 字"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			if answered := CollapseWhitespace(held.text); answered != held.want {
