@@ -160,6 +160,22 @@ var defaultChords = map[string][]string{
 	// The row that reports a fault names this key, so it has to reach the fault it names.
 	"editor:next-problem": {"f8"},
 
+	"document:clear-rewrites":   {"c"},
+	"document:copy-path":        {"shift+y"},
+	"document:copy-value":       {"y"},
+	"document:count-rows":       {"t"},
+	"document:cursor-down":      {"down"},
+	"document:cursor-first-row": {"home"},
+	"document:cursor-last-row":  {"end"},
+	"document:cursor-page-down": {"pagedown"},
+	"document:cursor-page-up":   {"pageup"},
+	"document:cursor-up":        {"up"},
+	"document:fold-row":         {"left"},
+	"document:open-node":        {"return"},
+	"document:pop-filter":       {"u"},
+	"document:search-columns":   {"/"},
+	"document:unfold-row":       {"right"},
+
 	"plan:toggle-raw-plan": {"r"},
 	"plan:copy-plan":       {"y"},
 	"plan:ai-check-plan":   {"i"},

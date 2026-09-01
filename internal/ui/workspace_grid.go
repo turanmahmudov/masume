@@ -46,7 +46,8 @@ func (model *Model) buildGridShape(connection *app.Connection, tab *app.Tab) Gri
 	key := model.buildTabKey(connection, tab)
 	head := model.resolveGridHead(key, connection, tab, active)
 	formatted := model.resolveGridText(key, tab, active, head.dataTypes, head.masked)
-	text, indexes, widths := model.resolveGridShape(key, tab, formatted, head.labels)
+	text, indexes, widths := model.resolveGridShape(
+		key, tab, formatted, answered.Rows, head.labels)
 
 	return GridShape{
 		Columns: answered.Columns, Rows: answered.Rows, Text: text, RowIndexes: indexes,
@@ -177,7 +178,7 @@ func buildSortKey(sort []core.SortState) string {
 // The widths are read from every cell of the page, so measuring them on every frame costs more
 // than the whole of the rest of it.
 func (model *Model) resolveGridShape(
-	key tabKey, tab *app.Tab, formatted [][]string, labels []string,
+	key tabKey, tab *app.Tab, formatted [][]string, values [][]any, labels []string,
 ) ([][]string, []int, []int) {
 	screen := tab.Screen.Fingerprint()
 	written := strings.Join(labels, "\x00")
@@ -205,7 +206,7 @@ func (model *Model) resolveGridShape(
 
 	shownBefore := len(text)
 	for at := from; at < len(formatted); at++ {
-		if !present.IsRowShown(formatted[at], tab.Screen) {
+		if !present.IsRowShown(formatted[at], readRowValues(values, at), tab.Screen) {
 			continue
 		}
 		text = append(text, formatted[at])
@@ -220,6 +221,15 @@ func (model *Model) resolveGridShape(
 		model.caches.keepText(key, held)
 	}
 	return text, indexes, widths
+}
+
+// readRowValues returns the row as the server sent it, for a screen filter that reads past
+// the shape a document cell draws.
+func readRowValues(values [][]any, at int) []any {
+	if at < 0 || at >= len(values) {
+		return nil
+	}
+	return values[at]
 }
 
 // gridText is the rows of one result as the grid writes them, kept because writing every cell
@@ -363,6 +373,20 @@ func (model *Model) approachDrawnGridEnd(
 		len(model.buildGridShape(connection, tab).Text))
 }
 
+// approachDrawnResultEnd tops up whichever view of the result is drawn. A page arrives for
+// the read and not for one way of looking at it, so the tree pages itself as the grid does.
+func (model *Model) approachDrawnResultEnd(
+	connection *app.Connection, tab *app.Tab,
+) tea.Cmd {
+	switch app.ResolveDrawnView(tab.Views(connection.Session), tab.View) {
+	case app.ViewData:
+		return model.approachDrawnGridEnd(connection, tab)
+	case app.ViewTree:
+		return model.approachDrawnDocumentEnd(connection, tab)
+	}
+	return nil
+}
+
 // runGridAction returns the keys of the result grid.
 func (model *Model) runGridAction(
 	connection *app.Connection, tab *app.Tab, match Match,
@@ -402,18 +426,9 @@ func (model *Model) runGridAction(
 	case ActionSortColumn, ActionAddSortColumn:
 		return model.sortByColumn(connection, tab, shape, match.Action == ActionAddSortColumn)
 	case ActionClearRewrites:
-		if !tab.HasRewrite() && tab.Screen.IsEmpty() {
-			return model, nil
-		}
-		tab.Sort, tab.Filter = nil, nil
-		tab.Screen = present.NoScreenFilter()
-		return model.runTabRead(connection, tab)
+		return model.clearRewrites(connection, tab)
 	case ActionPopFilter:
-		if len(tab.Filter) == 0 {
-			return model, nil
-		}
-		tab.Filter = tab.Filter[:len(tab.Filter)-1]
-		return model.runTabRead(connection, tab)
+		return model.popFilter(connection, tab)
 	case ActionFilterByCell, ActionExcludeCell:
 		return model.filterByCell(connection, tab, shape, match.Action == ActionExcludeCell)
 	case ActionFilterWhere:
@@ -537,6 +552,31 @@ func (model *Model) runPlanAction(
 		return model.askAiToCheckPlan(connection, tab)
 	}
 	return model, nil
+}
+
+// clearRewrites throws away the sort, the filter and the screen filter, and reads the
+// relation again. Every view that draws the rows offers it, because every one of them is
+// showing what those laid over the read.
+func (model *Model) clearRewrites(
+	connection *app.Connection, tab *app.Tab,
+) (tea.Model, tea.Cmd) {
+	if !tab.HasRewrite() && tab.Screen.IsEmpty() {
+		return model, nil
+	}
+	tab.Sort, tab.Filter = nil, nil
+	tab.Screen = present.NoScreenFilter()
+	return model.runTabRead(connection, tab)
+}
+
+// popFilter drops the last step of the filter and reads the relation again.
+func (model *Model) popFilter(
+	connection *app.Connection, tab *app.Tab,
+) (tea.Model, tea.Cmd) {
+	if len(tab.Filter) == 0 {
+		return model, nil
+	}
+	tab.Filter = tab.Filter[:len(tab.Filter)-1]
+	return model.runTabRead(connection, tab)
 }
 
 // sortByColumn sorts by the column under the cursor, and toggles the direction.
@@ -1257,15 +1297,13 @@ func (model *Model) goToColumn(
 	return model, nil
 }
 
-// describeGridFooter writes the size of the result on the left, and the row the cursor is on
-// at the right.
-func (model *Model) describeGridFooter(tab *app.Tab, shape GridShape) (string, string) {
-	active := tab.Results.Active()
-	if active == nil || active.State.Kind != app.QuerySucceeded {
-		return "", ""
-	}
+// describeResultSize writes how many rows the result holds, how many of them the screen
+// filter shows, and what the server is still doing about either. Every view of the result
+// reports it the same way, because it is the result and not the view that holds the rows.
+func (model *Model) describeResultSize(
+	tab *app.Tab, active *app.StatementResult, shown int,
+) string {
 	result := active.State.Result
-
 	size := present.FormatResultSize(
 		len(result.Rows), result.Truncated, active.TotalRows, active.HasTotalRows)
 	// The count runs on the server, so the wheel turns where its answer will stand.
@@ -1278,8 +1316,19 @@ func (model *Model) describeGridFooter(tab *app.Tab, shape GridShape) (string, s
 		size += " · " + spinnerFrame(model.spinnerAt) + " reading more…"
 	}
 	if !tab.Screen.IsEmpty() {
-		size += " · " + strconv.Itoa(len(shape.Text)) + " shown"
+		size += " · " + strconv.Itoa(shown) + " shown"
 	}
+	return size
+}
+
+// describeGridFooter writes the size of the result on the left, and the row the cursor is on
+// at the right.
+func (model *Model) describeGridFooter(tab *app.Tab, shape GridShape) (string, string) {
+	active := tab.Results.Active()
+	if active == nil || active.State.Kind != app.QuerySucceeded {
+		return "", ""
+	}
+	size := model.describeResultSize(tab, active, len(shape.Text))
 
 	where := ""
 	if len(shape.Text) > 0 {

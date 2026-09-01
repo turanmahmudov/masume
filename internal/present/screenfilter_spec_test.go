@@ -3,6 +3,7 @@ package present_test
 import (
 	"testing"
 
+	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
@@ -141,10 +142,10 @@ func TestCountColumnValuesReadsAColumnOutsideTheRowAsEmpty(t *testing.T) {
 func TestApplyValueFilterKeepsOnlyTheValuesChosen(t *testing.T) {
 	filter := present.ApplyValueFilter(present.NoScreenFilter(), 1,
 		map[string]bool{"new": true}, 3)
-	if !present.IsRowShown([]string{"1", "new"}, filter) {
+	if !present.IsRowShown([]string{"1", "new"}, nil, filter) {
 		t.Error("a row of a kept value was hidden")
 	}
-	if present.IsRowShown([]string{"2", "paid"}, filter) {
+	if present.IsRowShown([]string{"2", "paid"}, nil, filter) {
 		t.Error("a row of a value not kept was shown")
 	}
 }
@@ -193,10 +194,10 @@ func TestApplySearchTermKeepsTheTermWithoutItsBlanks(t *testing.T) {
 	if filter.Search != "ada" {
 		t.Errorf("Search = %q, want %q", filter.Search, "ada")
 	}
-	if !present.IsRowShown([]string{"1", "Ada"}, filter) {
+	if !present.IsRowShown([]string{"1", "Ada"}, nil, filter) {
 		t.Error("a row holding the term was hidden")
 	}
-	if present.IsRowShown([]string{"2", "Grace"}, filter) {
+	if present.IsRowShown([]string{"2", "Grace"}, nil, filter) {
 		t.Error("a row without the term was shown")
 	}
 }
@@ -208,5 +209,31 @@ func TestApplySearchTermWithABlankTermClearsTheSearch(t *testing.T) {
 		if cleared.Search != "" {
 			t.Errorf("term %q left Search = %q", term, cleared.Search)
 		}
+	}
+}
+
+// A cell that holds a document draws its shape, so the text the reader is looking for is not
+// on the screen at all. The search reads the document itself, or a search for a city inside
+// an address would answer that the collection holds none.
+func TestASearchReadsTheDocumentACellHolds(t *testing.T) {
+	filter := present.ApplySearchTerm(present.NoScreenFilter(), "berlin")
+	shape := []string{"1", "{ 2 fields }"}
+	values := []any{
+		int64(1),
+		core.DocumentValue{Text: `{"city":"berlin","zip":"10115"}`, Count: 2},
+	}
+
+	if !present.IsRowShown(shape, values, filter) {
+		t.Error("a row whose document holds the term was hidden")
+	}
+	if present.IsRowShown(shape, []any{
+		int64(1), core.DocumentValue{Text: `{"city":"hamburg","zip":"20095"}`, Count: 2},
+	}, filter) {
+		t.Error("a row whose document does not hold the term was shown")
+	}
+	// The shape drawn in the cell is not what the reader is searching for.
+	if present.IsRowShown(shape, values,
+		present.ApplySearchTerm(present.NoScreenFilter(), "zzz")) {
+		t.Error("a row was shown for a term nothing holds")
 	}
 }

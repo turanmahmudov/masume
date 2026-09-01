@@ -281,6 +281,22 @@ func (registry *KeyRegistry) buildViewHints(
 	view app.ResultView, views []app.ResultView, capabilities core.Capabilities,
 ) []Hint {
 	scroll := Hint{Key: "↑↓", Label: "scroll"}
+	switch view {
+	case app.ViewTree:
+		keys := hintList{}
+		keys.add(registry.buildHint(
+			capabilities, cfg.ScopeDocument, ActionOpenNode, "open or fold"))
+		keys.addAll([]Hint{{Key: "←→", Label: "fold or open"}, {Key: "↑↓", Label: "move"}})
+		keys.add(registry.buildHint(
+			capabilities, cfg.ScopeDocument, ActionCopyValue, "copy value"))
+		keys.add(registry.buildHint(
+			capabilities, cfg.ScopeDocument, ActionCopyPath, "copy field"))
+		keys.add(registry.buildHint(
+			capabilities, cfg.ScopeDocument, ActionSearchColumns, "search"))
+		keys.add(registry.buildHint(
+			capabilities, cfg.ScopeDocument, ActionCountRows, "count"))
+		return keys.build()
+	}
 	if view == app.ViewPlan {
 		keys := hintList{}
 		keys.add(registry.buildHint(

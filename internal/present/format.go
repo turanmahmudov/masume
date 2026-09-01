@@ -186,6 +186,12 @@ func FormatRow(row []any, dataTypes []string, masked map[int]bool) []string {
 		if index < len(dataTypes) {
 			dataType = dataTypes[index]
 		}
+		// A document draws as the shape it holds. A cell is one line, and the opening
+		// characters of the text say only what the first field is called.
+		if held, isDocument := cell.(core.DocumentValue); isDocument {
+			written = append(written, held.DescribeShape())
+			continue
+		}
 		written = append(written, SafeText(core.CollapseWhitespace(core.FormatCell(cell, dataType))))
 	}
 	return written

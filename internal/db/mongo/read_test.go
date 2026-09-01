@@ -63,8 +63,9 @@ func TestBuildDocumentColumnsNamesTheTypeOfEachField(t *testing.T) {
 	}
 }
 
-// A cell draws one line, so a document inside a field is written as its extended JSON
-// and an identity as the text another client would print.
+// A cell draws one line, so an identity is written as the text another client would print.
+// A document is answered whole, with the text it holds and how much it holds, because the
+// grid draws the shape of it and the tree opens the text.
 func TestFormatValueWritesEveryKindOfValueAsACell(t *testing.T) {
 	identity, err := bson.ObjectIDFromHex("507f1f77bcf86cd799439011")
 	if err != nil {
@@ -73,8 +74,29 @@ func TestFormatValueWritesEveryKindOfValueAsACell(t *testing.T) {
 	if held := FormatValue(identity); held != "507f1f77bcf86cd799439011" {
 		t.Errorf("the identity reads %v", held)
 	}
-	if held := FormatValue(bson.D{{Key: "a", Value: int32(1)}}); held != `{"a":1}` {
-		t.Errorf("the document reads %v", held)
+	document, isDocument := FormatValue(bson.D{{Key: "a", Value: int32(1)}}).(core.DocumentValue)
+	if !isDocument {
+		t.Fatalf("the document reads as %T, wanted a value that opens", FormatValue(bson.D{}))
+	}
+	// The text keeps every type, so the tree that opens it names the type the server holds
+	// rather than the one JSON has room for.
+	if document.Text != `{"a":{"$numberInt":"1"}}` {
+		t.Errorf("the document reads %q", document.Text)
+	}
+	if document.Count != 1 || document.IsArray {
+		t.Errorf("the document holds %d fields and reads as an array: %v",
+			document.Count, document.IsArray)
+	}
+	if held := document.DescribeShape(); held != "{ 1 field }" {
+		t.Errorf("the document says %q, wanted the shape a cell draws", held)
+	}
+
+	array, isArray := FormatValue(bson.A{int32(1), int32(2)}).(core.DocumentValue)
+	if !isArray || !array.IsArray || array.Count != 2 {
+		t.Errorf("the array reads as %#v, wanted two elements", array)
+	}
+	if held := array.DescribeShape(); held != "[ 2 elements ]" {
+		t.Errorf("the array says %q, wanted the shape a cell draws", held)
 	}
 	if held := FormatValue(int32(5)); held != int64(5) {
 		t.Errorf("the number reads %v", held)

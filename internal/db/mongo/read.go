@@ -72,13 +72,35 @@ func FormatValue(value any) any {
 		return int64(held)
 	case string, int64, float64, bool:
 		return held
+	case bson.D:
+		return buildDocumentValue(held, len(held), false)
+	case bson.M:
+		return buildDocumentValue(held, len(held), false)
+	case bson.A:
+		return buildDocumentValue(held, len(held), true)
 	}
 	return WriteExtendedJSON(value)
 }
 
-// WriteExtendedJSON writes a value as the extended JSON a reader sees.
+// buildDocumentValue returns a value that holds fields or elements. The text is written so
+// that every type survives it: a grid draws the shape of the value and a tree opens it, and
+// the tree names the type of each value it opens.
+func buildDocumentValue(value any, count int, isArray bool) core.DocumentValue {
+	return core.DocumentValue{
+		Text: writeExtendedJSON(value, true), Count: count, IsArray: isArray,
+	}
+}
+
+// WriteExtendedJSON writes a value as the extended JSON a reader sees, which writes a number
+// and a moment plainly and leaves the type of each to be guessed.
 func WriteExtendedJSON(value any) string {
-	written, err := bson.MarshalExtJSON(bson.D{{Key: "v", Value: value}}, false, false)
+	return writeExtendedJSON(value, false)
+}
+
+// writeExtendedJSON writes a value as extended JSON. The canonical form keeps every type,
+// and the relaxed form reads better where the type is already known.
+func writeExtendedJSON(value any, canonical bool) string {
+	written, err := bson.MarshalExtJSON(bson.D{{Key: "v", Value: value}}, canonical, false)
 	if err != nil {
 		return fmt.Sprintf("%v", value)
 	}
@@ -269,6 +291,9 @@ func buildStepText(step core.FilterStep) string {
 // read back as its hexadecimal text, so the text is written again as the identity it
 // stands for.
 func writeMatchValue(column string, value any) string {
+	if held, isDocument := value.(core.DocumentValue); isDocument {
+		return held.Text
+	}
 	if column == IdentityField {
 		if text, isText := value.(string); isText {
 			if _, err := bson.ObjectIDFromHex(text); err == nil {
@@ -645,6 +670,8 @@ func BuildInsertValue(written any, dataType string) (any, error) {
 	switch held := written.(type) {
 	case nil:
 		return nil, nil
+	case core.DocumentValue:
+		return ReadValue(held.Text)
 	case string:
 		return BuildWriteValue(core.CellValue{Kind: core.CellText, Text: held}, dataType)
 	case float64:

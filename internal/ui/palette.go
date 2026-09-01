@@ -237,6 +237,7 @@ func (model *Model) buildPaletteActions(connection *app.Connection) []app.Palett
 
 // paletteViews name the view each `tab-` row of the palette moves to.
 var paletteViews = []app.ResultView{
+	app.ViewTree,
 	app.ViewData, app.ViewFields, app.ViewStatistics, app.ViewColumns,
 	app.ViewIndexes, app.ViewConstraints, app.ViewDDL, app.ViewPlan,
 }

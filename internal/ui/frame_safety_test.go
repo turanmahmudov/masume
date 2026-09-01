@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/turanmahmudov/masume/internal/app"
+	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/present"
 )
@@ -101,6 +102,28 @@ func TestFrameHoldsNothingATerminalCannotDraw(t *testing.T) {
 	}{
 		{"the grid", func() { tab.View = app.ViewData }},
 		{"the fields", func() { tab.View = app.ViewFields }},
+		{"the document tree", func() {
+			// The keys and the values of a document reach the frame straight out of the
+			// text the server sent, so both carry bytes a terminal would act on.
+			tab.View = app.ViewTree
+			nested := "{\"na\x1b[31mme\":\"bell\"," +
+				"\"deep\":{\"cr\rlf\":\"tab\there\"}," +
+				"\"list\":[\"esc\x1b[0m\",null]}"
+			documentColumn := db.ResultColumn{Name: "doc\x1b[31m", DataType: "object"}
+			tab.Results.Succeed(0, db.ComposedRead{Text: "select * from nasty"},
+				db.QueryResult{
+					Columns: append(append([]db.ResultColumn{}, columns...), documentColumn),
+					Rows: [][]any{append(append([]any{}, row...),
+						core.DocumentValue{Text: nested, Count: 3})},
+				})
+			held := present.BuildRowPath(0)
+			field := held + documentSeparator + "doc\x1b[31m"
+			tab.Opened = map[string]bool{
+				held: true, field: true,
+				field + documentSeparator + "deep": true,
+				field + documentSeparator + "list": true,
+			}
+		}},
 		{"the row card", func() {
 			connection.Overlay = app.Overlay{
 				Kind:   app.OverlayRowDetail,
@@ -147,3 +170,6 @@ func TestFrameHoldsNothingATerminalCannotDraw(t *testing.T) {
 		}
 	}
 }
+
+// documentSeparator is what a path of the document tree puts between one key and the next.
+const documentSeparator = "\x1f"

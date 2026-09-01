@@ -16,6 +16,37 @@ import (
 // NullText is the text form of a null, for a viewer, the clipboard and the cell editor.
 const NullText = "NULL"
 
+// DocumentValue is a value that holds fields or elements rather than one reading: an
+// embedded document, or an array. It carries the text of the whole value and how much the
+// value holds, so a cell can say the shape of it without reading the text again.
+//
+// The text is written so that every type survives it. A number written plainly cannot say
+// whether the server holds it in four bytes or eight, and a moment written plainly cannot be
+// told from a string of the same shape, so the tree that opens this value would name the
+// wrong type for it.
+type DocumentValue struct {
+	Text string
+	// Count is how many fields a document holds, or how many elements an array holds.
+	Count   int
+	IsArray bool
+}
+
+// DescribeShape says what the value holds, for a cell that draws one line. A grid draws the
+// shape rather than the text, because a document cut off at the width of a column says only
+// what its first field is called.
+func (value DocumentValue) DescribeShape() string {
+	if value.IsArray {
+		if value.Count == 1 {
+			return "[ 1 element ]"
+		}
+		return "[ " + strconv.Itoa(value.Count) + " elements ]"
+	}
+	if value.Count == 1 {
+		return "{ 1 field }"
+	}
+	return "{ " + strconv.Itoa(value.Count) + " fields }"
+}
+
 // FormatCell turns a server value into text, the same way for a statement, an
 // export and the grid.
 func FormatCell(value any, dataType string) string {
@@ -24,6 +55,8 @@ func FormatCell(value any, dataType string) string {
 		return NullText
 	case string:
 		return held
+	case DocumentValue:
+		return held.Text
 	case []byte:
 		return `\x` + hex.EncodeToString(held)
 	case time.Time:
@@ -77,7 +110,7 @@ func IsStructuredValue(value any) bool {
 	case nil, string, []byte, time.Time, bool, float32, float64,
 		int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 		return false
-	case json.RawMessage:
+	case json.RawMessage, DocumentValue:
 		return true
 	}
 	_, writesItself := value.(fmt.Stringer)

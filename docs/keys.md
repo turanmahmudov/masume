@@ -230,6 +230,30 @@ Matching is plain text, so `id` matches `customer_id` too. The title names the t
 | `copy-plan` | `y` |
 | `toggle-raw-plan` | `r` |
 
+## Document tree
+
+`[keys.document]`
+
+The tree that opens the rows of a result as documents. It is offered wherever a value holds
+fields or elements: a document of a collection, and a `json` or `jsonb` column of a SQL
+server.
+
+| Action | Chord |
+| --- | --- |
+| `copy-path` | `shift+y` |
+| `copy-value` | `y` |
+| `count-rows` | `t` |
+| `cursor-down` | `down` |
+| `cursor-first-row` | `home` |
+| `cursor-last-row` | `end` |
+| `cursor-page-down` | `pagedown` |
+| `cursor-page-up` | `pageup` |
+| `cursor-up` | `up` |
+| `fold-row` | `left` |
+| `open-node` | `return` |
+| `search-columns` | `/` |
+| `unfold-row` | `right` |
+
 ## Object tree
 
 `[keys.tree]`

@@ -19,13 +19,24 @@ import (
 
 // runStatementAtCursor runs the selection, or the statement at the caret. A selection wins
 // over the statement the caret stands in.
+// resolveRowView returns the view a run lands on. A read answers rows, so a view that draws
+// something else about the relation steps aside for them. A view that draws the rows
+// themselves is the one the reader is working in, and a sort or a filter run from inside it
+// must not throw them back to another one.
+func resolveRowView(held app.ResultView) app.ResultView {
+	if DrawsResultRows(held) {
+		return held
+	}
+	return app.ViewData
+}
+
 func (model *Model) runStatementAtCursor(
 	connection *app.Connection, tab *app.Tab,
 ) (tea.Model, tea.Cmd) {
 	if model.refuseSecondRun(connection, tab) {
 		return model, nil
 	}
-	tab.View = app.ViewData
+	tab.View = resolveRowView(tab.View)
 	if !tab.EditorVisible() {
 		return model.runTabRead(connection, tab)
 	}
@@ -50,7 +61,7 @@ func (model *Model) runWholeBuffer(
 	if model.refuseSecondRun(connection, tab) {
 		return model, nil
 	}
-	tab.View = app.ViewData
+	tab.View = resolveRowView(tab.View)
 	if !tab.EditorVisible() {
 		return model.runTabRead(connection, tab)
 	}
@@ -82,7 +93,7 @@ func (model *Model) runTabRead(
 			tab.Editor.Text))
 	}
 
-	tab.View = app.ViewData
+	tab.View = resolveRowView(tab.View)
 	read := tab.ComposeRelationRead(connection.Session)
 	model.replaceResults(connection, tab,
 		[]string{read.Display}, connection.Profile().PageSize)
@@ -313,7 +324,7 @@ func (model *Model) readQueryAnswer(answered queryRanMsg) (tea.Model, tea.Cmd) {
 	}
 
 	tab.Results.Succeed(answered.Index, answered.Read, answered.Result)
-	model.placeGridCursor(connection, tab, answered.Result.Columns)
+	model.placeResultCursor(connection, tab, answered.Result.Columns)
 	tab.Target = model.resolveEditTarget(connection, tab)
 	// A row is written through the columns of its relation, and a relation opened without
 	// its fold being opened has none read yet, so they are asked for now.
@@ -321,7 +332,7 @@ func (model *Model) readQueryAnswer(answered queryRanMsg) (tea.Model, tea.Cmd) {
 
 	// A first page that does not fill the pane is topped up, so a tall pane is not left
 	// half empty until the reader scrolls.
-	topUp := model.approachDrawnGridEnd(connection, tab)
+	topUp := model.approachDrawnResultEnd(connection, tab)
 
 	next := model.askNextStatement(connection, answered)
 
@@ -369,11 +380,14 @@ func (model *Model) readTargetColumns(
 	return readTableDetail(model.ActiveID(), connection.Session, table)
 }
 
-// placeGridCursor puts the cursor where the result that landed asks for. A result whose
-// columns are named as the ones before it is the same result read again, such as one the user
-// sorted, so it keeps the cursor and only holds it inside the rows. A result of other columns
-// starts at the first cell.
-func (model *Model) placeGridCursor(
+// placeResultCursor puts the cursor of every view of the result where the result that landed
+// asks for. A result whose columns are named as the ones before it is the same result read
+// again, such as one the user sorted, so it keeps the cursor and only holds it inside the
+// rows. A result of other columns starts at the first cell.
+//
+// The tree names an opened document by its place in the result, so a result read again puts
+// the reader back on a different document. Its opened documents are dropped with the cursor.
+func (model *Model) placeResultCursor(
 	connection *app.Connection, tab *app.Tab, columns []query.ResultColumn,
 ) {
 	names := make([]string, 0, len(columns))
@@ -383,11 +397,14 @@ func (model *Model) placeGridCursor(
 	key := strings.Join(names, "|")
 	if key == tab.GridColumnKey {
 		tab.GridRow = clamp(tab.GridRow, len(model.buildGridShape(connection, tab).Text))
+		tab.TreeRow = clamp(tab.TreeRow, model.buildDocumentTree(connection, tab).CountRows())
 		return
 	}
 	tab.GridColumnKey = key
 	tab.GridRow, tab.GridColumn = 0, 0
 	tab.GridRowOffset, tab.GridColumnOffset = 0, 0
+	tab.TreeRow, tab.TreeRowOffset, tab.TreeRolled = 0, 0, false
+	tab.Opened = map[string]bool{}
 }
 
 // resolveEditTarget returns the relation a result can be edited as. It follows every run,
@@ -514,7 +531,7 @@ func (model *Model) readPageAnswer(answered pageReadMsg) (tea.Model, tea.Cmd) {
 	if answered.Index != tab.Results.ActiveIndex() || len(answered.Result.Rows) == 0 {
 		return model, nil
 	}
-	return model, model.approachDrawnGridEnd(connection, tab)
+	return model, model.approachDrawnResultEnd(connection, tab)
 }
 
 // countRows counts the whole result, once.

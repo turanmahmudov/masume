@@ -95,6 +95,12 @@ type frameLayout struct {
 	// The screen row the body of a view of the result starts on, which is under the strips
 	// the pane draws above it.
 	detailTop int
+	// documentRows is how many rows the document tree drew, which the lookahead of its
+	// paging is measured against.
+	documentRows int
+	// documentRowsHit is where the rows of the document tree were drawn, so a press lands
+	// on the row it looks like.
+	documentRowsHit rowsHit
 
 	// The rows each pane covers, so a press moves the keyboard to it.
 	editorTop, editorRows int
@@ -620,7 +626,10 @@ func (model *Model) rollWheel(mouse tea.Mouse, step int) (tea.Model, tea.Cmd) {
 		mouse.Y < model.layout.resultTop+model.layout.resultRows {
 		tab.GridRowOffset, tab.GridRolled = tab.GridRowOffset+step, true
 		tab.DetailOffset += step
-		return model, model.approachDrawnGridEnd(connection, tab)
+		// The tree scrolls its own rows, because a folded document is one row of it and
+		// not one row of the result.
+		tab.TreeRowOffset, tab.TreeRolled = max(tab.TreeRowOffset+step, 0), true
+		return model, model.approachDrawnResultEnd(connection, tab)
 	}
 	return model, nil
 }
@@ -821,6 +830,9 @@ func (model *Model) pressResultPane(
 	}
 	if tab.View == app.ViewData && mouse.Y == model.layout.gridHeaderRow {
 		return model.pressColumnHeader(connection, tab, mouse)
+	}
+	if tab.ActiveView(connection.Session) == app.ViewTree {
+		return model.pressDocumentTree(connection, tab, mouse)
 	}
 	row, found := model.layout.gridRows.holds(mouse.X, mouse.Y)
 	if !found {

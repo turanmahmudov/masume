@@ -132,6 +132,15 @@ type Tab struct {
 	Screen present.ScreenFilter
 	// How far the tree of the plan and the detail views have scrolled.
 	DetailOffset int
+	// The nodes of the document tree the reader opened, and where the cursor stands in it.
+	// A folded document is one row, so a result of a million rows keeps only what was
+	// opened rather than a state per row.
+	Opened        map[string]bool
+	TreeRow       int
+	TreeRowOffset int
+	// True while the wheel moved the rows away from the cursor, so the cursor may stand
+	// off screen until it moves again.
+	TreeRolled bool
 	// How far the editor has scrolled, down its lines and along them.
 	EditorRowOffset    int
 	EditorColumnOffset int
@@ -187,6 +196,7 @@ func newTab(id int, kind TabKind, sql string) *Tab {
 		Results: NewResultStore(), View: DefaultView, Focus: PaneSidebar,
 		Pending: core.NewPendingChanges(), Frozen: map[int]bool{},
 		Screen: present.NoScreenFilter(), Parameters: map[string]any{},
+		Opened:   map[string]bool{},
 		ViewData: PaneContent{Kind: DataIdle, Reason: "write a query and run it"},
 	}
 }
@@ -235,14 +245,29 @@ func (tab *Tab) Views(session db.SessionInfo) []ResultView {
 	}
 	offered := ListOfferedViews(tab.Kind, hasResultSet)
 
+	opensDocuments := tab.opensDocuments()
 	kept := make([]ResultView, 0, len(offered))
 	for _, view := range offered {
-		if view == ViewPlan && !tab.canExplain(session) {
+		switch {
+		case view == ViewPlan && !tab.canExplain(session):
+			continue
+		// A result of plain columns has nothing to open, and a server that keeps no
+		// document has nothing to write in the form that carries its types.
+		case view == ViewTree && !opensDocuments:
 			continue
 		}
 		kept = append(kept, view)
 	}
 	return kept
+}
+
+// opensDocuments is true where the result holds a value a tree opens.
+func (tab *Tab) opensDocuments() bool {
+	active := tab.Results.Active()
+	if active == nil || active.State.Kind != QuerySucceeded {
+		return false
+	}
+	return present.HasDocumentColumn(active.State.Result.Columns, active.State.Result.Rows)
 }
 
 // ActiveView returns the view drawn: the one asked for where this tab offers it, and the

@@ -197,6 +197,8 @@ const (
 	ActionCopyPlan      ActionID = "copy-plan"
 	ActionAiCheckPlan   ActionID = "ai-check-plan"
 
+	ActionCopyPath ActionID = "copy-path"
+
 	ActionFoldRow             ActionID = "fold-row"
 	ActionUnfoldRow           ActionID = "unfold-row"
 	ActionOpenNode            ActionID = "open-node"
@@ -327,6 +329,19 @@ var planActions = []ActionDefinition{
 	{ID: ActionAiCheckPlan, Needs: NeedsPlansStatement},
 }
 
+// documentActions answer while the tree that opens the rows as documents is drawn. It holds
+// a cursor and folds like the object tree, and it copies like the grid, so it answers to both
+// kinds of key under bindings of its own.
+var documentActions = []ActionDefinition{
+	{ID: ActionCursorUp}, {ID: ActionCursorDown},
+	{ID: ActionCursorPageUp}, {ID: ActionCursorPageDown},
+	{ID: ActionCursorFirstRow}, {ID: ActionCursorLastRow},
+	{ID: ActionFoldRow}, {ID: ActionUnfoldRow}, {ID: ActionOpenNode},
+	{ID: ActionCopyValue}, {ID: ActionCopyPath},
+	{ID: ActionSearchColumns}, {ID: ActionCountRows},
+	{ID: ActionClearRewrites}, {ID: ActionPopFilter},
+}
+
 // treeActions answer while the object tree holds the caret.
 var treeActions = []ActionDefinition{
 	{ID: ActionCursorUp}, {ID: ActionCursorDown},
@@ -401,6 +416,7 @@ var ActionCatalog = func() []ActionDefinition {
 	add(cfg.ScopeGlobal, globalActions)
 	add(cfg.ScopeGrid, gridActions)
 	add(cfg.ScopePlan, planActions)
+	add(cfg.ScopeDocument, documentActions)
 	add(cfg.ScopeTree, treeActions)
 	add(cfg.ScopeEditor, editorActions)
 	add(cfg.ScopeList, listActions)

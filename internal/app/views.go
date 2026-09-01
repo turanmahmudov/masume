@@ -14,7 +14,10 @@ type ResultView string
 
 // The views a tab can offer.
 const (
-	ViewData        ResultView = "data"
+	ViewData ResultView = "data"
+	// ViewTree opens the rows as documents: a value that holds fields or elements is
+	// opened into them rather than cut to the width of a column.
+	ViewTree        ResultView = "tree"
 	ViewFields      ResultView = "fields"
 	ViewStatistics  ResultView = "statistics"
 	ViewColumns     ResultView = "columns"
@@ -43,9 +46,9 @@ const (
 // The views each kind of tab offers, before the plan is left out.
 var (
 	tableViews = []ResultView{
-		ViewData, ViewColumns, ViewIndexes, ViewConstraints, ViewDDL, ViewPlan,
+		ViewData, ViewTree, ViewColumns, ViewIndexes, ViewConstraints, ViewDDL, ViewPlan,
 	}
-	queryViews = []ResultView{ViewData, ViewFields, ViewPlan}
+	queryViews = []ResultView{ViewData, ViewTree, ViewFields, ViewPlan}
 	// A schema object is shown by its definition only.
 	objectViews = []ResultView{ViewDDL}
 	// The message shown for a statement with no result set.
@@ -72,6 +75,7 @@ type ViewDataKind string
 // The kinds of thing a view can be drawing.
 const (
 	DataIdle          ViewDataKind = "idle"
+	DataTree          ViewDataKind = "tree"
 	DataLoading       ViewDataKind = "loading"
 	DataFailed        ViewDataKind = "failed"
 	DataColumns       ViewDataKind = "columns"

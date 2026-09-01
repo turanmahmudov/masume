@@ -72,9 +72,12 @@ func (model *Model) readWorkspaceKey(key tea.Key) (next tea.Model, command tea.C
 		case app.PaneSidebar:
 			scopes = append(scopes, cfg.ScopeTree)
 		case app.PaneResult:
-			if tab.View == app.ViewPlan {
+			switch tab.ActiveView(connection.Session) {
+			case app.ViewPlan:
 				scopes = append(scopes, cfg.ScopePlan)
-			} else {
+			case app.ViewTree:
+				scopes = append(scopes, cfg.ScopeDocument)
+			default:
 				scopes = append(scopes, cfg.ScopeGrid)
 			}
 		}
@@ -92,6 +95,14 @@ func (model *Model) readWorkspaceKey(key tea.Key) (next tea.Model, command tea.C
 	}
 	// A view of the result that is not the grid holds no cursor: it scrolls with the keys
 	// of a list, which is what its hint offers.
+	// The tree holds a cursor of its own, so it takes the keys that move one before the
+	// rows of a list are scrolled under it.
+	if tab.Focus == app.PaneResult && !typesInEditor &&
+		tab.ActiveView(connection.Session) == app.ViewTree {
+		if match, matched := model.keymap.Match(key, cfg.ScopeDocument); matched {
+			return model.runDocumentTreeAction(connection, tab, match)
+		}
+	}
 	if tab.Focus == app.PaneResult && !typesInEditor &&
 		tab.ActiveView(connection.Session) != app.ViewData {
 		if match, matched := model.keymap.Match(key, cfg.ScopeList); matched &&
@@ -175,6 +186,8 @@ func (model *Model) runAction(
 		return model.runGridAction(connection, tab, match)
 	case cfg.ScopePlan:
 		return model.runPlanAction(connection, tab, match)
+	case cfg.ScopeDocument:
+		return model.runDocumentTreeAction(connection, tab, match)
 	case cfg.ScopeEditor:
 		return model.runEditorAction(connection, tab, match)
 	}

@@ -75,9 +75,12 @@ func (model *Model) renderResultPane(
 		body--
 	}
 
+	// The strip that names the sort and the filter belongs to every view that draws the
+	// rows they shape. A reader who filtered in the tree has to be told what is hidden and
+	// how to bring it back, the same way the grid tells them.
 	banner := model.describeBanner(connection, tab)
-	if drawn == app.ViewData && banner != "" {
-		lines = append(lines, model.renderBanner(tab, banner, inner,
+	if DrawsResultRows(drawn) && banner != "" {
+		lines = append(lines, model.renderBanner(tab, drawn, banner, inner,
 			model.layout.resultTop+1+len(lines), model.editorLeft+1))
 		body--
 	}
@@ -104,11 +107,25 @@ func (model *Model) renderResultPane(
 				paintText(theme.Muted, theme.Background, where)))
 		}
 	} else {
+		// The document views name where the cursor stands, the way the grid does: a tree
+		// of a thousand rows says nothing about which document is open without it.
+		size, where := model.describeDocumentFooter(connection, tab, drawn)
+		if size != "" || where != "" {
+			body--
+		}
+		if body < 1 {
+			body = 1
+		}
 		// Where the body of the view starts on the screen, so the bar it draws is
 		// recorded at the rows it stands on.
 		model.layout.detailTop = model.layout.resultTop + 1 + len(lines)
 		lines = append(lines, model.renderDetailView(
 			connection, tab, drawn, inner, body, model.layout.detailTop)...)
+		if size != "" || where != "" {
+			lines = append(lines, model.styles.RenderStrip(theme.Background, inner,
+				paintText(theme.Muted, theme.Background, size),
+				paintText(theme.Muted, theme.Background, where)))
+		}
 	}
 	lines = append(lines, promptRows...)
 
@@ -303,6 +320,7 @@ func (model *Model) describeViewGlyph(view app.ResultView) string {
 // viewIcons names the glyph each view carries on its chip, so a reader picks a view by its
 // mark as well as by its name.
 var viewIcons = map[app.ResultView]cfg.IconKind{
+	app.ViewTree:        cfg.IconFolder,
 	app.ViewData:        cfg.IconTable,
 	app.ViewFields:      cfg.IconColumn,
 	app.ViewColumns:     cfg.IconColumn,
@@ -331,17 +349,37 @@ func (model *Model) describeBanner(connection *app.Connection, tab *app.Tab) str
 	return strings.Join(parts, " · ")
 }
 
+// DrawsResultRows is true for a view that draws the rows the read answered, rather than
+// something about them. Those views carry the strip that names the sort and the filter, and
+// a read run again lands back on the one the reader was working in.
+func DrawsResultRows(drawn app.ResultView) bool {
+	return drawn == app.ViewData || drawn == app.ViewTree
+}
+
+// resolveRewriteScope returns the scope the keys of the banner are bound in, which is the
+// scope of the view the banner stands over.
+func resolveRewriteScope(drawn app.ResultView) cfg.KeyScope {
+	if drawn == app.ViewTree {
+		return cfg.ScopeDocument
+	}
+	return cfg.ScopeGrid
+}
+
 // renderBanner draws the strip that names the sort and the filter, and the keys that remove one.
-func (model *Model) renderBanner(tab *app.Tab, banner string, width, row, left int) string {
+func (model *Model) renderBanner(
+	tab *app.Tab, drawn app.ResultView, banner string, width, row, left int,
+) string {
 	theme := model.styles.Theme
 	ink := model.styles.InkOn(theme.Warning)
 	style := lipgloss.NewStyle().Foreground(ink).Background(theme.Warning)
 
-	clear := model.registry.FormatActionChordCompact(cfg.ScopeGrid, ActionClearRewrites) +
-		" clear"
+	// The keys are the ones of the view the banner stands over, so the strip names the
+	// chord that works where the reader is and a press on it runs the right action.
+	scope := resolveRewriteScope(drawn)
+	clear := model.registry.FormatActionChordCompact(scope, ActionClearRewrites) + " clear"
 	keys, dropped := clear, ""
 	if len(tab.Filter) > 1 {
-		dropped = model.registry.FormatActionChordCompact(cfg.ScopeGrid, ActionPopFilter) +
+		dropped = model.registry.FormatActionChordCompact(scope, ActionPopFilter) +
 			" drop the last"
 		keys = dropped + " · " + clear
 	}
@@ -350,12 +388,10 @@ func (model *Model) renderBanner(tab *app.Tab, banner string, width, row, left i
 	// there and a press on the word removes what it names.
 	at := left + width - 1 - present.MeasureText(keys)
 	if dropped != "" {
-		model.recordButton(row, at, present.MeasureText(dropped),
-			cfg.ScopeGrid, ActionPopFilter)
+		model.recordButton(row, at, present.MeasureText(dropped), scope, ActionPopFilter)
 		at += present.MeasureText(dropped) + 3
 	}
-	model.recordButton(row, at, present.MeasureText(clear),
-		cfg.ScopeGrid, ActionClearRewrites)
+	model.recordButton(row, at, present.MeasureText(clear), scope, ActionClearRewrites)
 
 	return model.styles.RenderStrip(
 		theme.Warning, width,
@@ -847,6 +883,8 @@ func (model *Model) wrapMessage(
 // draws them rather than asked for.
 func (model *Model) resolveViewContent(tab *app.Tab, drawn app.ResultView) app.PaneContent {
 	switch drawn {
+	case app.ViewTree:
+		return app.PaneContent{Kind: app.DataTree}
 	case app.ViewStatistics:
 		return app.PaneContent{Kind: app.DataStatistics, Statistics: buildStatistics(tab)}
 	case app.ViewFields:
@@ -870,6 +908,8 @@ func (model *Model) renderDetailView(
 	content := model.resolveViewContent(tab, drawn)
 
 	switch content.Kind {
+	case app.DataTree:
+		return model.renderDocumentTree(connection, tab, width, height)
 	case app.DataLoading:
 		return model.renderWaitingBlock(waitBlock{
 			label: "reading", since: content.StartedAt,

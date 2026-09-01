@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/turanmahmudov/masume/internal/core"
 )
 
 // A filter over the rows on screen. It hides rows and reads none, so its counts are of the
@@ -63,7 +65,10 @@ func CountColumnValues(rows [][]string, columnIndex int) []ValueCount {
 }
 
 // IsRowShown is true if the row matches every filtered column and holds the term somewhere.
-func IsRowShown(row []string, filter ScreenFilter) bool {
+// A cell that holds a document draws its shape and not its text, so the search reads the
+// document itself: a reader looking for a city inside an address would otherwise be told the
+// collection holds none.
+func IsRowShown(row []string, values []any, filter ScreenFilter) bool {
 	for columnIndex, kept := range filter.Values {
 		value := ""
 		if columnIndex >= 0 && columnIndex < len(row) {
@@ -79,6 +84,12 @@ func IsRowShown(row []string, filter ScreenFilter) bool {
 	term := strings.ToLower(filter.Search)
 	for _, cell := range row {
 		if strings.Contains(strings.ToLower(cell), term) {
+			return true
+		}
+	}
+	for _, value := range values {
+		held, isDocument := value.(core.DocumentValue)
+		if isDocument && strings.Contains(strings.ToLower(held.Text), term) {
 			return true
 		}
 	}

@@ -7,26 +7,32 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// KeyScope says where a key works, which the focus decides. `grid` and `plan`
-// never draw together, so each may use the keys of the other. `editor` is the
-// statement being written. `list` is any list moved by keys that is not a pane.
-// `dialog` owns the keyboard while it is open, so it may share the keys of a pane.
+// KeyScope says where a key works, which the focus decides. `grid`, `plan` and
+// `document` never draw together, so each may use the keys of the others. `editor`
+// is the statement being written. `list` is any list moved by keys that is not a
+// pane. `dialog` owns the keyboard while it is open, so it may share the keys of a
+// pane.
 type KeyScope string
 
-// The seven scopes a chord can be bound in.
+// The eight scopes a chord can be bound in.
 const (
 	ScopeGlobal KeyScope = "global"
 	ScopeGrid   KeyScope = "grid"
 	ScopePlan   KeyScope = "plan"
-	ScopeTree   KeyScope = "tree"
-	ScopeEditor KeyScope = "editor"
-	ScopeList   KeyScope = "list"
-	ScopeDialog KeyScope = "dialog"
+	// ScopeDocument is the tree that opens the rows of a result as documents. It is
+	// its own scope and not the scope of the object tree: the two hold different
+	// rows and answer different keys, and a reader configures each one on its own.
+	ScopeDocument KeyScope = "document"
+	ScopeTree     KeyScope = "tree"
+	ScopeEditor   KeyScope = "editor"
+	ScopeList     KeyScope = "list"
+	ScopeDialog   KeyScope = "dialog"
 )
 
 // KeyScopes lists the scopes a config file may name.
 var KeyScopes = []KeyScope{
-	ScopeGlobal, ScopeGrid, ScopePlan, ScopeTree, ScopeEditor, ScopeList, ScopeDialog,
+	ScopeGlobal, ScopeGrid, ScopePlan, ScopeDocument, ScopeTree, ScopeEditor,
+	ScopeList, ScopeDialog,
 }
 
 // PresetID names one key preset.
