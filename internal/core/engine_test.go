@@ -2,9 +2,9 @@ package core
 
 import "testing"
 
-// Every engine the client offers needs an entry, or it cannot be opened at all. This is the
-// one test that walks the whole list, so a new engine added to Engines without an entry fails
-// here rather than at the moment a user picks it.
+// Every engine in the list needs a registry entry, or it cannot be opened. This test walks
+// the whole list, so a new engine without an entry fails here and not when a user selects
+// it.
 func TestEveryEngineHasAnEntry(t *testing.T) {
 	if len(Engines) == 0 {
 		t.Fatal("the client offers no engine")
@@ -18,7 +18,7 @@ func TestEveryEngineHasAnEntry(t *testing.T) {
 		if info.Family == "" {
 			t.Errorf("%q belongs to no family", engine)
 		}
-		// A server is reached over a port; a file is opened by path and needs none.
+		// A server is reached over a port. A file is opened by path and needs no port.
 		if info.OpensFile {
 			if info.DefaultPort != 0 {
 				t.Errorf("%q opens a file and still names port %d", engine, info.DefaultPort)
@@ -28,8 +28,8 @@ func TestEveryEngineHasAnEntry(t *testing.T) {
 		if info.DefaultPort <= 0 {
 			t.Errorf("%q reaches a server and names no port", engine)
 		}
-		// A hosted engine answers no scheme of its own: it is reached by the scheme of the
-		// protocol it speaks, which the base engine of its family owns.
+		// A hosted engine has no URL scheme of its own. It uses the scheme of its
+		// protocol, which belongs to the base engine of the family.
 	}
 }
 
@@ -58,8 +58,8 @@ func TestFindEngineReadsTheNameAndRefusesTheRest(t *testing.T) {
 	}
 }
 
-// Every family that reaches a server owns a scheme, so a URL can be pasted for one of its
-// engines. A family that opens a file has a path instead and needs none.
+// Every family that connects to a server has a URL scheme, so a user can paste a URL for
+// one of its engines. A family that opens a file uses a path and needs no scheme.
 func TestEveryServerFamilyOwnsAUrlScheme(t *testing.T) {
 	owned := map[Family]int{}
 	for _, info := range ListEngineInfo() {
@@ -89,8 +89,8 @@ func TestNoTwoEnginesClaimOneUrlScheme(t *testing.T) {
 	}
 }
 
-// A capability the engine has not must stay false, because the keys it belongs to are left
-// unbound rather than reporting a refusal.
+// A capability the engine does not have must stay false, because the related keys are left
+// unbound instead of showing an error.
 func TestCapabilitiesFollowTheFamily(t *testing.T) {
 	for _, held := range []struct {
 		engine Engine
@@ -102,12 +102,12 @@ func TestCapabilitiesFollowTheFamily(t *testing.T) {
 		{EnginePostgres, "has transactions", ResolveEngineInfo(EnginePostgres).Capabilities.HasTransactions, true},
 		{EngineMysql, "has transactions", ResolveEngineInfo(EngineMysql).Capabilities.HasTransactions, true},
 
-		// A key store keeps its own order and drives no transaction the client can see.
+		// A key store uses its own order and has no transaction the client can control.
 		{EngineRedis, "sorts a read", ResolveEngineInfo(EngineRedis).Capabilities.SortsRead, false},
 		{EngineRedis, "has transactions", ResolveEngineInfo(EngineRedis).Capabilities.HasTransactions, false},
 		{EngineRedis, "plans a statement", ResolveEngineInfo(EngineRedis).Capabilities.PlansStatement, false},
 
-		// A file has no server sessions to list or cancel.
+		// A file has no server sessions to list or to cancel.
 		{EngineSqlite, "has server sessions", ResolveEngineInfo(EngineSqlite).Capabilities.HasServerSessions, false},
 		{EngineSqlite, "cancels a running query", ResolveEngineInfo(EngineSqlite).Capabilities.CancelsRunningQuery, false},
 	} {
@@ -117,8 +117,8 @@ func TestCapabilitiesFollowTheFamily(t *testing.T) {
 	}
 }
 
-// Cancelling needs a second connection to the same server, so an engine that reports it must
-// also be one the client can open twice.
+// A cancel needs a second connection to the same server, so an engine that reports the
+// capability must also allow a second connection.
 func TestOnlyAServerCancelsARunningQuery(t *testing.T) {
 	for _, info := range ListEngineInfo() {
 		if info.Capabilities.CancelsRunningQuery && info.OpensFile {
@@ -135,7 +135,7 @@ func TestHoldsSystemSchemaMatchesTheNamesAndThePrefixes(t *testing.T) {
 	}{
 		{"pg_catalog", true},
 		{"information_schema", true},
-		// A prefix covers the schemas a server makes for itself, such as pg_toast_temp_1.
+		// A prefix covers the schemas a server creates for itself, such as pg_toast_temp_1.
 		{"pg_toast", true},
 		{"public", false},
 		{"shop", false},
@@ -161,9 +161,9 @@ func TestOpensFileAndNeedsUserAgreeWithTheEntry(t *testing.T) {
 	}
 }
 
-// An engine nothing knows answers the entry of the default engine, so a caller never reads a
-// port of zero or a family of nothing. The name of the engine is validated where a profile is
-// built, so this is the floor under that and not the way a bad name is caught.
+// An unknown engine gives the entry of the default engine, so a caller never reads a port
+// of zero or an empty family. The engine name is validated when a profile is built. This
+// behaviour is the fallback, not the check for a bad name.
 func TestAnUnknownEngineAnswersTheDefaultEntry(t *testing.T) {
 	held := ResolveEngineInfo(Engine("oracle"))
 	wanted := ResolveEngineInfo(DefaultEngine)
@@ -177,9 +177,9 @@ func TestAnUnknownEngineAnswersTheDefaultEntry(t *testing.T) {
 	}
 }
 
-// An engine that reaches a server and names no user of its own still has to be able to
-// give a password, or a hosted deployment could not be opened at all. MongoDB is the one
-// engine where the user is optional and the password is not.
+// An engine that connects to a server without a user must still be able to send a
+// password, or a hosted deployment cannot be opened. MongoDB is the only engine where the
+// user is optional and the password is not.
 func TestAnEngineWithAnOptionalUserCanStillGiveAPassword(t *testing.T) {
 	held := ResolveEngineInfo(EngineMongo)
 	if held.NeedsUser {
@@ -190,9 +190,9 @@ func TestAnEngineWithAnOptionalUserCanStillGiveAPassword(t *testing.T) {
 	}
 }
 
-// A password belongs to a named user on every server but one. Redis checks a password
-// that names nobody, so a profile that names no user can still hold one, and the client
-// must not decide there is nothing to ask for.
+// On every server except one, a password belongs to a named user. Redis checks a password
+// without a user, so a profile without a user can still have a password, and the client
+// must still ask for it.
 func TestOnlyRedisTakesAPasswordThatNamesNobody(t *testing.T) {
 	for _, info := range ListEngineInfo() {
 		wanted := info.Engine == EngineRedis
@@ -203,9 +203,9 @@ func TestOnlyRedisTakesAPasswordThatNamesNobody(t *testing.T) {
 	}
 }
 
-// MongoDB holds a transaction on a replica set and on a sharded cluster, and none on a
-// standalone server. The entry names what the engine can do, and the session reports what
-// the deployment it reached actually answered.
+// MongoDB supports a transaction on a replica set and on a sharded cluster, and not on a
+// standalone server. The registry entry gives the capability of the engine, and the session
+// reports what the connected deployment supports.
 func TestMongodbNamesTheTransactionItsDeploymentsHold(t *testing.T) {
 	if !ResolveEngineInfo(EngineMongo).Capabilities.HasTransactions {
 		t.Error("mongodb reports that no deployment of it holds a transaction")

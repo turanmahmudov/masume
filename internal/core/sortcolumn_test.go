@@ -82,7 +82,7 @@ func TestApplySortColumnActsOnTheSortItIsGiven(t *testing.T) {
 					t.Fatalf("built %v, want %v", built, held.wanted)
 				}
 			}
-			// The sort it was given is not written into, because the caller still holds it.
+			// The input sort is not modified, because the caller still uses it.
 			for at := range given {
 				if held.sort[at] != given[at] {
 					t.Errorf("the sort given was changed at %d", at)

@@ -12,7 +12,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/engines"
 )
 
-// hangingAdapter never answers, as a server behind a firewall that drops the packet does not.
+// hangingAdapter never answers, like a server behind a firewall that drops the packet.
 type hangingAdapter struct {
 	entered chan struct{}
 	release chan struct{}
@@ -26,8 +26,8 @@ func (adapter hangingAdapter) Connect(
 	return nil, db.NewDatabaseError("the server never answered")
 }
 
-// A call that waits on the attempt of another call has to end with its own context. One
-// connection that hangs would otherwise hold every later call to the same profile.
+// A call that waits on the attempt of another call must stop with its own context. Without
+// this one connection that hangs would block every later call to the same profile.
 func TestOpenConnectionEndsAWaiterWithTheContextOfItsCall(t *testing.T) {
 	adapter := hangingAdapter{entered: make(chan struct{}), release: make(chan struct{})}
 	defer close(adapter.release)

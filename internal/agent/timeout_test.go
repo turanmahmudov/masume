@@ -10,7 +10,8 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// stoppableSession is a session that reports what it can do and whether it was told to stop.
+// stoppableSession is a session that reports its capabilities and whether it got a stop
+// request.
 type stoppableSession struct {
 	db.Session
 	cancels bool
@@ -83,8 +84,8 @@ func TestRunStatementWithinStopsALongStatement(t *testing.T) {
 		_, err := RunStatementWithin(
 			context.Background(), session, 10*time.Millisecond,
 			func(running context.Context) (db.QueryResult, error) {
-				// The statement runs until the limit drops it, the way a driver that
-				// watches its context does.
+				// The statement runs until the limit cancels it, in the same way as a
+				// driver that watches its context.
 				<-running.Done()
 				dropped = true
 				return db.QueryResult{}, running.Err()
@@ -105,9 +106,9 @@ func TestRunStatementWithinStopsALongStatement(t *testing.T) {
 	}
 }
 
-// A statement that passed its limit is dropped in the driver as well as on the server, and
-// the caller waits for it to unwind. Without that the call goes on holding the one
-// connection of the profile, and the next call waits behind a statement nobody reads.
+// A statement above its limit is cancelled in the driver and on the server, and the caller
+// waits for it to finish. Without the wait the call keeps the only connection of the
+// profile, and the next call waits for a statement that nobody reads.
 func TestRunStatementWithinWaitsForTheStatementItDropped(t *testing.T) {
 	session := &stoppableSession{cancels: true, stops: true}
 	unwound := make(chan struct{})
@@ -122,7 +123,7 @@ func TestRunStatementWithinWaitsForTheStatementItDropped(t *testing.T) {
 		t.Fatal("a statement past its limit answered without a failure")
 	}
 
-	// The call came back only once the statement had ended, so the connection is free.
+	// The call returned after the statement finished, so the connection is free.
 	select {
 	case <-unwound:
 	default:

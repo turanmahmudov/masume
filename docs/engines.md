@@ -1,27 +1,27 @@
 # Engines
 
-The engines on this page do not all get the same test coverage. The support tiers below say how much each one gets. Read them first, then the capability table under them.
+Not all engines have the same test coverage. The support tiers below describe the coverage of each one. Read the tiers first, then the capability table.
 
 ## Support tiers
 
-**Tier 1** is tested against a real server on every change, so these are the engines to trust.
+**Tier 1** engines are tested against a real server on every change. They are reliable.
 
 | Engine | Versions tested |
 | --- | --- |
 | PostgreSQL | 14 and 18 |
 | MySQL | 8.0 and 8.4 |
 | MariaDB | 11 |
-| MongoDB | 8, standalone, with authentication, and as a replica set |
+| MongoDB | 8, as a standalone server, with authentication, and as a replica set |
 | Redis | 8 |
 | SQLite | Against a temporary file, so no server is involved |
 
-**Tier 2** speaks the protocol of a tier 1 engine, and masume tunes the catalog reads, the capabilities and the plan reader to each service. None of them is tested against a real server, so they rest on reports: CockroachDB, TimescaleDB, Redshift, Neon, Supabase, TiDB, PlanetScale and Aurora MySQL.
+**Tier 2** engines use the protocol of a tier 1 engine. masume adapts the catalog queries, the capabilities and the plan parser to each service. None of them is tested against a real server, so problems are found only through user reports. The tier 2 engines are CockroachDB, TimescaleDB, Redshift, Neon, Supabase, TiDB, PlanetScale and Aurora MySQL.
 
-File an engine report if a tier 2 engine gets something wrong.
+Open an engine problem issue if a tier 2 engine gets something wrong.
 
 ## Protocols
 
-Engines that share a protocol behave the same way, which is why a hosted service works as soon as the engine it was built on does.
+Engines that share a protocol behave the same way. This is why a hosted service works when the engine it is based on works.
 
 | Protocol | Engines |
 | --- | --- |
@@ -33,7 +33,7 @@ Engines that share a protocol behave the same way, which is why a hosted service
 
 ## Capabilities by engine
 
-masume asks the server what it can do, then hides what it cannot. An action the engine does not support has no key and is not offered, so nothing on screen promises something the server will refuse.
+masume queries the capabilities of the server and hides unsupported actions. An action that the engine does not support has no key binding and is not shown in menus. So the interface never offers an action that the server refuses.
 
 | Engine | Plans | Measures | Transactions | Cancels | Activity | Sorts | Truncates | DDL |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -52,18 +52,18 @@ masume asks the server what it can do, then hides what it cannot. An action the 
 | tidb | yes | yes | yes | yes | yes | yes | yes | yes |
 | timescale | yes | yes | yes | yes | yes | yes | yes | yes |
 
-- **Plans** - the server can explain a statement.
-- **Measures** - the plan carries the times the server measured.
+- **Plans** - the server can return the query plan of a statement.
+- **Measures** - the plan can include measured execution times.
 - **Transactions** - begin, commit and roll back by hand.
-- **Cancels** - a running statement can be stopped.
+- **Cancels** - a running statement can be cancelled.
 - **Activity** - other sessions can be listed, and one can be stopped.
-- **Sorts** - the grid can order a read.
+- **Sorts** - the grid can sort a query result.
 - **Truncates** - `TRUNCATE` is offered in the object menu.
-- **DDL** - the server can write the `CREATE` statement of an object.
+- **DDL** - the server can return the `CREATE` statement of an object.
 
-The MongoDB row depends on the deployment. MongoDB holds a transaction on a replica set or a sharded cluster, and none at all on a standalone server. masume reports what the deployment answered.
+The MongoDB row depends on the deployment. MongoDB supports transactions on a replica set or a sharded cluster, and not on a standalone server. masume reports the capabilities of the connected deployment.
 
-TiDB takes `SET SESSION TRANSACTION READ ONLY` and does nothing under it. A profile opened `read-only` is still refused by this client, but the server itself will not hold the session read-only.
+TiDB accepts `SET SESSION TRANSACTION READ ONLY` but does not enforce it. On a profile opened `read-only`, this client still refuses writes, but the server itself does not enforce the read-only session.
 
 ## Default port and TLS
 
@@ -84,42 +84,42 @@ TiDB takes `SET SESSION TRANSACTION READ ONLY` and does nothing under it. A prof
 | tidb | 4000 | `prefer` |
 | timescale | 5432 | `prefer` |
 
-`prefer` tries TLS and falls back to the clear if the server refuses it. `require` encrypts and never falls back. See [configuration.md](configuration.md) for `verify-ca` and `verify-full`.
+`prefer` tries TLS first and falls back to an unencrypted connection if the server does not support TLS. `require` always uses TLS and never falls back. See [configuration.md](configuration.md) for `verify-ca` and `verify-full`.
 
 ## Redis
 
-Redis has no SQL. A tab takes commands, one to a line:
+Redis has no SQL. A query tab accepts Redis commands, one per line:
 
 ```
 SET user:1 "a name"
 GET user:1
 ```
 
-The tree is built by scanning the key space, so it shows the result of the last scan. A write made since then is not in it until the next scan. masume knows the command set, and marks a command it does not know.
+The tree is built by scanning the key space, so it shows the state at the time of the last scan. A key written after that scan appears after the next scan. masume knows the Redis command set and marks unknown commands.
 
-A Redis profile may name a password with no user. The server `requirepass` names nobody.
+A Redis profile can have a password without a user, because the server setting `requirepass` does not use a user name.
 
 ## MongoDB
 
-A tab takes the calls of the shell:
+A query tab accepts MongoDB shell syntax:
 
 ```js
 db.orders.find({status: "new"}).sort({total: -1})
 ```
 
-The reader takes the shell form of a document as well as strict extended JSON, so `ObjectId("…")`, a bare key, a single quote and `/pattern/i` all read.
+The parser accepts the shell form of a document as well as strict extended JSON. So `ObjectId("…")`, unquoted keys, single quotes and `/pattern/i` all work.
 
-A collection keeps no schema, so the columns of a read are the fields a sample of its documents holds. The type of a column is the one type the sample saw, or `mixed` where it saw more than one. A staged edit is written by the `_id` of its row.
+A collection has no schema, so the columns of a result are the fields found in a sample of its documents. The type of a column is the type found in the sample, or `mixed` if the sample contained more than one type. A staged edit is written using the `_id` of its row.
 
-Name a user in a MongoDB profile only where the server has authentication turned on. A server without it refuses a connection that carries one.
+Set a user in a MongoDB profile only when the server has authentication enabled. A server without authentication refuses a connection that sends credentials.
 
 ## Choosing the engine
 
-Set `engine` in the profile. masume picks the driver, the default port, the catalog reads and the plan reader from it.
+Set `engine` in the profile. masume selects the driver, the default port, the catalog queries and the plan parser based on it.
 
 ```toml
 [profile.shop]
 engine = "postgres"
 ```
 
-See [configuration.md](configuration.md) for the rest of a profile.
+See [configuration.md](configuration.md) for the other profile keys.

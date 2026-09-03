@@ -7,8 +7,8 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// An ER diagram drawn with box characters: the relation in the middle, the relations that
-// point at it on the left, and the ones it points at on the right.
+// An ER diagram drawn with box characters: the table in the middle, the tables that refer to
+// it on the left, and the tables it refers to on the right.
 
 // DiagramColumn is one column of a box of the diagram.
 type DiagramColumn struct {
@@ -17,7 +17,7 @@ type DiagramColumn struct {
 	Foreign bool
 }
 
-// DiagramTable is one relation drawn in a diagram.
+// DiagramTable is one table of a diagram.
 type DiagramTable struct {
 	Schema      string
 	Name        string
@@ -25,7 +25,7 @@ type DiagramTable struct {
 	ForeignKeys []query.ForeignKey
 }
 
-// The shape of one box, and how much of a long column list it shows.
+// The size of one box, and the number of columns it shows.
 const (
 	diagramBoxWidth    = 26
 	diagramGap         = 8
@@ -33,17 +33,17 @@ const (
 	diagramMaxColumns  = 10
 )
 
-// QualifyDiagramTable writes the schema and the name of a relation as one name.
+// QualifyDiagramTable joins the schema and the name of a table into one name.
 func QualifyDiagramTable(schema, name string) string {
 	return schema + "." + name
 }
 
-// diagramCanvas is a grid of cells the boxes and the arrows are drawn into.
+// diagramCanvas is the cell grid the boxes and the arrows are drawn into.
 type diagramCanvas struct {
 	rows [][]rune
 }
 
-// set writes the text from that cell rightwards, over whatever stood there.
+// set writes the text from that cell to the right and replaces the previous content.
 func (canvas *diagramCanvas) set(x, y int, text string) {
 	for len(canvas.rows) <= y {
 		canvas.rows = append(canvas.rows, []rune{})
@@ -58,7 +58,7 @@ func (canvas *diagramCanvas) set(x, y int, text string) {
 	canvas.rows[y] = row
 }
 
-// setSoft draws only in a blank cell, so a box is never written over.
+// setSoft writes into a blank cell only, so it never overwrites a box.
 func (canvas *diagramCanvas) setSoft(x, y int, character rune) {
 	for len(canvas.rows) <= y {
 		canvas.rows = append(canvas.rows, []rune{})
@@ -87,7 +87,7 @@ func (canvas *diagramCanvas) toLines() []string {
 	return lines
 }
 
-// padDiagramCell cuts a cell with an ellipsis, or pads it out.
+// padDiagramCell cuts a cell with an ellipsis, or pads it with spaces.
 func padDiagramCell(text string, width int) string {
 	if len([]rune(text)) > width {
 		return string([]rune(text)[:width-1]) + "…"
@@ -95,8 +95,8 @@ func padDiagramCell(text string, width int) string {
 	return PadText(text, width)
 }
 
-// buildDiagramBox writes the box of one relation: its name, then its columns with the role
-// of each.
+// buildDiagramBox returns the box of one table: the name, and then the columns with the role
+// of each one.
 func buildDiagramBox(table DiagramTable) []string {
 	inner := diagramBoxWidth - 2
 	shown := table.Columns
@@ -126,7 +126,7 @@ func buildDiagramBox(table DiagramTable) []string {
 	return append(lines, "╰"+strings.Repeat("─", inner)+"╯")
 }
 
-// findDiagramColumnRow returns which row of a box holds that column.
+// findDiagramColumnRow returns the row of a box that holds that column.
 func findDiagramColumnRow(table DiagramTable, columnName string) (int, bool) {
 	shown := table.Columns
 	if len(shown) > diagramMaxColumns {
@@ -140,7 +140,7 @@ func findDiagramColumnRow(table DiagramTable, columnName string) (int, bool) {
 	return 0, false
 }
 
-// diagramPlacement is where one box was drawn, and how tall it is.
+// diagramPlacement is the position and the height of one box.
 type diagramPlacement struct {
 	table  DiagramTable
 	x      int
@@ -156,7 +156,7 @@ func placeDiagramBox(canvas *diagramCanvas, table DiagramTable, x, y int) diagra
 	return diagramPlacement{table: table, x: x, y: y, height: len(lines)}
 }
 
-// connectDiagram routes an arrow from one row to another through a vertical channel.
+// connectDiagram draws an arrow from one row to another through a vertical channel.
 func connectDiagram(canvas *diagramCanvas, fromX, fromY, toX, toY int) {
 	step := max((toX-fromX)/2, 2)
 	channel := fromX + step
@@ -190,8 +190,8 @@ func connectDiagram(canvas *diagramCanvas, fromX, fromY, toX, toY int) {
 	canvas.set(toX-1, toY, "▶")
 }
 
-// RenderErDiagram draws the relation and its neighbours, and joins every foreign key column
-// to the column it points at.
+// RenderErDiagram draws the table and its neighbours and connects every foreign key column
+// to the column it refers to.
 func RenderErDiagram(root DiagramTable, related []DiagramTable) []string {
 	canvas := &diagramCanvas{}
 	rootName := QualifyDiagramTable(root.Schema, root.Name)
@@ -285,8 +285,8 @@ func firstOf(names []string) string {
 	return names[0]
 }
 
-// CollectDiagramNeighbours returns the names of the relations at either end of a foreign key
-// of this one.
+// CollectDiagramNeighbours returns the names of the tables at both ends of a foreign key of
+// this table.
 func CollectDiagramNeighbours(
 	root DiagramTable, relationships []db.Relationship,
 ) map[string]bool {

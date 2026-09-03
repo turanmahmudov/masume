@@ -1,5 +1,5 @@
-// Package ai holds what the chat of one connection needs: the prompt a model is told, the
-// providers it can be asked through, and the run that returns one question.
+// Package ai holds what the chat of one connection needs: the system prompt, the providers
+// it can send to, and the run that answers one question.
 package ai
 
 import (
@@ -8,14 +8,14 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// ResolveLogPath returns where the traffic of the chat is written, to read with `tail -f`.
+// ResolveLogPath returns the path of the chat traffic log, to read with `tail -f`.
 func ResolveLogPath() string {
 	return core.ResolveStatePath("ai-chat.log")
 }
 
 var chatLog = sync.OnceValue(func() *core.LogFile { return core.NewLogFile(ResolveLogPath()) })
 
-// LogEvent writes one line of the log of the chat.
+// LogEvent writes one line to the chat log.
 func LogEvent(message string) {
 	chatLog().Append(message)
 }

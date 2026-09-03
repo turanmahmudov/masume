@@ -10,7 +10,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// buildStoredProfile answers a profile the form could have written.
+// buildStoredProfile returns a profile the form could have written.
 func buildStoredProfile() cfg.Profile {
 	return cfg.Profile{
 		Name: "shop", Engine: core.EnginePostgres, Host: "127.0.0.1", Port: 5432,
@@ -19,7 +19,7 @@ func buildStoredProfile() cfg.Profile {
 	}
 }
 
-// saveProfile writes the profile into a file holding that text, and answers the text again.
+// saveProfile writes the profile into a file with that text, and returns the new text.
 func saveProfile(t *testing.T, body string, profile cfg.Profile) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.toml")
@@ -36,8 +36,8 @@ func saveProfile(t *testing.T, body string, profile cfg.Profile) string {
 	return string(written)
 }
 
-// A password the user cleared must leave the file, because a line the writer left behind
-// keeps the connection on the old password and holds it on disk.
+// A password the user cleared must be deleted from the file. A line left behind keeps the
+// connection on the old password and stores it on disk.
 func TestSaveProfileToFileTakesOutAValueTheFormCleared(t *testing.T) {
 	written := saveProfile(t, `
 [profile.shop]
@@ -57,8 +57,8 @@ password = "old-secret"
 	}
 }
 
-// A setting the form never showed keeps its line, so editing a connection never takes the
-// page size or a comment out of the file.
+// A setting the form does not show keeps its line, so an edit of a connection never deletes
+// the page size or a comment from the file.
 func TestSaveProfileToFileKeepsWhatTheFormNeverShowed(t *testing.T) {
 	written := saveProfile(t, `
 [profile.shop]
@@ -79,9 +79,9 @@ statement_timeout_ms = 30000
 	}
 }
 
-// A rename keeps the settings the form never showed, the same way an edit does. A rename
-// that took the block out and wrote a new one would drop `mcp`, and the profile would fall
-// back to the level the whole server is open at.
+// A rename keeps the settings the form does not show, in the same way as an edit. A rename
+// that deleted the block and wrote a new one would lose `mcp`, and the profile would use the
+// access level of the whole server.
 func TestSaveProfileToFileKeepsWhatTheFormNeverShowedThroughARename(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte(`
@@ -122,7 +122,7 @@ page_size = 500
 		}
 	}
 
-	// The file still reads back as one profile of the new name.
+	// The file still contains one profile with the new name.
 	loaded := cfg.LoadConfig(path)
 	if len(loaded.Problems) > 0 {
 		t.Fatalf("the file does not read back: %+v", loaded.Problems)
@@ -135,8 +135,8 @@ page_size = 500
 	}
 }
 
-// A rename onto a name the file already holds writes into the block that stays, so the
-// file never ends with two blocks of one name.
+// A rename to a name that is already in the file writes into the block that stays, so the
+// file never contains two blocks with one name.
 func TestSaveProfileToFileRenamingOntoANameTheFileHolds(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte(`
@@ -176,9 +176,9 @@ user = "you"
 	}
 }
 
-// The file is written beside itself and moved over, so a write that fails part way leaves
-// the file it replaces whole. Nothing of the write may be left behind, and the file stays
-// readable by its owner alone.
+// The file is written to a temporary file in the same directory and then moved over the
+// target, so a write that fails part way leaves the old file complete. No temporary file can
+// stay behind, and only the owner can read the file.
 func TestSaveProfileToFileLeavesNoHalfWrittenFile(t *testing.T) {
 	directory := t.TempDir()
 	path := filepath.Join(directory, "config.toml")

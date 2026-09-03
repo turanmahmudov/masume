@@ -8,10 +8,10 @@ import (
 	"github.com/turanmahmudov/masume/internal/agent"
 )
 
-// The one place the catalogue of the tools meets a provider: the schemas a model is told
-// about, and the call that runs one of them.
+// The connection between the tool catalogue and a provider: the schemas sent to a model,
+// and the call that runs one tool.
 
-// BuildToolSchemas returns the catalogue as a provider is told about it.
+// BuildToolSchemas returns the catalogue in the form sent to a provider.
 func BuildToolSchemas(definitions []agent.ToolDefinition) []ToolSchema {
 	schemas := make([]ToolSchema, 0, len(definitions))
 	for _, definition := range definitions {
@@ -23,9 +23,9 @@ func BuildToolSchemas(definitions []agent.ToolDefinition) []ToolSchema {
 	return schemas
 }
 
-// CallToolDefinition runs the call of this name and returns what it said, as the JSON text a
-// model reads. A name the catalogue does not hold is answered, not thrown, because the model
-// asked for it and must be told.
+// CallToolDefinition runs the tool with this name and returns its result as JSON text for
+// the model. An unknown name returns an error message and does not panic, because the model
+// sent the name and needs the answer.
 func CallToolDefinition(
 	ctx context.Context, definitions []agent.ToolDefinition, deps agent.ToolDeps,
 	name string, input map[string]any,
@@ -39,8 +39,8 @@ func CallToolDefinition(
 	return writeToolOutput(map[string]any{"error": "no tool named " + name})
 }
 
-// writeToolOutput writes what a call answered as the text the model reads. A character a
-// browser cares about is left as the statement wrote it.
+// writeToolOutput returns the result of a call as text for the model. An HTML character is
+// not escaped and stays as the statement wrote it.
 func writeToolOutput(answered any) string {
 	written := &bytes.Buffer{}
 	encoder := json.NewEncoder(written)

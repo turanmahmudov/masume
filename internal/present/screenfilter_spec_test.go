@@ -7,9 +7,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// The banner is a summary: a column of several kept values reads as a count, so two different
-// filters read alike in it. Anything that keeps what it drew from a filter has to tell them
-// apart, which is what the fingerprint is for.
+// The banner is a summary: a column with several kept values shows a count, so two different
+// filters have the same banner. A caller that caches the result of a filter must see the
+// difference, which is the purpose of the fingerprint.
 func TestScreenFilterFingerprintTellsApartWhatTheBannerDoesNot(t *testing.T) {
 	first := present.ScreenFilter{Values: map[int]map[string]bool{
 		0: {"ada": true, "grace": true, "alan": true},
@@ -27,8 +27,8 @@ func TestScreenFilterFingerprintTellsApartWhatTheBannerDoesNot(t *testing.T) {
 	}
 }
 
-// The same filter answers the same fingerprint however its maps were walked, or a frame would
-// redraw for no reason.
+// The same filter gives the same fingerprint, whatever the order of its maps, or a frame
+// would redraw without a change.
 func TestScreenFilterFingerprintIsTheSameForTheSameFilter(t *testing.T) {
 	build := func() present.ScreenFilter {
 		return present.ScreenFilter{
@@ -47,7 +47,8 @@ func TestScreenFilterFingerprintIsTheSameForTheSameFilter(t *testing.T) {
 	}
 }
 
-// Every part of a filter changes it, because each one hides a different set of rows.
+// Every part of a filter changes the fingerprint, because each one hides a different set of
+// rows.
 func TestScreenFilterFingerprintFollowsEveryPart(t *testing.T) {
 	base := present.ScreenFilter{
 		Values: map[int]map[string]bool{0: {"ada": true}},
@@ -151,8 +152,8 @@ func TestApplyValueFilterKeepsOnlyTheValuesChosen(t *testing.T) {
 }
 
 func TestApplyValueFilterClearsTheColumnWhereNothingIsHidden(t *testing.T) {
-	// Keeping every value, or none, hides nothing, so the entry goes rather than being
-	// kept as a filter that does nothing.
+	// A selection of every value, or of no value, hides nothing, so the entry is removed
+	// and not kept as a filter without effect.
 	for _, held := range []struct {
 		name      string
 		kept      map[string]bool
@@ -212,9 +213,9 @@ func TestApplySearchTermWithABlankTermClearsTheSearch(t *testing.T) {
 	}
 }
 
-// A cell that holds a document draws its shape, so the text the reader is looking for is not
-// on the screen at all. The search reads the document itself, or a search for a city inside
-// an address would answer that the collection holds none.
+// A cell with a document shows a summary, so the text the user searches for is not on the
+// screen. The search reads the document itself, or a search for a city inside an address
+// would find nothing.
 func TestASearchReadsTheDocumentACellHolds(t *testing.T) {
 	filter := present.ApplySearchTerm(present.NoScreenFilter(), "berlin")
 	shape := []string{"1", "{ 2 fields }"}
@@ -231,7 +232,7 @@ func TestASearchReadsTheDocumentACellHolds(t *testing.T) {
 	}, filter) {
 		t.Error("a row whose document does not hold the term was shown")
 	}
-	// The shape drawn in the cell is not what the reader is searching for.
+	// The summary in the cell is not the text the user searches for.
 	if present.IsRowShown(shape, values,
 		present.ApplySearchTerm(present.NoScreenFilter(), "zzz")) {
 		t.Error("a row was shown for a term nothing holds")

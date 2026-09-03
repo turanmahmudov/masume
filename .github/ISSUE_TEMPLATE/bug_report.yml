@@ -1,18 +1,18 @@
 name: Bug report
-description: Report something the client gets wrong.
+description: Report something that the client does wrong.
 labels: ["bug", "needs triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for the report. Please do not put a password, a host name of a private
-        server, or any row of real data into this issue.
+        Thank you for the report. Please do not put a password, a private host name, or
+        any real data into this issue.
 
   - type: textarea
     id: what-happened
     attributes:
       label: What happened
-      description: What the client did, and what you expected instead.
+      description: What the client did, and what you expected it to do.
       placeholder: |
         The grid drew ... , and I expected it to draw ... .
     validations:
@@ -22,7 +22,7 @@ body:
     id: steps
     attributes:
       label: How to reproduce it
-      description: The smallest set of steps that shows the problem every time.
+      description: The shortest list of steps that reproduces the problem every time.
       placeholder: |
         1. Open a PostgreSQL profile.
         2. Run `select 1`.
@@ -35,7 +35,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: What `masume --version` writes.
+      description: The output of `masume --version`.
       placeholder: masume v0.1.0
     validations:
       required: true
@@ -44,7 +44,7 @@ body:
     id: engine
     attributes:
       label: Engine
-      description: The engine of the profile the problem happens on.
+      description: The engine of the profile where the problem happens.
       options:
         - PostgreSQL
         - MySQL
@@ -68,7 +68,7 @@ body:
     id: server-version
     attributes:
       label: Server version
-      description: What the server reports, where the problem needs one.
+      description: The version that the server reports, if a server is involved.
       placeholder: PostgreSQL 17.2
 
   - type: input
@@ -85,22 +85,22 @@ body:
     attributes:
       label: What the screen showed
       description: >
-        A screenshot, or the text of the frame. `tmux capture-pane -p` writes the frame as
+        A screenshot, or the frame as text. `tmux capture-pane -p` writes the frame as
         text. Remove any value you cannot share before you paste it.
 
   - type: textarea
     id: config
     attributes:
       label: The profile, without its password
-      description: The `[profile.…]` block the problem happens on. Remove every password.
+      description: The `[profile.…]` block where the problem happens. Remove every password.
       render: toml
 
   - type: checkboxes
     id: checks
     attributes:
-      label: Before you open it
+      label: Before you open the issue
       options:
         - label: I searched the open and closed issues for the same report.
           required: true
-        - label: This issue holds no password, no private host name and no real data.
+        - label: This issue contains no password, no private host name and no real data.
           required: true

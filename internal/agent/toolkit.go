@@ -1,5 +1,5 @@
-// Package agent holds what a model may ask one connection for. Both callers use it: the
-// server that speaks the Model Context Protocol, and the chat inside the client.
+// Package agent holds the operations a model can run on one connection. Two callers use it:
+// the Model Context Protocol server, and the chat inside the client.
 package agent
 
 import (
@@ -10,7 +10,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// StatementReport is one statement that ran or failed, as the caller stores it.
+// StatementReport is one statement that ran or failed, in the form the caller stores.
 type StatementReport struct {
 	SQL          string
 	RanAt        time.Time
@@ -20,18 +20,18 @@ type StatementReport struct {
 	ErrorMessage string
 }
 
-// StatementRunner is how a caller lets a statement run. The caller decides whether it may:
-// the chat asks the user in a card, and the server checks the level of the connection and
-// then asks the user through their own client.
+// StatementRunner is the interface a caller uses to allow a statement. The caller decides:
+// the chat asks the user in a card, and the server checks the access level of the connection
+// and then asks the user through their own client.
 type StatementRunner struct {
-	// RowLimit is how many rows one run returns, which is also the most a caller may ask
-	// for.
+	// RowLimit is the number of rows one run returns, which is also the maximum a caller
+	// can request.
 	RowLimit int
-	// AskToRun returns an empty text where the statement may run, and the reason it may
-	// not otherwise.
+	// AskToRun returns an empty text if the statement can run, and the reason if it
+	// cannot.
 	AskToRun     func(ctx context.Context, risk statement.WriteRisk, statements []string) string
 	RunStatement func(ctx context.Context, sql string, rowLimit int) (db.QueryResult, error)
-	// ReportRun is called after the run, so the caller can store it.
+	// ReportRun is called after the run, so the caller can store the result.
 	ReportRun func(report StatementReport)
 }
 
@@ -42,23 +42,23 @@ type ToolSession interface {
 	db.TransactionKeeper
 }
 
-// ToolDeps is what a tool may reach.
+// ToolDeps holds the resources a tool can use.
 type ToolDeps struct {
 	Session ToolSession
-	// Tables returns the relations of the connection, which the caller keeps fresh.
+	// Tables returns the tables of the connection. The caller keeps the list up to date.
 	Tables func() []db.TableRef
 	Runner StatementRunner
-	// MarkTableDescribed marks a relation the model described as read in the tree too.
+	// MarkTableDescribed marks a table the model described as read in the tree as well.
 	MarkTableDescribed func(table db.TableRef, detail db.TableDetail)
 }
 
-// ToolDefinition is one thing a model may ask a connection for, named and described before
-// any connection exists. The server lists these, and the chat binds them.
+// ToolDefinition is one operation a model can run on a connection. It has a name and a
+// description before a connection exists. The server lists them, and the chat binds them.
 type ToolDefinition struct {
 	Name        string
 	Description string
-	// InputSchema is the JSON Schema of the call, which every caller sends as it is.
+	// InputSchema is the JSON Schema of the call. Every caller sends it unchanged.
 	InputSchema map[string]any
-	// Call reads the input through the schema, because a caller can send anything.
+	// Call validates the input against the schema, because a caller can send any value.
 	Call func(ctx context.Context, deps ToolDeps, input map[string]any) any
 }

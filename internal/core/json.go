@@ -7,15 +7,15 @@ import (
 	"strings"
 )
 
-// A JSON value read back as text keeps the order of the members of every object. A map has
-// no order, so a value read into one and written again stands in name order, and the fields
-// of a value the server sent must stand in the order the server wrote them.
+// This parser keeps the order of the members of every object. A map has no order, so a
+// value parsed into a map and written again is in name order, and the fields of a value
+// from the server must keep the order the server used.
 
-// JSONValue is one JSON value: an object, an array, or a scalar already written.
+// JSONValue is one JSON value: an object, an array, or a scalar in its written form.
 type JSONValue struct {
 	Members []JSONMember
 	Items   []JSONValue
-	// The written form of a scalar, for a value that is neither an object nor an array.
+	// The written form of a scalar. It is empty for an object and for an array.
 	Scalar   string
 	IsObject bool
 	IsArray  bool
@@ -27,7 +27,7 @@ type JSONMember struct {
 	Value JSONValue
 }
 
-// ReadJSON reads JSON text. It returns false where the text is not one JSON value.
+// ReadJSON parses JSON text. It returns false if the text is not exactly one JSON value.
 func ReadJSON(text string) (JSONValue, bool) {
 	decoder := json.NewDecoder(strings.NewReader(text))
 	decoder.UseNumber()
@@ -115,14 +115,14 @@ func readJSONArray(decoder *json.Decoder) (JSONValue, error) {
 	}
 }
 
-// Write writes the value on one line, with no space between its parts.
+// Write returns the value on one line, with no space between the parts.
 func (value JSONValue) Write() string {
 	written := &strings.Builder{}
 	value.writeInto(written, "", "")
 	return written.String()
 }
 
-// WriteIndented writes the value over several lines, one step of indent per level.
+// WriteIndented returns the value on several lines, with one indent step per level.
 func (value JSONValue) WriteIndented(step string) string {
 	written := &strings.Builder{}
 	value.writeInto(written, step, "")
@@ -189,8 +189,8 @@ func writeJSONBreak(written *strings.Builder, step, indent string) {
 	written.WriteString(indent)
 }
 
-// WriteJSONText writes a text as a JSON string, without the escapes of `<`, `>` and `&` that
-// the standard library adds.
+// WriteJSONText returns the text as a JSON string. It does not escape `<`, `>` and `&`,
+// which the standard library escapes.
 func WriteJSONText(text string) string {
 	held := &bytes.Buffer{}
 	encoder := json.NewEncoder(held)
@@ -201,8 +201,8 @@ func WriteJSONText(text string) string {
 	return strings.TrimSuffix(held.String(), "\n")
 }
 
-// WriteJSONValue writes one value as JSON, which is how a bind value is shown: a text keeps
-// its quotes, and a line break inside it is written as an escape rather than breaking the row.
+// WriteJSONValue returns one value as JSON. A bind value is displayed this way: a text
+// keeps its quotes, and a line break becomes an escape and does not break the row.
 func WriteJSONValue(value any) string {
 	held := &bytes.Buffer{}
 	encoder := json.NewEncoder(held)
@@ -213,9 +213,9 @@ func WriteJSONValue(value any) string {
 	return strings.TrimSuffix(held.String(), "\n")
 }
 
-// writeJSONNumber writes a number in the shortest form that reads back the same. A whole
-// number keeps every digit it was written with: a double holds only 53 bits, so above that
-// the double names another number, and a column of identities is read wrong.
+// writeJSONNumber returns a number in the shortest form that parses back to the same
+// value. An integer keeps all of its digits: a double holds 53 bits only, so a larger
+// integer becomes a different number and a column of ids is displayed wrong.
 func writeJSONNumber(number json.Number) string {
 	written := number.String()
 	if isWholeNumberText(written) {
@@ -232,8 +232,9 @@ func writeJSONNumber(number json.Number) string {
 	return string(shortest)
 }
 
-// isWholeNumberText is true for digits with an optional minus, which is already the shortest
-// form of that number. JSON writes no other sign, so anything else is read as a double.
+// isWholeNumberText is true for digits with an optional minus sign, which is already the
+// shortest form of that number. JSON has no other sign, so all other text becomes a
+// double.
 func isWholeNumberText(written string) bool {
 	digits := strings.TrimPrefix(written, "-")
 	if digits == "" {

@@ -6,9 +6,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// The panes are laid out for whatever the terminal gives, down to a very narrow one. A width
-// below zero or a count of zero must answer something a renderer can use rather than a
-// negative width that would panic where it is sliced.
+// The panes are laid out for every terminal size, down to a very narrow one. A width below
+// zero or a count of zero must give a value the renderer can use and not a negative width,
+// which would panic in a slice operation.
 func TestPlanLabelWidthNeverAnswersBelowZero(t *testing.T) {
 	for _, count := range []int{0, 1, 2, 5, 40} {
 		for _, available := range []int{-10, 0, 1, 10, 80, 400} {
@@ -19,14 +19,14 @@ func TestPlanLabelWidthNeverAnswersBelowZero(t *testing.T) {
 	}
 }
 
-// A label keeps a readable width even where the terminal is narrow, because a label cut to
-// nothing names no column at all.
+// A label keeps a readable width in a narrow terminal, because a label cut to zero shows no
+// name.
 func TestPlanLabelWidthKeepsALabelReadable(t *testing.T) {
 	narrow := present.PlanLabelWidth(8, 20)
 	if narrow <= 0 {
 		t.Fatalf("eight labels in twenty cells answered %d", narrow)
 	}
-	// A wide terminal does not give one label the whole row either.
+	// A wide terminal does not give one label the whole row.
 	wide := present.PlanLabelWidth(2, 4000)
 	if wide >= 4000 {
 		t.Errorf("two labels in four thousand cells answered %d", wide)
@@ -37,9 +37,9 @@ func TestPlanLabelWidthKeepsALabelReadable(t *testing.T) {
 	}
 }
 
-// The name and the type of a field share the room the value does not need. Both keep a
-// readable width, so a pane too narrow for even that is given the floor and the renderer cuts
-// what will not fit. The widths never fall below zero and never grow as the pane shrinks.
+// The name and the type of a field share the space the value does not need. Both keep a
+// readable width, so a pane that is too narrow gets the minimum widths and the renderer cuts
+// the rest. The widths are never below zero and never grow as the pane shrinks.
 func TestPlanFieldColumnsNeverFallBelowTheReadableFloor(t *testing.T) {
 	last := present.PlanFieldColumns(-5)
 	for _, available := range []int{-5, 0, 1, 10, 20, 40, 80, 200} {
@@ -55,8 +55,8 @@ func TestPlanFieldColumnsNeverFallBelowTheReadableFloor(t *testing.T) {
 	}
 }
 
-// A wide pane gives both columns their full width, and a narrow one takes from both rather
-// than starving one of them.
+// A wide pane gives both columns their full width. A narrow pane takes space from both and
+// not from one only.
 func TestPlanFieldColumnsTakeFromBothWhereItIsNarrow(t *testing.T) {
 	wide := present.PlanFieldColumns(200)
 	narrow := present.PlanFieldColumns(30)
@@ -70,8 +70,8 @@ func TestPlanFieldColumnsTakeFromBothWhereItIsNarrow(t *testing.T) {
 	}
 }
 
-// The strip of views names them where there is room, numbers them where there is less, and
-// drops the hint first, because the names are what the user reads.
+// The view strip shows the names if there is space, the numbers if there is less space, and
+// removes the hint first, because the user reads the names.
 func TestPlanViewStripGivesUpTheHintBeforeTheNames(t *testing.T) {
 	names := []string{"data", "columns", "indexes", "constraints", "ddl", "plan"}
 
@@ -80,13 +80,13 @@ func TestPlanViewStripGivesUpTheHintBeforeTheNames(t *testing.T) {
 		t.Errorf("a wide strip answered %+v, wanted the names and the hint", wide)
 	}
 
-	// Narrower: the names stay and the hint goes.
+	// Narrower: the names stay and the hint is removed.
 	middle := present.PlanViewStrip(names, 0, 60)
 	if !middle.Named {
 		t.Errorf("a strip of sixty cells answered %+v, wanted the names kept", middle)
 	}
 
-	// Narrower still: the numbers alone.
+	// Narrower again: the numbers only.
 	narrow := present.PlanViewStrip(names, 0, 10)
 	if narrow.Named {
 		t.Errorf("a strip of ten cells answered %+v, wanted the numbers alone", narrow)
@@ -95,16 +95,16 @@ func TestPlanViewStripGivesUpTheHintBeforeTheNames(t *testing.T) {
 
 func TestPlanViewStripHoldsAnEmptyListAndANarrowTerminal(t *testing.T) {
 	for _, available := range []int{-5, 0, 1, 5} {
-		// It has to answer rather than reach past the end of the list.
+		// It must return a value and not read after the end of the list.
 		present.PlanViewStrip(nil, 0, available)
 		present.PlanViewStrip([]string{"data"}, 0, available)
-		// An index outside the list must not reach past it either.
+		// An index outside the list must also not read after the list.
 		present.PlanViewStrip([]string{"data"}, 5, available)
 	}
 }
 
-// The tree shrinks with the terminal, because a tree of its full width would leave the editor
-// and the result no room beside it.
+// The tree shrinks with the terminal, because a tree at full width would leave no space for
+// the editor and the result.
 func TestPlanSidebarWidthLeavesRoomForThePanes(t *testing.T) {
 	const preferred = 40
 
@@ -126,8 +126,8 @@ func TestPlanSidebarWidthLeavesRoomForThePanes(t *testing.T) {
 	}
 }
 
-// A terminal with no room gets no tree, and one that has room never gets a tree wider than
-// itself. The width never falls below zero, because it is sliced with.
+// A terminal without space gets no tree, and a terminal with space never gets a tree wider
+// than itself. The width is never below zero, because it is used in a slice operation.
 func TestPlanSidebarWidthNeverPassesWhatThereIs(t *testing.T) {
 	for _, available := range []int{-10, 0, 1, 10, 20, 40, 80, 200} {
 		held := present.PlanSidebarWidth(available, 40)

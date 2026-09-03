@@ -1,6 +1,6 @@
-// Package core holds what every tier above it reads: the text form of a value,
-// the sort and filter of a tab, the staged work of the grid, and the paths this
-// client writes to.
+// Package core holds the types every tier above it uses: the text form of a value, the
+// sort and filter of a tab, the staged changes of the grid, and the paths this client
+// writes to.
 package core
 
 import (
@@ -13,27 +13,27 @@ import (
 	"time"
 )
 
-// NullText is the text form of a null, for a viewer, the clipboard and the cell editor.
+// NullText is the text form of a null, used by the viewer, the clipboard and the cell
+// editor.
 const NullText = "NULL"
 
-// DocumentValue is a value that holds fields or elements rather than one reading: an
-// embedded document, or an array. It carries the text of the whole value and how much the
-// value holds, so a cell can say the shape of it without reading the text again.
+// DocumentValue is a value that contains fields or elements instead of one reading: an
+// embedded document, or an array. It holds the text of the whole value and the number of
+// entries, so a cell can show the size without parsing the text again.
 //
-// The text is written so that every type survives it. A number written plainly cannot say
-// whether the server holds it in four bytes or eight, and a moment written plainly cannot be
-// told from a string of the same shape, so the tree that opens this value would name the
-// wrong type for it.
+// The text keeps the type of every value. A plain number does not show whether the server
+// stores it in four bytes or eight, and a plain timestamp is not different from a string
+// of the same form, so the document tree would show the wrong type.
 type DocumentValue struct {
 	Text string
-	// Count is how many fields a document holds, or how many elements an array holds.
+	// Count is the number of fields in a document, or the number of elements in an array.
 	Count   int
 	IsArray bool
 }
 
-// DescribeShape says what the value holds, for a cell that draws one line. A grid draws the
-// shape rather than the text, because a document cut off at the width of a column says only
-// what its first field is called.
+// DescribeShape returns a one-line summary of the value for a grid cell. The grid shows
+// the summary and not the text, because a document truncated to the column width shows
+// only the name of its first field.
 func (value DocumentValue) DescribeShape() string {
 	if value.IsArray {
 		if value.Count == 1 {
@@ -47,8 +47,8 @@ func (value DocumentValue) DescribeShape() string {
 	return "{ " + strconv.Itoa(value.Count) + " fields }"
 }
 
-// FormatCell turns a server value into text, the same way for a statement, an
-// export and the grid.
+// FormatCell converts a server value into text. A statement, an export and the grid all
+// use it, so the text is the same everywhere.
 func FormatCell(value any, dataType string) string {
 	switch held := value.(type) {
 	case nil:
@@ -63,7 +63,7 @@ func FormatCell(value any, dataType string) string {
 		if dataType == "date" {
 			return held.UTC().Format("2006-01-02")
 		}
-		// Three places always, whatever the server sent, so a column of stamps lines up.
+		// Always three decimal places, so a column of timestamps is aligned.
 		return held.UTC().Format("2006-01-02 15:04:05.000")
 	case bool:
 		return strconv.FormatBool(held)
@@ -74,8 +74,8 @@ func FormatCell(value any, dataType string) string {
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 		return fmt.Sprintf("%d", held)
 	case json.RawMessage:
-		// A JSON value the server sent keeps the order of its fields, so it is written
-		// again from its own text and not from a map.
+		// A JSON value from the server keeps the order of its fields, so it is written
+		// from its own text and not from a map.
 		if value, isJSON := ReadJSON(string(held)); isJSON {
 			return value.Write()
 		}
@@ -91,20 +91,20 @@ func FormatCell(value any, dataType string) string {
 	return string(written)
 }
 
-// documentTypes name a column whose values are a document rather than one value: the JSON
-// of a SQL server, and the embedded document and array of MongoDB.
+// documentTypes are the column types that hold a document and not one value: JSON on a
+// SQL server, and the embedded document and array of MongoDB.
 var documentTypes = map[string]bool{
 	"json": true, "jsonb": true, "object": true, "array": true,
 }
 
-// IsDocumentType is true for a column the server stores a document in.
+// IsDocumentType is true for a column type that holds a document.
 func IsDocumentType(dataType string) bool {
 	return documentTypes[dataType]
 }
 
-// IsStructuredValue is true where the driver read a value as a structure: a JSON value, a
-// list, or a record. A full-height viewer indents one of those, whatever the column says its
-// type is.
+// IsStructuredValue is true if the driver returned the value as a structure: a JSON
+// value, a list, or a record. The full-height viewer indents such a value, whatever the
+// column type is.
 func IsStructuredValue(value any) bool {
 	switch value.(type) {
 	case nil, string, []byte, time.Time, bool, float32, float64,
@@ -124,7 +124,7 @@ func formatFloat(value float64) string {
 	return strconv.FormatFloat(value, 'g', -1, 64)
 }
 
-// CollapseWhitespace turns every run of blank characters into one space.
+// CollapseWhitespace replaces every group of blank characters with one space.
 func CollapseWhitespace(text string) string {
 	if !needsCollapse(text) {
 		return text
@@ -150,9 +150,9 @@ func CollapseWhitespace(text string) string {
 	return built.String()
 }
 
-// needsCollapse is true where a run of blanks, a blank at either end, or a blank that is
-// no space would be written differently. A document of a collection is kilobytes of text
-// with nothing to collapse, so the text of one is answered without being built again.
+// needsCollapse is true if the text has two blanks together, a blank at the start or the
+// end, or a blank that is not a space. A document can be kilobytes of text with nothing to
+// collapse, and this test returns that text unchanged.
 func needsCollapse(text string) bool {
 	previousBlank := false
 	for at := 0; at < len(text); at++ {
@@ -165,8 +165,9 @@ func needsCollapse(text string) bool {
 	return false
 }
 
-// isBlankByte is true for a byte CollapseWhitespace reads as blank. Every one of them is
-// ASCII, and a byte of a longer character never is, so the bytes are read one at a time.
+// isBlankByte is true for a byte that CollapseWhitespace treats as blank. All of them are
+// ASCII, and no byte of a multibyte character is ASCII, so the test reads one byte at a
+// time.
 func isBlankByte(held byte) bool {
 	switch held {
 	case ' ', '\t', '\n', '\r', '\v', '\f':
@@ -175,13 +176,14 @@ func isBlankByte(held byte) bool {
 	return false
 }
 
-// FormatClockTime writes a clock time in the zone of the terminal, because the
-// app took the reading.
+// FormatClockTime returns a clock time in the time zone of the terminal, because the app
+// read the time.
 func FormatClockTime(at time.Time) string {
 	return at.Format("2006-01-02 15:04:05.000")
 }
 
-// FormatDuration writes a run time in the unit that reads best.
+// FormatDuration returns a run time in milliseconds or in seconds, whichever is easier
+// to read.
 func FormatDuration(elapsed time.Duration) string {
 	milliseconds := float64(elapsed) / float64(time.Millisecond)
 	if milliseconds < 1000 {

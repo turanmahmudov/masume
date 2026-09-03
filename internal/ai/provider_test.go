@@ -10,15 +10,15 @@ import (
 	"testing"
 )
 
-// recordedRequest is one request a provider stand-in was sent.
+// recordedRequest is one request the test provider received.
 type recordedRequest struct {
 	path    string
 	headers http.Header
 	body    map[string]any
 }
 
-// serveCannedStreams answers each request with the next canned stream, and writes down what it
-// was sent.
+// serveCannedStreams answers each request with the next prepared stream and records the
+// request.
 func serveCannedStreams(t *testing.T, streams ...string) (*httptest.Server, *[]recordedRequest) {
 	t.Helper()
 	sent := &[]recordedRequest{}
@@ -44,12 +44,12 @@ func serveCannedStreams(t *testing.T, streams ...string) (*httptest.Server, *[]r
 	return server, sent
 }
 
-// buildEvent writes one event of a stream.
+// buildEvent returns one event of a stream.
 func buildEvent(name string, data string) string {
 	return "event: " + name + "\ndata: " + data + "\n\n"
 }
 
-// The canned answers of Anthropic: one that asks for a call, and one that answers.
+// The prepared answers of Anthropic: one that requests a call, and one that replies.
 var anthropicCallsATool = buildEvent("message_start",
 	`{"type":"message_start","message":{"usage":{"input_tokens":100,"output_tokens":1,`+
 		`"cache_read_input_tokens":0,"cache_creation_input_tokens":40}}}`) +
@@ -85,7 +85,7 @@ var anthropicAnswers = buildEvent("message_start",
 			`"usage":{"output_tokens":55}}`) +
 	buildEvent("message_stop", `{"type":"message_stop"}`)
 
-// The canned answers of OpenAI, in the shapes of its own protocol.
+// The prepared answers of OpenAI, in the form of its own protocol.
 var openaiCallsATool = buildEvent("response.created",
 	`{"type":"response.created","response":{"id":"resp_1","status":"in_progress"}}`) +
 	buildEvent("response.content_part.added",
@@ -119,7 +119,8 @@ var openaiAnswers = buildEvent("response.created",
 			`{"input_tokens":170,"input_tokens_details":{"cached_tokens":128},`+
 			`"output_tokens":55}}}`)
 
-// buildTestRequest answers one question with one tool, as a chat of a connection sends it.
+// buildTestRequest returns one question with one tool, in the form the chat of a connection
+// sends.
 func buildTestRequest() Request {
 	return Request{
 		System:   "You are a SQL assistant.",
@@ -131,7 +132,7 @@ func buildTestRequest() Request {
 	}
 }
 
-// collectRun answers what a whole run reported, with the calls it made.
+// collectRun returns the result of a whole run, with the calls it made.
 func collectRun(t *testing.T, model Model, request Request) (RunResult, []string, string) {
 	t.Helper()
 	text := strings.Builder{}
@@ -171,8 +172,8 @@ func TestAnthropicAsksAndRunsWhatItIsAskedFor(t *testing.T) {
 	if result.FinishReason != FinishStop {
 		t.Errorf("the run stopped for %q", result.FinishReason)
 	}
-	// The counts of both requests are added, and the input of this protocol leaves out what
-	// it read from its cache.
+	// The counts of both requests are added. The input count of this protocol does not
+	// include the tokens read from the cache.
 	wanted := Usage{InputTokens: 140 + 170, OutputTokens: 75, CachedInputTokens: 140}
 	if result.Usage != wanted {
 		t.Errorf("the run spent %+v, wanted %+v", result.Usage, wanted)
@@ -196,8 +197,8 @@ func TestAnthropicAsksAndRunsWhatItIsAskedFor(t *testing.T) {
 	if choice, _ := first.body["tool_choice"].(map[string]any); choice["type"] != "auto" {
 		t.Errorf("the request names the tool choice %v", first.body["tool_choice"])
 	}
-	// The system prompt is one block of text, and the last block of the last message is
-	// marked, so everything before it is read back from the cache.
+	// The system prompt is one block of text, and the last block of the last message
+	// carries the mark, so the provider reads everything before it from the cache.
 	system, _ := first.body["system"].([]any)
 	if len(system) != 1 {
 		t.Fatalf("the system prompt is %v", first.body["system"])
@@ -209,7 +210,8 @@ func TestAnthropicAsksAndRunsWhatItIsAskedFor(t *testing.T) {
 		t.Error("the last block of the request carries no mark")
 	}
 
-	// The second request carries the call and its answer, and only its last block is marked.
+	// The second request holds the call and its result, and only its last block carries the
+	// mark.
 	second := (*sent)[1]
 	messages, _ := second.body["messages"].([]any)
 	if len(messages) != 3 {
@@ -238,7 +240,7 @@ func TestAnthropicAsksAndRunsWhatItIsAskedFor(t *testing.T) {
 	}
 }
 
-// findAnthropicCacheMark answers the mark on the last block of the last message.
+// findAnthropicCacheMark returns the mark on the last block of the last message.
 func findAnthropicCacheMark(t *testing.T, body map[string]any) any {
 	t.Helper()
 	messages, _ := body["messages"].([]any)
@@ -249,7 +251,7 @@ func findAnthropicCacheMark(t *testing.T, body map[string]any) any {
 	return findMark(last)
 }
 
-// findMark answers the mark on the last block of one message.
+// findMark returns the mark on the last block of one message.
 func findMark(message map[string]any) any {
 	blocks, _ := message["content"].([]any)
 	if len(blocks) == 0 {
@@ -294,7 +296,7 @@ func TestOpenaiAsksAndRunsWhatItIsAskedFor(t *testing.T) {
 	if first.body["tool_choice"] != "auto" {
 		t.Errorf("the request names the tool choice %v", first.body["tool_choice"])
 	}
-	// The turn that opens the request carries its text plainly.
+	// The first turn of the request holds plain text.
 	input, _ := first.body["input"].([]any)
 	opening, _ := input[0].(map[string]any)
 	if opening["role"] != "developer" || opening["content"] != "You are a SQL assistant." {
@@ -306,8 +308,8 @@ func TestOpenaiAsksAndRunsWhatItIsAskedFor(t *testing.T) {
 		t.Errorf("the tool reads %v", tool)
 	}
 
-	// The second request carries what the model wrote, then the call and its answer as items
-	// of their own.
+	// The second request holds the text of the model, then the call and its result as
+	// separate items.
 	second, _ := (*sent)[1].body["input"].([]any)
 	if len(second) != 5 {
 		t.Fatalf("the second request holds %d items, wanted five", len(second))
@@ -412,7 +414,7 @@ func TestARunThatWasStoppedWritesNothingMore(t *testing.T) {
 	server, sent := serveCannedStreams(t, anthropicCallsATool, anthropicAnswers)
 	model := openAnthropicModel("claude-opus-5", "probe-key", server.URL+"/v1")
 
-	// The run is stopped as soon as the first call is asked for.
+	// The run stops at the first requested call.
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 	written := strings.Builder{}
@@ -434,14 +436,14 @@ func TestARunThatWasStoppedWritesNothingMore(t *testing.T) {
 	if len(*sent) != 1 {
 		t.Errorf("a stopped run asked the model %d times", len(*sent))
 	}
-	// The tokens of the request that ran are still counted, because they were spent.
+	// The tokens of the request that ran are counted, because they were used.
 	if result.Usage.InputTokens == 0 {
 		t.Error("a stopped run counted no tokens")
 	}
 }
 
-// The chat proposes a statement the connected server takes. A server that has no SQL was
-// told to write SQL, and the reply was useless on it.
+// The chat proposes a statement the connected server accepts. A server without SQL got a SQL
+// statement, which it cannot run.
 func TestBuildChatSystemPromptWritesTheLanguageOfTheServer(t *testing.T) {
 	built := BuildChatSystemPrompt(ChatPromptSource{
 		DialectName: "mongodb", DefaultSchema: "shop",
@@ -464,8 +466,8 @@ func TestBuildChatSystemPromptWritesTheLanguageOfTheServer(t *testing.T) {
 	}
 }
 
-// A server that names no language of its own is a SQL server, which is what every engine
-// but two is.
+// A server without its own language is a SQL server, which is the case for every engine
+// except two.
 func TestBuildChatSystemPromptFallsBackToSql(t *testing.T) {
 	built := BuildChatSystemPrompt(ChatPromptSource{
 		DialectName: "postgres", DefaultSchema: "public",
@@ -475,16 +477,16 @@ func TestBuildChatSystemPromptFallsBackToSql(t *testing.T) {
 	}
 }
 
-// The reply of a model arrives as a stream that is read as it comes, so the client carries no
-// deadline of its own. A whole-request timeout cuts a long reply in the middle.
+// The reply of a model arrives as a stream that is read part by part, so the client has no
+// time limit of its own. A time limit on the whole request would cut a long reply.
 func TestTheStreamingClientCarriesNoDeadline(t *testing.T) {
 	if streamingClient.Timeout != 0 {
 		t.Errorf("the client cuts a request after %s", streamingClient.Timeout)
 	}
 }
 
-// A data line of a stream loses the one space that follows the colon, and keeps every space
-// after it, because that is what the event stream says.
+// A data line of a stream drops the one space after the colon and keeps every further space,
+// as the event stream format defines.
 func TestReadServerEventsKeepsTheDataAfterTheFirstSpace(t *testing.T) {
 	stream := "event: delta\ndata:  held\ndata: more\n\ndata:{\"a\":1}\n\n"
 	read := []string{}

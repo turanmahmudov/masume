@@ -9,31 +9,31 @@ import (
 	"time"
 )
 
-// Some gateways sit behind a middlebox that resets the connection rather than answering a
-// hello that offers TLS 1.3. The handshake fails before any request is written, so the
-// connection is opened again with TLS 1.2 as the ceiling and the host is remembered.
+// Some gateways are behind a network device that resets the connection instead of answering
+// a hello that offers TLS 1.3. The handshake fails before the client writes a request, so the
+// client opens the connection again with TLS 1.2 as the maximum and stores the host.
 
-// handshakeTimeout is how long one attempt at opening a connection may take.
+// handshakeTimeout is the time limit of one attempt to open a connection.
 const handshakeTimeout = 20 * time.Second
 
-// responseHeaderTimeout is how long a provider may take to answer with its headers. The body
-// after them carries no deadline, because a model writes a long reply for as long as it likes.
+// responseHeaderTimeout is the time a provider has to send its headers. The body after them
+// has no time limit, because a model can write a long reply.
 const responseHeaderTimeout = 2 * time.Minute
 
-// tlsFallback remembers the hosts that answered only with TLS 1.2 as the ceiling.
+// tlsFallback stores the hosts that answer only with TLS 1.2 as the maximum.
 type tlsFallback struct {
 	guard sync.RWMutex
 	hosts map[string]bool
 }
 
-// needsOldTLS reports whether this host already refused a hello that offered TLS 1.3.
+// needsOldTLS reports whether this host refused a hello that offered TLS 1.3.
 func (fallback *tlsFallback) needsOldTLS(address string) bool {
 	fallback.guard.RLock()
 	defer fallback.guard.RUnlock()
 	return fallback.hosts[address]
 }
 
-// keepOldTLS records that this host returns only with TLS 1.2 as the ceiling.
+// keepOldTLS records that this host answers only with TLS 1.2 as the maximum.
 func (fallback *tlsFallback) keepOldTLS(address string) {
 	fallback.guard.Lock()
 	defer fallback.guard.Unlock()
@@ -45,8 +45,8 @@ func (fallback *tlsFallback) keepOldTLS(address string) {
 
 var oldTLSHosts = &tlsFallback{}
 
-// buildTLSConfig returns what one attempt offers. The protocols are named so the transport
-// can still speak HTTP/2 where the server takes it.
+// buildTLSConfig returns the configuration of one attempt. It lists the protocols, so the
+// transport can still use HTTP/2 if the server supports it.
 func buildTLSConfig(host string, ceiling uint16) *tls.Config {
 	config := &tls.Config{
 		ServerName: host,
@@ -59,12 +59,12 @@ func buildTLSConfig(host string, ceiling uint16) *tls.Config {
 	return config
 }
 
-// shakeHands opens one connection and runs the handshake of it.
+// shakeHands opens one connection and runs its handshake.
 func shakeHands(
 	ctx context.Context, dialer *net.Dialer, network, address, host string, ceiling uint16,
 ) (net.Conn, error) {
-	// A handshake that is complete is not affected by the end of this context, so the
-	// connection outlives it.
+	// The end of this context does not affect a completed handshake, so the connection
+	// stays open after it.
 	ctx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
 
@@ -80,9 +80,9 @@ func shakeHands(
 	return held, nil
 }
 
-// dialTLS opens the connection of one request. A host that resets a hello which offered
-// TLS 1.3 is asked again with TLS 1.2 as the ceiling. Nothing of the request is written
-// before the handshake, so the second attempt sends nothing twice.
+// dialTLS opens the connection of one request. If a host resets a hello that offered TLS
+// 1.3, the client tries again with TLS 1.2 as the maximum. The client writes no part of the
+// request before the handshake, so the second attempt sends nothing a second time.
 func dialTLS(ctx context.Context, network, address string) (net.Conn, error) {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
@@ -97,7 +97,7 @@ func dialTLS(ctx context.Context, network, address string) (net.Conn, error) {
 	if err == nil {
 		return conn, nil
 	}
-	// A context that ended is not a host that refuses the hello.
+	// A cancelled context is not a host that refuses the hello.
 	if ctx.Err() != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func dialTLS(ctx context.Context, network, address string) (net.Conn, error) {
 	return held, nil
 }
 
-// buildTransport returns the transport every request of the chat goes through.
+// buildTransport returns the transport used by every request of the chat.
 func buildTransport() *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialTLSContext = dialTLS

@@ -7,7 +7,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 )
 
-// readSettings reads the interface settings out of a config file.
+// readSettings reads the interface settings from a config file.
 func readSettings(t *testing.T, body string) cfg.UISettings {
 	t.Helper()
 	document, err := cfg.DecodeDocument(body)
@@ -17,8 +17,8 @@ func readSettings(t *testing.T, body string) cfg.UISettings {
 	return cfg.ParseUISettings(document)
 }
 
-// A colour is written as hex, and one written any other way has to be reported rather than
-// drawn as nothing, because a theme with a missing colour is a frame the reader cannot see.
+// A colour is written as a hex value. Any other form must be reported and not ignored,
+// because a theme with a missing colour gives an interface the user cannot read.
 func TestIsHexColorReadsWhatATerminalCanDraw(t *testing.T) {
 	for _, held := range []struct {
 		value string
@@ -44,8 +44,8 @@ func TestIsHexColorReadsWhatATerminalCanDraw(t *testing.T) {
 	}
 }
 
-// The settings the file does not name keep their defaults, so a file with one line changes
-// one thing.
+// A setting the file does not set keeps its default, so a file with one line changes one
+// setting.
 func TestParseUiSettingsKeepsTheDefaultsForWhatIsNotNamed(t *testing.T) {
 	defaults := cfg.DefaultUISettings()
 	held := readSettings(t, "[ui]\ntheme = \"nord\"\n")
@@ -81,8 +81,8 @@ hide_system_schemas = true
 	}
 }
 
-// A colour set under `[ui]` is laid over the theme, so a reader can change one colour without
-// writing a theme file.
+// A colour set under `[ui]` is applied over the theme, so the user can change one colour
+// without a theme file.
 func TestParseUiSettingsReadsAColourLaidOverTheTheme(t *testing.T) {
 	held := readSettings(t, `
 [ui.colors]
@@ -96,9 +96,9 @@ accent = "#ff8800"
 	}
 }
 
-// A colour may name an entry of the palette instead of holding a hex value, which is how a
-// theme is written once and pointed at from several places. The name is resolved later, so it
-// is taken as it stands here.
+// A colour can name a palette entry instead of a hex value, so a theme defines a colour one
+// time and uses it in several places. The name is resolved later, so it is kept unchanged
+// here.
 func TestParseUiSettingsTakesAColourThatNamesAPaletteEntry(t *testing.T) {
 	held := readSettings(t, `
 [ui.palette]
@@ -116,8 +116,8 @@ accent = "orange"
 	}
 }
 
-// A palette entry cannot be a name, because the names point at it. One that is not hex is
-// reported and dropped, so nothing later resolves to it.
+// A palette entry cannot be a palette name, because the names refer to this table. An entry
+// that is not a hex value is reported and removed, so nothing resolves to it later.
 func TestParseUiSettingsDropsAPaletteEntryThatIsNotHex(t *testing.T) {
 	held := readSettings(t, `
 [ui.palette]
@@ -134,7 +134,7 @@ orange = "not-a-colour"
 	}
 }
 
-// A colour written as anything but text cannot be read at all, whichever table it is in.
+// A colour that is not a string cannot be read, in any of the tables.
 func TestParseUiSettingsReportsAColourNotWrittenAsText(t *testing.T) {
 	held := readSettings(t, `
 [ui.colors]
@@ -145,7 +145,7 @@ accent = 16711680
 	}
 }
 
-// A file with no `[ui]` section at all is the usual case, and every default stands.
+// A file without an `[ui]` section is the usual case, and every default applies.
 func TestParseUiSettingsAnswersTheDefaultsForAFileWithNoSection(t *testing.T) {
 	held := readSettings(t, "[profile.shop]\nengine = \"sqlite\"\n")
 	defaults := cfg.DefaultUISettings()
@@ -158,15 +158,15 @@ func TestParseUiSettingsAnswersTheDefaultsForAFileWithNoSection(t *testing.T) {
 	}
 }
 
-// The name of an icon set has to be read as the client names it, or a reader who writes one
-// gets the default and no word about why.
+// An icon set name must match a set of the client, or the user gets the default set and no
+// message about the reason.
 func TestFindIconSetNameReadsTheNamesThereAre(t *testing.T) {
 	held, is := cfg.FindIconSetName("ascii")
 	if !is || held != cfg.IconsASCII {
 		t.Errorf("the plain set reads as %q and %v", held, is)
 	}
-	// A set the client used to ship is not a set any more, and a name it never had is not
-	// one either. Both fall back to the default and are reported.
+	// A set from an older version and a name that never existed are both invalid. Both
+	// use the default and are reported.
 	for _, written := range []string{"", "  ", "off", "nerdfont", "emoji"} {
 		if _, is := cfg.FindIconSetName(written); is {
 			t.Errorf("%q was read as a set of icons", written)
@@ -174,8 +174,8 @@ func TestFindIconSetNameReadsTheNamesThereAre(t *testing.T) {
 	}
 }
 
-// A theme file names itself by its file name, so two files cannot claim one theme, and what
-// it gets wrong is reported for the reader to find.
+// A theme takes its name from its file name, so two files cannot have the same theme name.
+// The errors in a file are reported to the user.
 func TestParseThemeDocumentNamesTheThemeAndReportsWhatItCannotRead(t *testing.T) {
 	document, err := cfg.DecodeDocument(`
 title = "Held"
@@ -205,7 +205,7 @@ accent = "#ff8800"
 	}
 }
 
-// A theme with no title of its own is named by its file, so it still reads in the picker.
+// A theme without a title uses its file name, so the picker still shows a name.
 func TestParseThemeDocumentFallsBackToTheFileNameForATitle(t *testing.T) {
 	document, err := cfg.DecodeDocument("[colors]\naccent = \"#ff8800\"\n")
 	if err != nil {
@@ -217,7 +217,7 @@ func TestParseThemeDocumentFallsBackToTheFileNameForATitle(t *testing.T) {
 	}
 }
 
-// A theme that names nothing wrong reports nothing, so a good file is silent.
+// A theme without errors reports no problem.
 func TestParseThemeDocumentIsSilentForAGoodTheme(t *testing.T) {
 	document, err := cfg.DecodeDocument("[colors]\naccent = \"#ff8800\"\n")
 	if err != nil {
@@ -228,8 +228,8 @@ func TestParseThemeDocumentIsSilentForAGoodTheme(t *testing.T) {
 	}
 }
 
-// A set the config names that the client does not have is reported, so a misspelling is found
-// instead of read as silence. The client goes on drawing the set it opens with.
+// An icon set in the config that the client does not have is reported, so the user sees a
+// spelling error. The client continues with the set it started with.
 func TestASetOfIconsThatIsNotThereIsReported(t *testing.T) {
 	held := cfg.ParseUISettings(cfg.Table{
 		"ui": map[string]any{"icons": "nerdfont"},
@@ -248,8 +248,8 @@ func TestASetOfIconsThatIsNotThereIsReported(t *testing.T) {
 	}
 }
 
-// A kind the config names that the client does not have is reported as well, and the kinds it
-// does name are still read.
+// An icon kind in the config that the client does not have is also reported, and the known
+// kinds are still read.
 func TestAKindOfIconThatIsNotThereIsReported(t *testing.T) {
 	held := cfg.ParseUISettings(cfg.Table{
 		"ui": map[string]any{
@@ -267,8 +267,8 @@ func TestAKindOfIconThatIsNotThereIsReported(t *testing.T) {
 	}
 }
 
-// Every kind the client draws is a kind the config file may name, so nothing the client draws
-// is out of reach of `[ui.icon_glyphs]`.
+// Every kind the client draws can be set in the config file, so `[ui.icon_glyphs]` covers
+// every icon.
 func TestEveryKindTheConfigMayNameIsAKindThereIs(t *testing.T) {
 	for _, kind := range cfg.IconKinds {
 		if !cfg.IsIconKind(string(kind)) {

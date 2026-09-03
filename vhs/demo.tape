@@ -1,9 +1,9 @@
-# The README recording. Rebuild it with `mise run demo`, which starts the postgres
+# The README recording. Rebuild it with `mise run demo`. That task starts the postgres
 # container, loads vhs/seed.sql into it, and runs this tape.
 #
-# vhs itself needs ttyd and ffmpeg on the PATH. See https://github.com/charmbracelet/vhs.
-# The glyphs in vhs/config.toml need a Nerd Font, so FontFamily below is not decoration.
-# Width, Height and FontSize scale together: raising all three keeps the same character
+# vhs needs ttyd and ffmpeg on the PATH. See https://github.com/charmbracelet/vhs.
+# The glyphs in vhs/config.toml need a Nerd Font, so FontFamily below is required.
+# Width, Height and FontSize scale together. Raising all three keeps the same character
 # grid and renders it with more pixels.
 
 Output vhs/demo.gif
@@ -32,7 +32,7 @@ Sleep 2s
 Enter
 Sleep 3s
 
-# Unfold a table in the tree: its columns, with the primary and foreign keys marked.
+# Unfold a table in the tree. It shows the columns, with the primary and foreign keys marked.
 Down Sleep 350ms
 Down Sleep 350ms
 Down Sleep 350ms
@@ -40,7 +40,7 @@ Down Sleep 350ms
 Right
 Sleep 2s
 
-# Open it. Every view of the table is one key away.
+# Open the table. Each table view is one key press away.
 Enter
 Sleep 2500ms
 Type "2" Sleep 2200ms
@@ -48,7 +48,7 @@ Type "3" Sleep 2200ms
 Type "4" Sleep 2200ms
 Type "5" Sleep 2500ms
 
-# The object menu, and the ER diagram of what this table relates to.
+# The object menu, and the ER diagram of the tables related to this one.
 Type "m"
 Sleep 2200ms
 Enter
@@ -63,7 +63,7 @@ Type "select c.country," Enter
 Type "count(*) as orders," Enter
 Type "sum(o.total) as revenue" Enter
 
-# The completion menu offers what the catalog holds. Tab takes the highlighted name.
+# The completion menu suggests names from the catalog. Tab accepts the highlighted name.
 Type "from ord"
 Sleep 2200ms
 Tab
@@ -82,13 +82,13 @@ Sleep 1200ms
 Ctrl+r
 Sleep 2500ms
 
-# The plan, estimated first and then measured.
+# The plan, first estimated and then measured.
 Ctrl+e
 Sleep 3s
 Ctrl+y
 Sleep 3500ms
 
-# The command palette finds an action by name.
+# The command palette searches actions by name.
 Ctrl+k
 Sleep 1200ms
 Type "theme"
@@ -96,7 +96,7 @@ Sleep 1200ms
 Enter
 Sleep 1500ms
 
-# Moving the cursor repaints the whole screen in that theme, before anything is chosen.
+# Moving the cursor repaints the whole screen in the highlighted theme before you choose one.
 # Tokyo Night, Catppuccin Mocha, Gruvbox Dark, Dracula, Nord.
 Down Sleep 1200ms
 Down Sleep 1200ms
@@ -104,11 +104,11 @@ Down Sleep 1200ms
 Down Sleep 1200ms
 Down Sleep 1400ms
 
-# Past Rosé Pine and Solarized Dark sit the light themes. Stop on Catppuccin Latte.
+# The light themes come after Rosé Pine and Solarized Dark. Stop on Catppuccin Latte.
 Down Sleep 500ms
 Down Sleep 500ms
 Down Sleep 2500ms
 
-# Esc takes back the preview, so the screen returns to the theme in the config file.
+# Esc cancels the preview, and the screen returns to the theme from the config file.
 Escape
 Sleep 2s

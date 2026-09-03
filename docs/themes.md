@@ -1,6 +1,6 @@
 # Themes
 
-Press `Alt+O` then `T` to see the themes that ship with masume and pick one. There are eleven: Tokyo Night, Catppuccin Mocha and Latte, Gruvbox Dark and Light, Rosé Pine and Dawn, Nord, Dracula, Ayu Dark and Solarized Dark.
+Press `Alt+O` then `T` to see the built-in themes and select one. There are eleven: Tokyo Night, Catppuccin Mocha and Latte, Gruvbox Dark and Light, Rosé Pine and Dawn, Nord, Dracula, Ayu Dark and Solarized Dark.
 
 To set one in the config instead:
 
@@ -9,22 +9,22 @@ To set one in the config instead:
 theme = "tokyonight"
 ```
 
-The name is the file name without `.toml`. Ayu Dark is the fallback: every other theme inherits the keys it does not set.
+The name is the file name without `.toml`. Ayu Dark is the base theme. Every other theme inherits from it the keys it does not define.
 
-## Following the terminal
+## Using the terminal colours
 
 ```toml
 [ui]
 theme = "system"
 ```
 
-masume takes its colours from the terminal: the background, the foreground and the sixteen palette colours.
+masume uses the colours of the terminal: the background, the foreground and the sixteen palette colours.
 
-It keeps following them. Change the terminal theme while masume is open and it changes with it, within about two seconds.
+It keeps them in sync. If you change the terminal theme while masume is running, masume updates within about two seconds.
 
 ## A custom theme
 
-A custom theme is a TOML file in `$XDG_CONFIG_HOME/masume/themes/`. The file name without `.toml` is the name to set under `[ui]`. A file of the same name as a shipped theme replaces it.
+A custom theme is a TOML file in `$XDG_CONFIG_HOME/masume/themes/`. The file name without `.toml` is the name you set under `[ui]`. A file with the same name as a built-in theme replaces that theme.
 
 ```toml
 title = "My Theme"
@@ -43,42 +43,42 @@ text         = "ink"
 accent       = "blue"
 ```
 
-`title` is the name the picker shows. `appearance` is `dark` or `light`. `extends` takes every colour of a shipped theme first, so a file only has to name what it changes.
+`title` is the name shown in the picker. `appearance` is `dark` or `light`. `extends` copies every colour of a built-in theme first, so the file only has to define what it changes.
 
-`[palette]` holds names for reuse. A colour can point at a palette entry or at another colour by that name: `border_focus = "blue"` or `border_focus = "accent"`. A palette entry must be a hex value, not a name.
+`[palette]` holds named colours for reuse. A colour can refer to a palette entry or to another colour by name: `border_focus = "blue"` or `border_focus = "accent"`. A palette entry must be a hex value, not a name.
 
 ## The colour names
 
 | Name | Used for |
 | --- | --- |
-| `background` | Behind everything |
+| `background` | The background of the whole screen |
 | `panel` | A pane or a card |
 | `header` | The row of column names |
 | `zebra` | Every second row of the grid |
 | `border` | A pane border |
 | `border_focus` | The border of the focused pane |
-| `selection` | A selected row or a drag. Mixed from `panel` and `text` if omitted |
+| `selection` | A selected row or a drag selection. Mixed from `panel` and `text` if not set |
 | `text` | Normal text |
 | `muted` | A hint or a label |
-| `faint` | A line number or a rule |
+| `faint` | A line number or a separator line |
 | `accent` | The main highlight |
 | `accent_alt` | A second highlight |
 | `accent_warm` | A third highlight |
-| `on_accent` | Text on an accent background. Chosen for contrast if omitted |
-| `info` | A note |
-| `success` | A statement that worked |
+| `on_accent` | Text on an accent background. Chosen for contrast if not set |
+| `info` | An informational message |
+| `success` | A statement that succeeded |
 | `warning` | A warning |
 | `danger` | A destructive action |
 | `error` | A failure |
-| `env_dev` | The title bar on dev. Follows `success` if omitted |
-| `env_test` | The title bar on test. Follows `warning` if omitted |
-| `env_prod` | The title bar on prod. Follows `danger` if omitted |
+| `env_dev` | The title bar on dev. Same as `success` if not set |
+| `env_test` | The title bar on test. Same as `warning` if not set |
+| `env_prod` | The title bar on prod. Same as `danger` if not set |
 
-To change a few colours without writing a theme file, set them under `[ui.colors]` in the config. They lay over whichever theme is active.
+To change a few colours without a theme file, set them under `[ui.colors]` in the config. They override the active theme.
 
-## Syntax
+## Syntax highlighting
 
-`[syntax]` styles the editor. Each kind is a table of its own. Ayu Dark holds the rules every other theme inherits if it writes none.
+`[syntax]` styles the editor. Each token kind has its own table. Ayu Dark defines the rules that every other theme inherits when it defines none.
 
 ```toml
 [syntax]
@@ -91,11 +91,11 @@ guide      = { bg = "header" }
 match      = { fg = "on_accent", bg = "accent_warm" }
 ```
 
-`fg` and `bg` take a hex value or a colour name. `bold`, `italic` and `underline` are flags. `link` copies another highlight first, then the rest of the keys apply.
+`fg` and `bg` take a hex value or a colour name. `bold`, `italic` and `underline` are flags. `link` copies another highlight first, then the other keys apply on top.
 
-| Kind | Marks |
+| Kind | Applies to |
 | --- | --- |
-| `keyword` | `SELECT`, `FROM`, and the rest |
+| `keyword` | `SELECT`, `FROM`, and other keywords |
 | `type` | A type name |
 | `string` | A quoted string |
 | `comment` | A comment |
@@ -103,8 +103,8 @@ match      = { fg = "on_accent", bg = "accent_warm" }
 | `identifier` | A name |
 | `quoted` | A quoted identifier |
 | `operator` | An operator |
-| `parameter` | A `:name` mark |
-| `problem` | A fault the scanner found |
-| `bracket` | The bracket at the caret, and the one that closes it |
-| `guide` | The indent step of a line |
-| `match` | What a search of the statement found |
+| `parameter` | A `:name` placeholder |
+| `problem` | An error found by the scanner |
+| `bracket` | The bracket at the caret, and its matching bracket |
+| `guide` | The indent guide of a line |
+| `match` | A search match in the statement |

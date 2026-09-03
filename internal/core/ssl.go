@@ -2,11 +2,11 @@ package core
 
 import "strings"
 
-// SSLMode is an sslmode as libpq reads it. An empty value means the profile named
-// none, and each engine has its own default.
+// SSLMode is an sslmode value as libpq defines it. An empty value means the profile
+// does not set one, and each engine has its own default.
 type SSLMode string
 
-// The modes libpq reads, in the order it lists them, from least to most safe.
+// The modes libpq accepts, in its own order, from the least to the most secure.
 const (
 	SSLUnset      SSLMode = ""
 	SSLDisable    SSLMode = "disable"
@@ -17,20 +17,21 @@ const (
 	SSLVerifyFull SSLMode = "verify-full"
 )
 
-// SSLModes lists the modes a profile may name.
+// SSLModes lists the modes a profile can use.
 var SSLModes = []SSLMode{SSLDisable, SSLAllow, SSLPrefer, SSLRequire, SSLVerifyCa, SSLVerifyFull}
 
-// FindSSLMode reads this text as a mode. A name nobody can read is refused rather
-// than read as a weaker mode, because a profile that asks to be encrypted must not
-// connect in the clear on a typo.
+// FindSSLMode parses the text as a mode. An unknown name gives an error and is not
+// replaced by a weaker mode, because a profile that requests encryption must not
+// connect without it after a spelling error.
 func FindSSLMode(written string) (SSLMode, bool) {
 	return FindAllowed(SSLModes, strings.ToLower(strings.TrimSpace(written)))
 }
 
-// SSLPolicy is what the mode asks of the connection.
+// SSLPolicy is the requirement the mode puts on the connection.
 type SSLPolicy string
 
-// The policies a mode resolves to. Only the two verifying ones check the certificate.
+// The policies a mode can resolve to. Only the two verifying policies check the
+// certificate.
 const (
 	PolicyUnset       SSLPolicy = "unset"
 	PolicyOff         SSLPolicy = "off"
@@ -40,7 +41,7 @@ const (
 	PolicyVerifyFull  SSLPolicy = "verify-full"
 )
 
-// ResolveSSLPolicy returns what the mode asks of the connection.
+// ResolveSSLPolicy returns the policy of the mode.
 func ResolveSSLPolicy(mode SSLMode) SSLPolicy {
 	switch mode {
 	case SSLUnset:
@@ -64,7 +65,7 @@ func VerifiesCertificate(policy SSLPolicy) bool {
 	return policy == PolicyVerifyCa || policy == PolicyVerifyFull
 }
 
-// SSLModeNames writes the modes as a message lists them.
+// SSLModeNames returns the mode names for use in an error message.
 func SSLModeNames() string {
 	names := make([]string, 0, len(SSLModes))
 	for _, mode := range SSLModes {

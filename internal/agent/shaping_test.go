@@ -9,8 +9,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// A value goes to the model as JSON. A number kept as a number can be compared and added; one
-// turned into text cannot, and the model would quote it back into a statement.
+// A value goes to the model as JSON. A number sent as a number can be compared and used in
+// arithmetic. A number sent as text cannot, and the model would put it in quotes in the next
+// statement.
 func TestDescribeCellForModelKeepsTheTypeOfAValue(t *testing.T) {
 	for _, held := range []struct {
 		name  string
@@ -33,8 +34,8 @@ func TestDescribeCellForModelKeepsTheTypeOfAValue(t *testing.T) {
 	}
 }
 
-// A shape JSON has no form for becomes text, because the model has to read something and a Go
-// value would not survive the encoding.
+// A type that JSON cannot express becomes text, because the model needs a readable value and
+// a Go value would not survive the encoding.
 func TestDescribeCellForModelWritesWhatJsonCannotHold(t *testing.T) {
 	at := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	answered := describeCellForModel(at, "timestamptz")
@@ -42,14 +43,14 @@ func TestDescribeCellForModelWritesWhatJsonCannotHold(t *testing.T) {
 		t.Errorf("a moment goes to the model as %#v, wanted text", answered)
 	}
 
-	// Whatever it becomes, it has to encode, or the whole answer is lost.
+	// Whatever the result is, it must encode, or the whole answer is lost.
 	if _, err := json.Marshal(answered); err != nil {
 		t.Errorf("the value does not encode: %v", err)
 	}
 }
 
-// The answer the model reads holds the columns with their types and the rows under them, so it
-// can write a further statement without asking again.
+// The answer holds the columns with their types and the rows, so the model can write the
+// next statement without another request.
 func TestDescribeResultForModelHoldsTheColumnsAndTheRows(t *testing.T) {
 	answered := describeResultForModel(db.QueryResult{
 		Columns: []db.ResultColumn{
@@ -90,8 +91,8 @@ func TestDescribeResultForModelHoldsTheColumnsAndTheRows(t *testing.T) {
 	}
 }
 
-// A read that was cut has to say so, or the model reads the page as the whole relation and
-// answers a total that is wrong.
+// A truncated read must report the truncation, or the model treats the page as the whole
+// table and returns a wrong total.
 func TestDescribeResultForModelReportsAReadThatWasCut(t *testing.T) {
 	held := describeResultForModel(db.QueryResult{
 		Columns:   []db.ResultColumn{{Name: "id"}},
@@ -107,8 +108,8 @@ func TestDescribeResultForModelReportsAReadThatWasCut(t *testing.T) {
 	}
 }
 
-// A column with no default is written as null, because an empty text is itself a default a
-// column can have and the model must be able to tell them apart.
+// A column without a default is written as null, because an empty text is a valid default
+// and the model must see the difference.
 func TestDescribeColumnForModelTellsNoDefaultFromAnEmptyOne(t *testing.T) {
 	none := describeColumnForModel(db.ColumnDetail{Name: "id", HasDefault: false})
 	if none["default"] != nil {
@@ -123,8 +124,8 @@ func TestDescribeColumnForModelTellsNoDefaultFromAnEmptyOne(t *testing.T) {
 	}
 }
 
-// The values of an enum column are given, so the model writes `where status = 'shipped'`
-// without reading them from the server first.
+// The values of an enum column are included, so the model can write
+// `where status = 'shipped'` without a read from the server.
 func TestDescribeColumnForModelGivesTheValuesOfAnEnum(t *testing.T) {
 	held := describeColumnForModel(db.ColumnDetail{
 		Name: "status", DataType: "order_status",
@@ -135,16 +136,16 @@ func TestDescribeColumnForModelGivesTheValuesOfAnEnum(t *testing.T) {
 		t.Fatalf("the values read %#v", held["choices"])
 	}
 
-	// A column that takes any value names none, rather than an empty list the model reads
-	// as a column that takes nothing.
+	// A column that accepts any value has no list, and not an empty list, which the model
+	// would read as a column that accepts no value.
 	plain := describeColumnForModel(db.ColumnDetail{Name: "customer", DataType: "text"})
 	if _, there := plain["choices"]; there {
 		t.Errorf("a plain column names values: %#v", plain["choices"])
 	}
 }
 
-// A foreign key names the relation it points at with its schema, because the model writes a
-// join from it and a bare name may sit in two schemas.
+// A foreign key names the target table with its schema, because the model writes a join
+// from it and a name alone can exist in two schemas.
 func TestDescribeForeignKeyForModelNamesTheTargetWithItsSchema(t *testing.T) {
 	held := describeForeignKeyForModel(query.ForeignKey{
 		Columns:       []string{"customer_id"},

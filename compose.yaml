@@ -1,12 +1,12 @@
-# The servers the integration tests read. Nothing in Go knows this file exists: the tests
-# take a connection URL from the environment and open it like any other connection.
+# The database servers for the integration tests. No Go code depends on this file. The tests
+# read a connection URL from the environment and connect like any other client.
 #
-# `docker compose up -d --wait` comes back only once every health check passes, so whatever
-# starts the containers waits, and the tests never race a server that is still opening.
+# `docker compose up -d --wait` returns only after every health check passes. So the tests
+# never run against a server that is still starting.
 #
-# The ports are not the usual ones, so these containers never take the port of a server
-# already running on the machine. Each one binds 127.0.0.1, because these servers hold no
-# real data and one of them has no password.
+# The ports are not the default ones, so these containers do not conflict with a local
+# server. Each one binds 127.0.0.1, because these servers contain no real data and one of
+# them has no password.
 name: masume-test
 
 services:
@@ -17,8 +17,8 @@ services:
       POSTGRES_DB: shop
     ports:
       - "127.0.0.1:55432:5432"
-    # tmpfs, because a test database is thrown away and never needs to survive a restart.
-    # Postgres 18 keeps its data under a subdirectory of this mount, not in it.
+    # tmpfs, because a test database is discarded and never needs to survive a restart.
+    # Postgres 18 keeps its data in a subdirectory of this mount.
     tmpfs:
       - /var/lib/postgresql
     healthcheck:
@@ -37,7 +37,7 @@ services:
     tmpfs:
       - /var/lib/mysql
     healthcheck:
-      # MariaDB 11 ships mariadb-admin and no longer ships mysqladmin, so try both.
+      # MariaDB 11 ships mariadb-admin and no longer ships mysqladmin, so both are tried.
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -psecret || mariadb-admin ping -h 127.0.0.1 -psecret"]
       interval: 1s
       timeout: 5s
@@ -65,9 +65,9 @@ services:
       timeout: 5s
       retries: 60
 
-  # A second MongoDB, with authentication turned on. A hosted deployment always has it,
-  # and the client behaves differently there: the server accepts a ping from anyone and
-  # refuses every other command, so a connection has to be checked with one of those.
+  # A second MongoDB with authentication turned on. A hosted deployment always has it, and
+  # the client behaves differently there. The server accepts a ping from anyone and refuses
+  # every other command, so a connection check must use one of the accepted commands.
   mongo-auth:
     image: ${MASUME_TEST_MONGO_IMAGE:-mongo:8}
     environment:
@@ -85,10 +85,10 @@ services:
       timeout: 5s
       retries: 60
 
-  # A third MongoDB, as a replica set of one server. A transaction needs one: a standalone
-  # server holds none. The server listens on the published port rather than the usual one,
-  # because a replica set advertises the address its members are reached by and the tests
-  # reach it from outside the container.
+  # A third MongoDB, as a replica set with one member. Transactions require a replica set.
+  # The server listens on the published port instead of the default one, because a replica
+  # set advertises the addresses of its members and the tests connect from outside the
+  # container.
   mongo-rs:
     image: ${MASUME_TEST_MONGO_IMAGE:-mongo:8}
     command: ["--replSet", "rs0", "--port", "55020", "--bind_ip_all"]

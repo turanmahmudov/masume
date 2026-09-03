@@ -14,7 +14,7 @@ func TestStopWaitsForTheCommandItStopped(t *testing.T) {
 
 	handle.Stop()
 
-	// A command that was signalled and not waited for holds a slot in the process table.
+	// A command that got a signal but no wait keeps an entry in the process table.
 	if command.ProcessState == nil {
 		t.Error("the command was stopped and never waited for")
 	}

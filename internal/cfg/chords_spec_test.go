@@ -7,8 +7,8 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// A chord the config file writes has to read back as the press the user makes, or a key is
-// bound to nothing and the action cannot be reached.
+// A chord in the config file must parse into the key press the user makes, or the key is
+// not bound and the action cannot be started.
 func TestParseChordReadsWhatTheConfigFileWrites(t *testing.T) {
 	for _, held := range []struct {
 		text  string
@@ -24,13 +24,13 @@ func TestParseChordReadsWhatTheConfigFileWrites(t *testing.T) {
 		{"ctrl+shift+a", "a", true, false, true},
 		{"ctrl+alt+shift+a", "a", true, true, true},
 
-		// A named key reads as the name the terminal reports, so Enter and Return are one
-		// chord and a binding written either way reaches the same action.
+		// A named key parses into the name the terminal reports, so Enter and Return
+		// give the same chord and both spellings run the same action.
 		{"enter", "return", false, false, false},
 		{"return", "return", false, false, false},
-		// A modifier is read whatever its case.
+		// A modifier is parsed in upper case and in lower case.
 		{"CTRL+a", "a", true, false, false},
-		// A single capital is how a config file writes shift.
+		// A single capital letter is the config file form of shift.
 		{"ctrl+A", "a", true, false, true},
 		{"f5", "f5", false, false, false},
 		{"ctrl+f12", "f12", true, false, false},
@@ -58,10 +58,10 @@ func TestParseChordRefusesWhatIsNotAChord(t *testing.T) {
 	for _, text := range []string{
 		"",
 		"   ",
-		"+",        // a plus on its own names no key
-		"ctrl+",    // a modifier and nothing to press
-		"ctrl",     // a modifier read as a key, which there is none of
-		"hyper+a",  // a modifier no terminal reports
+		"+",        // a plus sign alone is no key
+		"ctrl+",    // a modifier and no key
+		"ctrl",     // a modifier and no key
+		"hyper+a",  // a modifier no terminal sends
 		"ctrl+a+b", // two keys in one chord
 	} {
 		if _, is := cfg.ParseChord(text); is {
@@ -70,8 +70,8 @@ func TestParseChordRefusesWhatIsNotAChord(t *testing.T) {
 	}
 }
 
-// A plus with nothing between it and the next part is dropped, so a binding written with a
-// stray one still reaches its action rather than falling silently unbound.
+// An empty part between two plus signs is skipped, so a binding with an extra plus sign
+// still runs its action and does not stay unbound.
 func TestParseChordDropsAnEmptyPartBetweenPluses(t *testing.T) {
 	plain, is := cfg.ParseChord("a")
 	if !is {
@@ -97,8 +97,8 @@ func TestParseChordDropsAnEmptyPartBetweenPluses(t *testing.T) {
 	}
 }
 
-// A chord reads back as the text it was written from, so the help and the hints name the key
-// the user has to press.
+// A chord converts back into the text it was parsed from, so the help and the hints show
+// the key the user has to press.
 func TestDescribeChordRoundTrips(t *testing.T) {
 	for _, text := range []string{"a", "ctrl+a", "alt+a", "shift+a", "ctrl+shift+a", "return", "f5"} {
 		chord, is := cfg.ParseChord(text)
@@ -116,7 +116,7 @@ func TestDescribeChordRoundTrips(t *testing.T) {
 	}
 }
 
-// A sequence is two presses in a row, such as the ones a leader key opens.
+// A sequence is two key presses in a row, for example after a leader key.
 func TestParseChordSequenceReadsSeveralPressesInOrder(t *testing.T) {
 	sequence, is := cfg.ParseChordSequence("ctrl+k b")
 	if !is {
@@ -156,10 +156,10 @@ func TestDescribeSequenceNamesEveryPress(t *testing.T) {
 	}
 }
 
-// A chord a terminal never reports cannot be bound, because the action would be unreachable
-// and the user would think the client ignored it.
+// A chord no terminal sends cannot be bound, because the action would never run and the
+// user would think the client ignores the key.
 func TestFindUndeliverableChordNamesWhatATerminalWillNotReport(t *testing.T) {
-	// A plain letter and a control chord both arrive, so neither is refused.
+	// A plain letter and a control chord both arrive, so both are allowed.
 	for _, text := range []string{"a", "ctrl+a", "enter", "f5"} {
 		chord, is := cfg.ParseChord(text)
 		if !is {
@@ -171,8 +171,8 @@ func TestFindUndeliverableChordNamesWhatATerminalWillNotReport(t *testing.T) {
 	}
 }
 
-// The key of an action holds its scope and its name, and splits back into the two, so the
-// config file can name one action of one pane.
+// The key of an action contains its scope and its name and splits back into the two, so the
+// config file can address one action of one pane.
 func TestBuildAndSplitActionKeyRoundTrip(t *testing.T) {
 	for _, held := range []struct {
 		scope cfg.KeyScope
@@ -191,8 +191,8 @@ func TestBuildAndSplitActionKeyRoundTrip(t *testing.T) {
 	}
 }
 
-// A URL pasted into the connection form fills the fields in, so the reader types nothing that
-// the URL already holds.
+// A URL pasted into the connection form fills the fields, so the user does not type a value
+// the URL already contains.
 func TestParseConnectionUrlReadsEveryPart(t *testing.T) {
 	held, is := cfg.ParseConnectionURL("postgres://reader@db.example.com:6543/shop")
 	if !is {
@@ -215,7 +215,7 @@ func TestParseConnectionUrlReadsEveryPart(t *testing.T) {
 	}
 }
 
-// A URL with no port takes the port the engine listens on.
+// A URL without a port uses the default port of the engine.
 func TestParseConnectionUrlFallsBackToTheDefaultPort(t *testing.T) {
 	held, is := cfg.ParseConnectionURL("postgres://reader@localhost/shop")
 	if !is {
@@ -226,7 +226,7 @@ func TestParseConnectionUrlFallsBackToTheDefaultPort(t *testing.T) {
 	}
 }
 
-// An address in brackets is how a URL writes IPv6, and every other reader wants it plain.
+// A URL puts an IPv6 address in brackets. Every other reader needs it without them.
 func TestParseConnectionUrlTakesTheBracketsOffAnIpv6Address(t *testing.T) {
 	held, is := cfg.ParseConnectionURL("postgres://reader@[::1]:5432/shop")
 	if !is {
@@ -237,7 +237,7 @@ func TestParseConnectionUrlTakesTheBracketsOffAnIpv6Address(t *testing.T) {
 	}
 }
 
-// Every scheme an engine claims has to be read, or a URL a server prints cannot be pasted.
+// Every scheme of an engine must be parsed, or a URL printed by a server cannot be pasted.
 func TestParseConnectionUrlReadsEverySchemeAnEngineClaims(t *testing.T) {
 	for _, info := range core.ListEngineInfo() {
 		for _, scheme := range info.URLSchemes {
@@ -258,8 +258,8 @@ func TestParseConnectionUrlRefusesWhatItCannotUse(t *testing.T) {
 	for _, text := range []string{
 		"",
 		"not a url",
-		"db.example.com/shop",                   // no scheme at all
-		"oracle://reader@localhost/shop",        // a scheme no engine claims
+		"db.example.com/shop",                   // no scheme
+		"oracle://reader@localhost/shop",        // a scheme of no engine
 		"postgres://reader@localhost",           // no database
 		"postgres://reader@/shop",               // no host
 		"postgres://reader@localhost:0/shop",    // a port below one

@@ -8,10 +8,10 @@ import (
 	"strconv"
 )
 
-// CellValueKind tells the text "NULL" and a real null apart.
+// CellValueKind separates the text "NULL" from a real null.
 type CellValueKind string
 
-// The kinds a chosen cell value can have.
+// The kinds of cell value the user can select.
 const (
 	CellText    CellValueKind = "text"
 	CellNull    CellValueKind = "null"
@@ -19,13 +19,13 @@ const (
 	CellDefault CellValueKind = "default"
 )
 
-// CellValue is a chosen cell value, before an engine turns it into a statement.
+// CellValue is a selected cell value, before an engine converts it into a statement.
 type CellValue struct {
 	Kind CellValueKind
 	Text string
 }
 
-// DescribeCellValue writes the value as the grid and the review overlay show it.
+// DescribeCellValue returns the value as the grid and the review overlay display it.
 func DescribeCellValue(value CellValue) string {
 	switch value.Kind {
 	case CellNull:
@@ -46,25 +46,25 @@ type CellEdit struct {
 	Value       CellValue
 }
 
-// PendingChanges is everything staged against one result: edits, deletes and inserts.
+// PendingChanges holds all staged edits, deletes and inserts for one result.
 type PendingChanges struct {
 	Edits       map[string]CellEdit
 	DeletedRows map[int]bool
 	Inserts     []map[string]any
 }
 
-// NewPendingChanges builds an empty set of staged work.
+// NewPendingChanges returns an empty set of staged changes.
 func NewPendingChanges() PendingChanges {
 	return PendingChanges{Edits: map[string]CellEdit{}, DeletedRows: map[int]bool{}}
 }
 
-// BuildEditKey names one cell of the result.
+// BuildEditKey returns the map key of one cell of the result.
 func BuildEditKey(rowIndex, columnIndex int) string {
 	return strconv.Itoa(rowIndex) + ":" + strconv.Itoa(columnIndex)
 }
 
-// CountChanges counts the staged work. A cell of a row marked for delete is not
-// counted twice.
+// CountChanges returns the number of staged changes. An edit in a row marked for
+// delete is not counted a second time.
 func CountChanges(pending PendingChanges) int {
 	count := len(pending.DeletedRows) + len(pending.Inserts)
 	for _, edit := range pending.Edits {
@@ -75,7 +75,7 @@ func CountChanges(pending PendingChanges) int {
 	return count
 }
 
-// SortedEdits lists the staged cell edits by row and then by column.
+// SortedEdits returns the staged cell edits, sorted by row and then by column.
 func SortedEdits(pending PendingChanges) []CellEdit {
 	edits := make([]CellEdit, 0, len(pending.Edits))
 	for _, edit := range pending.Edits {
@@ -90,7 +90,7 @@ func SortedEdits(pending PendingChanges) []CellEdit {
 	return edits
 }
 
-// SortedDeletedRows lists the rows marked for delete, lowest first.
+// SortedDeletedRows returns the rows marked for delete, lowest index first.
 func SortedDeletedRows(pending PendingChanges) []int {
 	rows := make([]int, 0, len(pending.DeletedRows))
 	for rowIndex := range pending.DeletedRows {
@@ -100,10 +100,10 @@ func SortedDeletedRows(pending PendingChanges) []int {
 	return rows
 }
 
-// ErrEdit marks an edit the client refuses to write.
+// ErrEdit is the error class for an edit the client refuses to write.
 var ErrEdit = errors.New("edit")
 
-// NewEditError builds a refusal with its reason.
+// NewEditError returns an ErrEdit error with the given reason.
 func NewEditError(reason string) error {
 	return fmt.Errorf("%w: %s", ErrEdit, reason)
 }

@@ -6,11 +6,11 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// A press lands on a column of the screen, and these say what it hit. A wrong answer
-// sorts the wrong column or folds the wrong row.
+// A key press or a click lands on a screen column, and these functions return the target. A
+// wrong result sorts the wrong column or folds the wrong row.
 
 func TestIsOnFoldMarkerIsTrueOnlyOnTheMarkItself(t *testing.T) {
-	// A press on the name selects the row. Only the mark folds it.
+	// A click on the name selects the row. Only the mark folds it.
 	for _, held := range []struct {
 		name   string
 		offset int
@@ -77,7 +77,7 @@ func TestPlanVisibleTabsMovesTheWindowBackForATabBeforeIt(t *testing.T) {
 }
 
 func TestPlanVisibleTabsAlwaysDrawsTheOpenTabEvenWhereItDoesNotFit(t *testing.T) {
-	// A tab wider than the row would otherwise leave the row empty.
+	// Without this a tab wider than the row would leave the row empty.
 	window := present.PlanVisibleTabs([]int{5, 200, 5}, 1, 20, 1)
 	if window.Count < 1 {
 		t.Errorf("count = %d, want at least the open tab", window.Count)
@@ -90,7 +90,7 @@ func TestPlanVisibleTabsAlwaysDrawsTheOpenTabEvenWhereItDoesNotFit(t *testing.T)
 
 func TestPlanVisibleColumnsSpansTheColumnsThatFitBesideTheFrozenOnes(t *testing.T) {
 	// A frozen column always draws and takes its width from the same total, so fewer of
-	// the rest fit beside it.
+	// the other columns fit next to it.
 	widths := []int{10, 10, 10, 10, 10}
 	free := present.PlanVisibleColumns(present.ColumnPlanInput{
 		Widths: widths, Available: 35, Gap: 1, ColumnOffset: 0,
@@ -107,8 +107,8 @@ func TestPlanVisibleColumnsSpansTheColumnsThatFitBesideTheFrozenOnes(t *testing.
 
 func TestPlanVisibleColumnsHoldsTheWindowInsideTheColumnsThereAre(t *testing.T) {
 	widths := []int{10, 10, 10}
-	// The caller offsets from a cursor into the result it is drawing, so the offset is
-	// never past the last column. A negative one is held at the first.
+	// The caller adds an offset to a cursor inside the result, so the offset is never
+	// after the last column. A negative offset is clamped to the first column.
 	for _, offset := range []int{-5, 0, 2} {
 		plan := present.PlanVisibleColumns(present.ColumnPlanInput{
 			Widths: widths, Available: 25, Gap: 1, ColumnOffset: offset,
@@ -124,7 +124,7 @@ func TestPlanVisibleColumnsHoldsTheWindowInsideTheColumnsThereAre(t *testing.T) 
 }
 
 func TestPlanVisibleColumnsAlwaysSpansAtLeastOneColumn(t *testing.T) {
-	// A column wider than the pane would otherwise leave the grid empty.
+	// Without this a column wider than the pane would leave the grid empty.
 	plan := present.PlanVisibleColumns(present.ColumnPlanInput{
 		Widths: []int{200, 10}, Available: 20, Gap: 1, ColumnOffset: 0,
 	})

@@ -11,10 +11,10 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// QueryStateKind says how far one run got.
+// QueryStateKind is the state of one run.
 type QueryStateKind string
 
-// The four states a run can be in.
+// The four states of a run.
 const (
 	QueryIdle      QueryStateKind = "idle"
 	QueryRunning   QueryStateKind = "running"
@@ -22,17 +22,17 @@ const (
 	QueryFailed    QueryStateKind = "failed"
 )
 
-// QueryState is what the pane knows about the run of the active statement.
+// QueryState is the state of the run of the active statement.
 type QueryState struct {
 	Kind    QueryStateKind
 	Result  db.QueryResult
 	Message string
 }
 
-// PlanStateKind says how far the plan of a statement got.
+// PlanStateKind is the state of the plan of a statement.
 type PlanStateKind string
 
-// The four states a plan can be in.
+// The four states of a plan.
 const (
 	PlanNone    PlanStateKind = "none"
 	PlanLoading PlanStateKind = "loading"
@@ -40,46 +40,46 @@ const (
 	PlanFailed  PlanStateKind = "failed"
 )
 
-// PlanState is the plan of one statement, and how far the read of it got.
+// PlanState is the plan of one statement and the state of its read.
 type PlanState struct {
 	Kind    PlanStateKind
 	Plan    query.QueryPlan
 	Message string
 }
 
-// StatementResult is one statement of a batch, and everything read for it.
+// StatementResult is one statement of a batch and everything read for it.
 type StatementResult struct {
 	ID int
-	// The label the strip of a batch draws, which is the first words of the statement.
+	// The label the batch strip draws, which is the first words of the statement.
 	Label string
-	// The statement the run was built from, before any rewrite.
+	// The statement the run was built from, before a rewrite.
 	Source string
-	// The read the engine composed, which paging and counting go through.
+	// The read the engine composed. Paging and counting use it.
 	Read  db.ComposedRead
 	State QueryState
-	// Revision counts the times the rows of this statement were written again, so a
-	// reader that keeps what it built from them knows when to build it again. A page added
-	// to the end leaves it as it was: the rows before the page did not change, and their
-	// number says how many of them a reader has already seen.
+	// Revision counts how often the rows of this statement were replaced, so a caller
+	// that caches a result of the rows knows when to build it again. A page added at the
+	// end does not change it: the rows before the page are unchanged, and their number
+	// says how many rows the caller already read.
 	Revision int
 	Plan     PlanState
-	// How many rows the whole result holds, once the user asked for the total.
+	// The number of rows of the whole result, after the user requested the total.
 	TotalRows    int64
 	HasTotalRows bool
-	// True while the next page is being read.
+	// True while the next page is read.
 	FetchingMore bool
-	// True while the whole result is being counted, so the size says a count is on its way.
+	// True while the whole result is counted, so the size shows that a count runs.
 	Counting bool
-	// The rows a page holds, which is the step size through the relation.
+	// The number of rows of a page, which is the step size through the table.
 	PageSize int
-	// When the run of this statement began, so the wheel beside it can count the seconds.
+	// The start time of the run, so the wait indicator can show the elapsed time.
 	StartedAt time.Time
-	// When the answer landed, which the statistics report beside the start.
+	// The time the answer arrived, which the statistics show next to the start time.
 	FinishedAt time.Time
 }
 
-// BuildStatementLabel writes the label of one statement of a batch: the relation it reads,
-// and not the text of the statement.
+// BuildStatementLabel returns the label of one statement of a batch: the table it reads, and
+// not the text of the statement.
 func BuildStatementLabel(written string) string {
 	references := statement.FindTableReferences(written, syntax.FlavourStandard)
 	if len(references) > 0 {
@@ -91,7 +91,7 @@ func BuildStatementLabel(written string) string {
 	return "statement"
 }
 
-// resolveStatementLabel keeps two results of one relation apart, as `orders` and `orders (2)`.
+// resolveStatementLabel separates two results of one table, as `orders` and `orders (2)`.
 func resolveStatementLabel(written string, taken map[string]bool) string {
 	base := BuildStatementLabel(written)
 	label := base
@@ -102,14 +102,14 @@ func resolveStatementLabel(written string, taken map[string]bool) string {
 	return label
 }
 
-// ResultStore holds one result per statement, and which of them the pane draws.
+// ResultStore holds one result per statement and the index of the result the pane draws.
 type ResultStore struct {
 	results     []*StatementResult
 	activeIndex int
 	nextID      int
 }
 
-// NewResultStore starts a store with nothing read yet.
+// NewResultStore returns an empty store.
 func NewResultStore() *ResultStore {
 	return &ResultStore{}
 }
@@ -119,7 +119,7 @@ func (store *ResultStore) Results() []*StatementResult {
 	return store.results
 }
 
-// ActiveIndex returns which statement the pane draws.
+// ActiveIndex returns the index of the statement the pane draws.
 func (store *ResultStore) ActiveIndex() int {
 	return store.activeIndex
 }
@@ -132,7 +132,7 @@ func (store *ResultStore) Active() *StatementResult {
 	return store.results[store.activeIndex]
 }
 
-// ResultAt returns the statement at that position, and nothing where the run holds none.
+// ResultAt returns the statement at that index, and nothing if the run has none.
 func (store *ResultStore) ResultAt(index int) *StatementResult {
 	if index < 0 || index >= len(store.results) {
 		return nil
@@ -140,7 +140,7 @@ func (store *ResultStore) ResultAt(index int) *StatementResult {
 	return store.results[index]
 }
 
-// State returns how far the active statement got.
+// State returns the state of the active statement.
 func (store *ResultStore) State() QueryState {
 	active := store.Active()
 	if active == nil {
@@ -149,7 +149,7 @@ func (store *ResultStore) State() QueryState {
 	return active.State
 }
 
-// Start clears the store and opens one entry per statement of the run.
+// Start clears the store and creates one entry per statement of the run.
 func (store *ResultStore) Start(statements []string, pageSize int) {
 	store.results = make([]*StatementResult, 0, len(statements))
 	taken := map[string]bool{}
@@ -164,7 +164,7 @@ func (store *ResultStore) Start(statements []string, pageSize int) {
 	store.activeIndex = 0
 }
 
-// IsRunning is true while any statement of the run still waits for the server.
+// IsRunning is true while a statement of the run waits for the server.
 func (store *ResultStore) IsRunning() bool {
 	for _, held := range store.results {
 		if held.State.Kind == QueryRunning || held.FetchingMore {
@@ -179,12 +179,12 @@ func (store *ResultStore) SelectResult(index int) {
 	store.activeIndex = core.ClampIndex(index, len(store.results))
 }
 
-// SelectNextResult steps to the statement before or after the one drawn.
+// SelectNextResult moves to the statement before or after the one that is drawn.
 func (store *ResultStore) SelectNextResult(step int) {
 	store.activeIndex = core.WrapIndex(store.activeIndex+step, len(store.results))
 }
 
-// Succeed keeps what one statement answered.
+// Succeed stores the answer of one statement.
 func (store *ResultStore) Succeed(index int, read db.ComposedRead, result db.QueryResult) {
 	if index < 0 || index >= len(store.results) {
 		return
@@ -198,7 +198,7 @@ func (store *ResultStore) Succeed(index int, read db.ComposedRead, result db.Que
 	held.Revision++
 }
 
-// Fail keeps why one statement did not run.
+// Fail stores the reason one statement did not run.
 func (store *ResultStore) Fail(index int, message string) {
 	if index < 0 || index >= len(store.results) {
 		return
@@ -207,8 +207,8 @@ func (store *ResultStore) Fail(index int, message string) {
 	store.results[index].FinishedAt = time.Now()
 }
 
-// SkipRest marks every statement from this one on as never run, which a batch stopped by a
-// failure leaves behind. Without it they wait for a server that is never asked.
+// SkipRest marks every statement from this one on as not run, which is the state after a
+// batch stopped at an error. Without it they wait for a server that is never asked.
 func (store *ResultStore) SkipRest(from int, message string) {
 	for index := from; index < len(store.results); index++ {
 		if store.results[index].State.Kind != QueryRunning {
@@ -219,7 +219,7 @@ func (store *ResultStore) SkipRest(from int, message string) {
 	}
 }
 
-// IsCounting is true while any statement of the tab is being counted.
+// IsCounting is true while a statement of the tab is counted.
 func (store *ResultStore) IsCounting() bool {
 	for _, held := range store.results {
 		if held.Counting {
@@ -229,7 +229,7 @@ func (store *ResultStore) IsCounting() bool {
 	return false
 }
 
-// AppendRows adds the next page to the result already drawn.
+// AppendRows adds the next page to the result on screen.
 func (store *ResultStore) AppendRows(index int, page db.QueryResult) {
 	if index < 0 || index >= len(store.results) {
 		return
@@ -240,9 +240,10 @@ func (store *ResultStore) AppendRows(index int, page db.QueryResult) {
 		return
 	}
 	result := held.State.Result
-	// The rows already read stay where they are, so the page goes on the end of them and
-	// the revision holds: a reader that wrote them keeps what it wrote and writes the new
-	// ones alone. A result of many pages is written once that way, and not once per page.
+	// The rows already read stay in place, so the page is added at the end and the
+	// revision does not change: a caller that formatted them keeps its result and
+	// formats the new rows only. A result of many pages is then formatted one time and
+	// not one time per page.
 	result.Rows = append(result.Rows, page.Rows...)
 	result.Truncated = page.Truncated
 	if len(result.Columns) == 0 {
@@ -252,7 +253,7 @@ func (store *ResultStore) AppendRows(index int, page db.QueryResult) {
 	held.State.Result = result
 }
 
-// CanFetchMore is true where the read stopped at a page and the server holds more.
+// CanFetchMore is true if the read stopped at a page and the server has more rows.
 func (store *ResultStore) CanFetchMore() bool {
 	active := store.Active()
 	if active == nil || active.State.Kind != QuerySucceeded {
@@ -261,8 +262,8 @@ func (store *ResultStore) CanFetchMore() bool {
 	return active.State.Result.Truncated && active.Read.Pageable
 }
 
-// CanCountRows is true where the server can count the whole result without running the read
-// twice.
+// CanCountRows is true if the server can count the whole result without a second run of the
+// read.
 func (store *ResultStore) CanCountRows() bool {
 	active := store.Active()
 	if active == nil || active.State.Kind != QuerySucceeded {

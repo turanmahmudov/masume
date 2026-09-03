@@ -9,22 +9,22 @@ import (
 type SortDirection string
 
 const (
-	// SortAscending orders from the lowest value up.
+	// SortAscending sorts from the lowest value to the highest.
 	SortAscending SortDirection = "asc"
-	// SortDescending orders from the highest value down.
+	// SortDescending sorts from the highest value to the lowest.
 	SortDescending SortDirection = "desc"
 )
 
-// SortState is a sort key: a column and a direction.
+// SortState is one sort key: a column and a direction.
 type SortState struct {
 	Column    string        `json:"column"`
 	Direction SortDirection `json:"direction"`
 }
 
-// ApplySortColumn returns the sort after the user asked to order by this column. A column
-// already in the sort turns its direction over and keeps its place, because moving it would
-// change which column orders the rows first. A column that is not in the sort joins the end of
-// it, where it orders the rows the least. Asking without adding leaves that column alone.
+// ApplySortColumn returns the new sort after the user selected this column. A column that
+// is already in the sort reverses its direction and keeps its position, because a move would
+// change which column sorts first. A new column is added at the end, where it has the least
+// effect. If add is false, the sort is replaced by this one column.
 func ApplySortColumn(sort []SortState, column string, add bool) []SortState {
 	turned := TurnSortDirection(FindSortDirection(sort, column))
 	if !add {
@@ -47,8 +47,8 @@ func ApplySortColumn(sort []SortState, column string, add bool) []SortState {
 	return append(built, SortState{Column: column, Direction: turned})
 }
 
-// FindSortDirection returns the direction this column is ordered by, and nothing where the
-// sort does not name it.
+// FindSortDirection returns the direction of this column, or an empty string if the
+// column is not in the sort.
 func FindSortDirection(sort []SortState, column string) SortDirection {
 	for _, key := range sort {
 		if key.Column == column {
@@ -58,8 +58,8 @@ func FindSortDirection(sort []SortState, column string) SortDirection {
 	return ""
 }
 
-// TurnSortDirection returns the direction after this one. A column that is not ordered yet
-// starts at the lowest value up, which is what a reader expects of a first press.
+// TurnSortDirection returns the next direction. A column that is not sorted yet starts
+// with ascending order, which is what the user expects from the first key press.
 func TurnSortDirection(held SortDirection) SortDirection {
 	if held == SortAscending {
 		return SortDescending
@@ -67,11 +67,11 @@ func TurnSortDirection(held SortDirection) SortDirection {
 	return SortAscending
 }
 
-// FilterTest is how a cell is tested. A null needs its own test, because
+// FilterTest is the test applied to a cell. A null needs its own test, because
 // `= null` matches nothing.
 type FilterTest string
 
-// The tests a compare step can carry.
+// The tests a compare step can use.
 const (
 	FilterEquals    FilterTest = "equals"
 	FilterDiffers   FilterTest = "differs"
@@ -79,7 +79,7 @@ const (
 	FilterIsNotNull FilterTest = "is-not-null"
 )
 
-// FilterKind tells a bound comparison from text the user typed.
+// FilterKind separates a bound comparison from text the user typed.
 type FilterKind string
 
 // The two kinds of filter step.
@@ -89,7 +89,7 @@ const (
 )
 
 // FilterStep is one step of a filter: a bound comparison, or text the user typed
-// which the client does not read.
+// which the client does not parse.
 type FilterStep struct {
 	Kind   FilterKind `json:"kind"`
 	Column string     `json:"column,omitempty"`
@@ -98,8 +98,8 @@ type FilterStep struct {
 	Text   string     `json:"text,omitempty"`
 }
 
-// resolveBindValue keeps a type with a wire form as it is. Only a type with none
-// becomes text, so a date keeps the offset the display drops.
+// resolveBindValue keeps a type that the driver can send unchanged. Only a type the
+// driver cannot send becomes text, so a date keeps the offset that the display omits.
 func resolveBindValue(value any) any {
 	switch held := value.(type) {
 	case nil:
@@ -114,7 +114,8 @@ func resolveBindValue(value any) any {
 	return FormatCell(value, "")
 }
 
-// BuildCellFilter writes "this cell" and "not this cell", which the filter keys apply.
+// BuildCellFilter returns the "equal to this cell" or "not equal to this cell" step used
+// by the filter keys.
 func BuildCellFilter(column string, value any, exclude bool) FilterStep {
 	if value == nil {
 		test := FilterIsNull
@@ -130,7 +131,8 @@ func BuildCellFilter(column string, value any, exclude bool) FilterStep {
 	return FilterStep{Kind: FilterCompare, Column: column, Test: test, Value: resolveBindValue(value)}
 }
 
-// BuildRawFilter reads the predicate the user typed. An empty one clears the filter.
+// BuildRawFilter returns a step for the predicate the user typed. Empty text clears the
+// filter.
 func BuildRawFilter(text string) (FilterStep, bool) {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
@@ -139,7 +141,7 @@ func BuildRawFilter(text string) (FilterStep, bool) {
 	return FilterStep{Kind: FilterRaw, Text: trimmed}, true
 }
 
-// ReadRewrite is the sort and filter a tab lays over a read.
+// ReadRewrite is the sort and filter a tab applies to a read.
 type ReadRewrite struct {
 	Sort   []SortState
 	Filter []FilterStep

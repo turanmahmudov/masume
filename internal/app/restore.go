@@ -9,12 +9,12 @@ import (
 	"github.com/turanmahmudov/masume/internal/hist"
 )
 
-// The tabs a connection was left with, written into the history file and read back on
-// the next connect. A restored table or object tab reads what it describes the first
-// time it is shown, so opening a connection asks the server for one relation only.
+// The open tabs of a connection, written into the history file and read back at the next
+// connection. A restored table or object tab reads its data the first time it is shown, so a
+// new connection asks the server for one table only.
 
-// RestoreTabs opens the tabs the profile was left with. A profile never opened, or one
-// whose tabs could not be read, opens with one empty query tab.
+// RestoreTabs opens the stored tabs of the profile. A profile that was never opened, or one
+// whose tabs could not be read, starts with one empty query tab.
 func (connection *Connection) RestoreTabs(saved hist.SavedWorkspace, buildPreview PreviewBuilder) {
 	if len(saved.Tabs) == 0 {
 		return
@@ -36,17 +36,17 @@ func (connection *Connection) RestoreTabs(saved hist.SavedWorkspace, buildPrevie
 	connection.ActiveIndex = core.ClampIndex(saved.ActiveIndex, len(tabs))
 }
 
-// PreviewBuilder writes the read of a relation, which a restored table tab opens with.
+// PreviewBuilder returns the read of a table, which a restored table tab starts with.
 type PreviewBuilder func(table db.TableRef) string
 
-// buildRestoredTab opens one stored tab as the tab it was written from.
+// buildRestoredTab returns the tab of one stored tab.
 func buildRestoredTab(id int, saved hist.SavedTab, buildPreview PreviewBuilder) *Tab {
 	switch saved.Kind {
 	case "object":
 		tab := NewObjectTab(id, db.SchemaObject{
 			Schema: saved.Schema, Name: saved.Name,
 			Kind: db.SchemaObjectKind(saved.ObjectKind),
-			// Only the tree shows a detail beside a name.
+			// Only the tree shows a detail next to a name.
 			Identity: saved.Identity,
 		})
 		applySavedState(tab, saved.State)
@@ -65,7 +65,7 @@ func buildRestoredTab(id int, saved hist.SavedTab, buildPreview PreviewBuilder) 
 	return tab
 }
 
-// applySavedState lays the sort, the filter and the caret of a stored tab back on.
+// applySavedState applies the sort, the filter and the caret of a stored tab.
 func applySavedState(tab *Tab, state hist.SavedTabState) {
 	tab.Sort = state.Sort
 	tab.Filter = state.Filter
@@ -75,8 +75,8 @@ func applySavedState(tab *Tab, state hist.SavedTabState) {
 	}
 }
 
-// TakeUnread returns whether this tab still has to read what it describes, and marks it
-// read. A restored tab reads the first time it is shown.
+// TakeUnread returns whether this tab still has to read its data, and marks it as read. A
+// restored tab reads the first time it is shown.
 func (connection *Connection) TakeUnread(tab *Tab) bool {
 	if tab == nil || !connection.Unread[tab.ID] {
 		return false
@@ -85,7 +85,7 @@ func (connection *Connection) TakeUnread(tab *Tab) bool {
 	return true
 }
 
-// BuildWorkspaceSnapshot returns the tabs as the history file holds them.
+// BuildWorkspaceSnapshot returns the tabs in the form the history file stores.
 func (connection *Connection) BuildWorkspaceSnapshot() hist.SavedWorkspace {
 	tabs := make([]hist.SavedTab, 0, len(connection.Tabs))
 	for _, tab := range connection.Tabs {
@@ -98,7 +98,7 @@ func (connection *Connection) BuildWorkspaceSnapshot() hist.SavedWorkspace {
 	}
 }
 
-// buildSavedTab writes one tab as the history file holds it.
+// buildSavedTab returns one tab in the form the history file stores.
 func buildSavedTab(tab *Tab) hist.SavedTab {
 	state := hist.SavedTabState{
 		Caret: tab.Editor.Caret, Sort: tab.Sort, Filter: tab.Filter,
@@ -118,8 +118,8 @@ func buildSavedTab(tab *Tab) hist.SavedTab {
 	return hist.SavedTab{Kind: "query", SQL: tab.Editor.Text, State: state}
 }
 
-// DescribeTabs writes what is open as one text, so a press that changed it is known
-// without comparing every field.
+// DescribeTabs returns the open tabs as one text, so a change is found without a comparison
+// of every field.
 func (connection *Connection) DescribeTabs() string {
 	var written strings.Builder
 	written.WriteString(strconv.Itoa(connection.ActiveIndex))

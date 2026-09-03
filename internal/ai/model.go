@@ -9,8 +9,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 )
 
-// What every provider returns for. Each provider writes its own request and reads its own
-// stream, because the two protocols differ in everything but what they carry.
+// The interface every provider implements. Each provider builds its own request and reads
+// its own stream, because the two protocols are different in every part except the
+// content.
 
 // The roles a turn of the request can have.
 const (
@@ -18,22 +19,22 @@ const (
 	RoleAssistant = "assistant"
 )
 
-// ToolCall is one call a model asked for.
+// ToolCall is one call the model requested.
 type ToolCall struct {
-	// ID is what the provider called this call, which the answer is keyed by.
+	// ID is the identifier the provider gave this call. The answer uses it as its key.
 	ID    string
 	Name  string
 	Input map[string]any
-	// Arguments is the input as the model wrote it, kept so the next request sends it back
-	// exactly as it came.
+	// Arguments is the input in the exact form the model sent, so the next request can
+	// send it back unchanged.
 	Arguments string
 }
 
-// ToolAnswer is what one call answered.
+// ToolAnswer is the result of one call.
 type ToolAnswer struct {
 	CallID string
 	Name   string
-	// Output is the answer as JSON text, which is what a model reads.
+	// Output is the result as JSON text, which is the form the model reads.
 	Output string
 }
 
@@ -41,34 +42,34 @@ type ToolAnswer struct {
 type Message struct {
 	Role string
 	Text string
-	// Calls holds the calls an assistant turn asked for.
+	// Calls holds the calls an assistant turn requested.
 	Calls []ToolCall
-	// Returns holds what those calls answered, sent as the turn after them.
+	// Returns holds the results of those calls, sent in the next turn.
 	Answers []ToolAnswer
 }
 
-// ToolSchema is one tool as a provider is told about it.
+// ToolSchema is one tool in the form sent to a provider.
 type ToolSchema struct {
 	Name        string
 	Description string
 	InputSchema map[string]any
 }
 
-// Request is one question, with everything the model needs to answer it.
+// Request is one question with everything the model needs to answer it.
 type Request struct {
 	System   string
 	Messages []Message
 	Tools    []ToolSchema
 }
 
-// The kinds of thing that arrive while a model returns.
+// The kinds of event that arrive while a model answers.
 const (
-	// EventTextStart opens a block of text, which follows the text of an earlier block.
+	// EventTextStart starts a block of text that follows an earlier block.
 	EventTextStart = "text-start"
 	EventTextDelta = "text-delta"
 )
 
-// Event is one thing that arrived.
+// Event is one event of the stream.
 type Event struct {
 	Kind string
 	Text string
@@ -84,16 +85,17 @@ const (
 	FinishUnknown       = "unknown"
 )
 
-// Usage is what one request spent.
+// Usage is the token count of one request.
 type Usage struct {
 	InputTokens  int
 	OutputTokens int
-	// CachedInputTokens is the part of the input the provider read from its cache, at a tenth
-	// of the price. It is a part of the input count, not a sum beside it.
+	// CachedInputTokens is the part of the input the provider read from its cache, at ten
+	// percent of the price. It is included in the input count and is not a separate
+	// total.
 	CachedInputTokens int
 }
 
-// Answer is what one request answered, once the stream ended.
+// Answer is the result of one request, after the end of the stream.
 type Answer struct {
 	Text         string
 	Calls        []ToolCall
@@ -101,16 +103,18 @@ type Answer struct {
 	Usage        Usage
 }
 
-// Model is one provider, opened for one model.
+// Model is one provider, configured for one model.
 type Model interface {
-	// Describe writes the provider and the model, as the panel and the log name them.
+	// Describe returns the provider and the model, in the form used by the panel and the
+	// log.
 	Describe() string
-	// Stream sends one request and reports what arrives. It returns once the stream ends.
+	// Stream sends one request and reports every event. It returns at the end of the
+	// stream.
 	Stream(ctx context.Context, request Request, onEvent func(Event)) (Answer, error)
 }
 
-// ResolveVersionedBaseURL adds `/v1` where a base URL has none, because neither provider adds
-// it to a URL the config gave.
+// ResolveVersionedBaseURL adds `/v1` to a base URL that has no version, because neither
+// provider adds it to a URL from the config.
 func ResolveVersionedBaseURL(baseURL string) string {
 	stripped := strings.TrimRight(baseURL, "/")
 	if strings.HasSuffix(strings.ToLower(stripped), "/v1") {
@@ -119,8 +123,9 @@ func ResolveVersionedBaseURL(baseURL string) string {
 	return stripped + "/v1"
 }
 
-// OpenModel returns the model of the active provider, and why it cannot be opened. The
-// cacheKey says which requests share a prefix; a provider that marks its own blocks ignores it.
+// OpenModel returns the model of the active provider, or the reason it cannot be opened.
+// cacheKey groups the requests that share a prefix. A provider that marks its own blocks
+// ignores it.
 func OpenModel(config cfg.AiConfig, id cfg.AiProviderID, cacheKey string) (Model, error) {
 	if id != cfg.ProviderAnthropic && id != cfg.ProviderOpenai {
 		return nil, fmt.Errorf("no provider named %q", string(id))
@@ -142,7 +147,7 @@ func OpenModel(config cfg.AiConfig, id cfg.AiProviderID, cacheKey string) (Model
 	return openOpenaiModel(settings.Model, apiKey, baseURL, cacheKey), nil
 }
 
-// DescribeActiveModel writes the provider and the model the chat sends to.
+// DescribeActiveModel returns the provider and the model the chat sends to.
 func DescribeActiveModel(config cfg.AiConfig, id cfg.AiProviderID) string {
 	return string(id) + "/" + config.Providers[id].Model
 }

@@ -14,11 +14,11 @@ type FormField struct {
 	Key   string
 	Label string
 	Value string
-	// The values a field steps through, where it is a choice rather than free text.
+	// The values of a field that is a choice and not free text.
 	Choices []string
 }
 
-// buildBlankProfile returns what a new connection starts from.
+// buildBlankProfile returns the profile a new connection starts from.
 func buildBlankProfile() Profile {
 	return Profile{
 		Name: "new-connection", Engine: core.DefaultEngine, Host: "127.0.0.1",
@@ -29,7 +29,8 @@ func buildBlankProfile() Profile {
 	}
 }
 
-// resolveDatabaseLabel names the field: a name on a server, or the path of a file.
+// resolveDatabaseLabel returns the label of the field: a database name on a server, or a
+// file path.
 func resolveDatabaseLabel(engine core.Engine) string {
 	if core.OpensFile(engine) {
 		return "file"
@@ -37,13 +38,14 @@ func resolveDatabaseLabel(engine core.Engine) string {
 	return "database"
 }
 
-// serverFields are the fields that say how a server is reached, and as whom.
+// serverFields are the fields for the address of a server and the user.
 var serverFields = map[string]bool{
 	"host": true, "port": true, "user": true, "auth": true,
 	"password": true, "passwordEnv": true, "passwordCommand": true, "sslMode": true,
 }
 
-// passwordFields name the field each auth mode reads the password from. A prompt reads none.
+// passwordFields give the field each auth mode reads the password from. The prompt mode
+// reads no field.
 var passwordFields = map[AuthMode]map[string]bool{
 	AuthPassword: {"password": true, "passwordEnv": true},
 	AuthCommand:  {"passwordCommand": true},
@@ -80,7 +82,7 @@ func listModeNames[T ~string](allowed []T) []string {
 	return names
 }
 
-// BuildFormFields returns the fields of the form, filled from the profile it edits.
+// BuildFormFields returns the fields of the form, filled from the profile under edit.
 func BuildFormFields(profile Profile, editing bool) []FormField {
 	source := profile
 	if !editing {
@@ -115,10 +117,10 @@ func BuildFormFields(profile Profile, editing bool) []FormField {
 	}
 }
 
-// FindShownFields returns the fields the form draws. A file engine has no server, so it
-// shows no host and no password field. A mode reads its password from one field, so the
-// others are hidden. The text of a hidden field is kept, and returns with the mode that
-// reads it.
+// FindShownFields returns the fields the form draws. A file engine has no server, so the
+// host and password fields are hidden. An auth mode reads the password from one field, so
+// the other password fields are hidden. The text of a hidden field is kept and appears
+// again with the mode that reads it.
 func FindShownFields(fields []FormField) []FormField {
 	engine, known := core.FindEngine(ReadField(fields, "engine"))
 	if known && core.OpensFile(engine) {
@@ -149,12 +151,12 @@ func FindShownFields(fields []FormField) []FormField {
 	return kept
 }
 
-// FormError is a value no connection can be opened with.
+// FormError is a form value that cannot be used to open a connection.
 type FormError struct{ Reason string }
 
 func (err FormError) Error() string { return err.Reason }
 
-// findChoice returns the value the field names, or the fallback where it names none.
+// findChoice returns the value of the field, or the fallback if the field has none.
 func findChoice[T ~string](allowed []T, written string, fallback T) T {
 	if found, known := core.FindAllowed(allowed, written); known {
 		return found
@@ -162,9 +164,10 @@ func findChoice[T ~string](allowed []T, written string, fallback T) T {
 	return fallback
 }
 
-// BuildProfileFromFields turns the edited fields back into a profile, and refuses a wrong
-// value. The fields the form does not show are kept from the profile it edits, so a test run
-// and a save both carry the pre-connect command, the page size and the rest.
+// BuildProfileFromFields converts the edited fields back into a profile and rejects an
+// invalid value. The settings the form does not show are taken from the profile under edit,
+// so a test connection and a save both keep the pre-connect command, the page size and the
+// other settings.
 func BuildProfileFromFields(fields []FormField, source Profile, editing bool) (Profile, error) {
 	built := source
 	if !editing {
@@ -187,14 +190,14 @@ func BuildProfileFromFields(fields []FormField, source Profile, editing bool) (P
 	built.Environment = findChoice(Environments, read("environment"), EnvironmentDev)
 	built.AccessMode = findChoice(AccessModes, read("accessMode"), AccessWrite)
 	built.ConfirmWrites = findChoice(ConfirmModes, read("confirmWrites"), ConfirmOff)
-	// A space at either end of a password is part of it.
+	// A space at the start or the end of a password is part of the password.
 	built.Password = ReadField(fields, "password")
 	built.PasswordEnv = read("passwordEnv")
 	built.PasswordCommand = read("passwordCommand")
 	built.Description = read("description")
 	built.AiInstructions = read("aiInstructions")
 
-	// A file engine reaches no port, so the form does not show one.
+	// A file engine uses no port, so the form does not show one.
 	built.Port = core.ResolveDefaultPort(engine)
 	if !opensFile {
 		port, err := strconv.Atoi(read("port"))
@@ -239,7 +242,7 @@ func BuildProfileFromFields(fields []FormField, source Profile, editing bool) (P
 	return built, nil
 }
 
-// ConnectionURL is a connection URL, as the form fields it fills.
+// ConnectionURL is a parsed connection URL, in the form fields it fills.
 type ConnectionURL struct {
 	Engine   core.Engine
 	Host     string
@@ -249,7 +252,7 @@ type ConnectionURL struct {
 	SSLMode  string
 }
 
-// urlSchemes name the engine each scheme reaches, with its other names.
+// urlSchemes give the engine of each scheme, including the alternative scheme names.
 var urlSchemes = func() map[string]core.Engine {
 	schemes := map[string]core.Engine{}
 	for _, info := range core.ListEngineInfo() {
@@ -260,17 +263,17 @@ var urlSchemes = func() map[string]core.Engine {
 	return schemes
 }()
 
-// sslKeys name the keys a URL can use for the SSL setting.
+// sslKeys are the query keys a URL can use for the SSL setting.
 var sslKeys = []string{"sslmode", "ssl-mode", "sslMode"}
 
-// tlsSchemes name the schemes that ask for TLS by their name alone, and the mode each one
-// means. A Redis client reads `rediss://` as a TLS connection that checks the certificate,
-// so a URL that names no mode must not fall back to the clear.
+// tlsSchemes are the schemes that request TLS by their name, with the mode of each one. A
+// Redis client reads `rediss://` as a TLS connection that verifies the certificate, so a
+// URL without a mode must not fall back to an unencrypted connection.
 var tlsSchemes = map[string]core.SSLMode{"rediss": core.SSLVerifyFull}
 
-// ParseConnectionURL reads a pasted connection string. It returns nothing unless the scheme,
-// the host and the database are all there, because a part of a URL means the user is still
-// typing. A password in the URL is dropped.
+// ParseConnectionURL reads a pasted connection string. It returns false unless the scheme,
+// the host and the database are all present, because an incomplete URL means the user is
+// still typing. A password in the URL is removed.
 func ParseConnectionURL(text string) (ConnectionURL, bool) {
 	trimmed := strings.TrimSpace(text)
 	if !strings.Contains(trimmed, "://") {
@@ -286,7 +289,7 @@ func ParseConnectionURL(text string) (ConnectionURL, bool) {
 		return ConnectionURL{}, false
 	}
 
-	// A URL puts an IPv6 address in brackets, and every other reader wants it plain.
+	// A URL puts an IPv6 address in brackets. Every other reader needs it without them.
 	host := strings.Trim(parsed.Hostname(), "[]")
 	database := strings.TrimPrefix(parsed.Path, "/")
 	if host == "" || database == "" {
@@ -325,7 +328,7 @@ func ParseConnectionURL(text string) (ConnectionURL, bool) {
 	}, true
 }
 
-// writeField writes one value, and keeps every other field.
+// writeField sets one value and keeps every other field.
 func writeField(fields []FormField, key, value string) []FormField {
 	written := make([]FormField, 0, len(fields))
 	for _, field := range fields {
@@ -337,8 +340,8 @@ func writeField(fields []FormField, key, value string) []FormField {
 	return written
 }
 
-// ApplyConnectionURL fills the form from a pasted connection string. The name follows the
-// database only while the user did not choose a name.
+// ApplyConnectionURL fills the form from a pasted connection string. The profile name
+// follows the database name only while the user has not typed a name.
 func ApplyConnectionURL(fields []FormField, held ConnectionURL) []FormField {
 	named := strings.TrimSpace(ReadField(fields, "name"))
 	if named == "" || named == buildBlankProfile().Name {
@@ -356,8 +359,8 @@ func ApplyConnectionURL(fields []FormField, held ConnectionURL) []FormField {
 	return filled
 }
 
-// ApplyFieldChange writes one value and follows what it changes. A host never holds `://`,
-// so a value with it is a pasted connection string.
+// ApplyFieldChange sets one value and updates the fields that depend on it. A host never
+// contains `://`, so a value with it is a pasted connection string.
 func ApplyFieldChange(fields []FormField, key, value string) []FormField {
 	if key == "host" {
 		if held, parsed := ParseConnectionURL(value); parsed {
@@ -371,7 +374,7 @@ func ApplyFieldChange(fields []FormField, key, value string) []FormField {
 	return followEngine(fields, changed, value)
 }
 
-// followEngine sets the port and the database label of the chosen engine. A port the user
+// followEngine sets the port and the database label of the selected engine. A port the user
 // typed is kept.
 func followEngine(before, after []FormField, engine string) []FormField {
 	wanted, known := core.FindEngine(engine)
@@ -395,7 +398,8 @@ func followEngine(before, after []FormField, engine string) []FormField {
 	return written
 }
 
-// DescribeFormValue writes a value as the form draws it, so an empty field says what it is.
+// DescribeFormValue returns a value as the form draws it. An empty field shows a
+// placeholder.
 func DescribeFormValue(field FormField) string {
 	if field.Value != "" {
 		return field.Value

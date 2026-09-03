@@ -8,15 +8,15 @@ import (
 	"time"
 )
 
-// The password of a profile: the one the file holds, the one an environment variable holds,
-// or the one a command prints. A failed command is reported, so a locked keyring is not
-// turned into a refused login.
+// The password of a profile: the value in the file, the value of an environment variable,
+// or the output of a command. A command that fails is reported, so a locked keyring does not
+// become a login error.
 
-// passwordCommandTimeout is how long a locked keyring has to ask the user to unlock it.
+// passwordCommandTimeout is the time a locked keyring has to ask the user to unlock it.
 const passwordCommandTimeout = 30 * time.Second
 
-// readFirstLine returns the first line of what a command printed, so a store that prints
-// more still works.
+// readFirstLine returns the first line of the output of a command, so a store that prints
+// more than one line still works.
 func readFirstLine(output string) string {
 	line := output
 	if before, _, ok := strings.Cut(output, "\n"); ok {
@@ -25,13 +25,13 @@ func readFirstLine(output string) string {
 	return strings.TrimSuffix(line, "\r")
 }
 
-// runPasswordCommand runs the command a profile names and returns what it printed.
+// runPasswordCommand runs the password command of a profile and returns its output.
 func runPasswordCommand(name, written string) (string, error) {
 	ctx, stop := context.WithTimeout(context.Background(), passwordCommandTimeout)
 	defer stop()
 
-	// Without stdin, a command that asks in the terminal fails instead of drawing over
-	// the interface.
+	// Without stdin, a command that prompts in the terminal fails instead of drawing
+	// over the interface.
 	command := exec.CommandContext(ctx, "sh", "-c", written)
 	command.Stdin = nil
 	printed, err := command.Output()
@@ -60,8 +60,8 @@ func runPasswordCommand(name, written string) (string, error) {
 	return password, nil
 }
 
-// ResolveProfilePassword returns the password of the profile, or nothing where only the user
-// can give one.
+// ResolveProfilePassword returns the password of the profile, or an empty value if the user
+// is the only source.
 func ResolveProfilePassword(profile Profile) (string, error) {
 	if profile.Auth == AuthCommand && profile.PasswordCommand != "" {
 		return runPasswordCommand(profile.Name, profile.PasswordCommand)

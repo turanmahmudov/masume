@@ -14,23 +14,23 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// Everything a model may ask a connection for. Only the last one writes.
+// Every operation a model can run on a connection. Only the last one writes.
 
-// The limits of a listing. A pattern narrows a long list rather than a higher number.
+// The limits of a listing. A pattern reduces a long list, not a higher limit.
 const (
 	maxRelationshipsListed = 300
 	maxTablesListed        = 200
 )
 
-// buildNamePattern reads a pattern a caller wrote: the text anywhere in the name, with `*`
-// for any run of characters. The case is not read.
+// buildNamePattern parses a pattern from a caller: the text at any position in the name,
+// with `*` for any group of characters. The comparison ignores the case.
 func buildNamePattern(written string) (*regexp.Regexp, error) {
 	escaped := regexp.QuoteMeta(written)
-	// The star is the one part of the pattern that is not literal.
+	// The star is the only part of the pattern that is not literal.
 	return regexp.Compile("(?i)" + strings.ReplaceAll(escaped, `\*`, ".*"))
 }
 
-// resolveDatabase returns the schema a call names, or the one the connection opened on.
+// resolveDatabase returns the schema of the call, or the schema of the connection.
 func resolveDatabase(deps ToolDeps, named string) string {
 	if named != "" {
 		return named
@@ -38,7 +38,7 @@ func resolveDatabase(deps ToolDeps, named string) string {
 	return deps.Session.Describe().DefaultSchema
 }
 
-// listSchemaNames returns every schema the relations sit in, in name order.
+// listSchemaNames returns every schema that contains a table, sorted by name.
 func listSchemaNames(tables []db.TableRef) []string {
 	seen := map[string]bool{}
 	names := []string{}
@@ -51,8 +51,8 @@ func listSchemaNames(tables []db.TableRef) []string {
 	return names
 }
 
-// resolveTableInput returns the relation a name from the model stands for. The second answer
-// is the problem to report where there is no such relation.
+// resolveTableInput returns the table for a name from the model. The second value is the
+// error message if there is no such table.
 func resolveTableInput(deps ToolDeps, table, database string) (db.TableRef, map[string]any) {
 	source := statement.SelectSource{Name: table}
 	if database != "" {
@@ -77,7 +77,7 @@ func resolveTableInput(deps ToolDeps, table, database string) (db.TableRef, map[
 	return found, nil
 }
 
-// tableInputFields are the arguments of a tool that takes one relation name.
+// tableInputFields are the arguments of a tool that takes one table name.
 var tableInputFields = []field{
 	{
 		name: "table", kind: kindString, required: true,
@@ -90,8 +90,8 @@ var tableInputFields = []field{
 	},
 }
 
-// defineTableReadTool builds a tool that returns one thing about one relation. Only the read
-// differs between them.
+// defineTableReadTool builds a tool that returns one property of one table. The read
+// function is the only difference between them.
 func defineTableReadTool(
 	name, description string,
 	readDetail func(
@@ -122,7 +122,7 @@ func defineTableReadTool(
 	}
 }
 
-// refuseInput returns what is wrong with a call, as a text the model reads.
+// refuseInput returns the error of a call as a text for the model.
 func refuseInput(problem string) map[string]any {
 	return map[string]any{
 		"error": problem, "hint": "read the schema of this tool and call it again",
@@ -208,7 +208,8 @@ var listTables = ToolDefinition{
 		described := make([]map[string]any, 0, len(listed))
 		for _, table := range listed {
 			held := map[string]any{"name": table.Name, "kind": string(table.Kind)}
-			// Only where the server has an estimate. Nothing is sent instead of a zero.
+			// Only if the server has an estimate. Otherwise the field is omitted and
+			// not sent as zero.
 			if table.EstimatedRows > 0 {
 				held["estimatedRows"] = table.EstimatedRows
 			}
@@ -224,8 +225,8 @@ var listTables = ToolDefinition{
 }
 
 func describeColumnForModel(column db.ColumnDetail) map[string]any {
-	// A column with no default is written as null, not as an empty text, because an empty
-	// text is a default a column can have.
+	// A column without a default is written as null and not as an empty text, because an
+	// empty text is a valid default.
 	var defaultValue any
 	if column.HasDefault {
 		defaultValue = column.DefaultValue
@@ -238,7 +239,7 @@ func describeColumnForModel(column db.ColumnDetail) map[string]any {
 		"default":    defaultValue,
 	}
 	// The values of an enum column. Without them the model has to read them from the
-	// server to write `where status = 'shipped'`.
+	// server before it can write `where status = 'shipped'`.
 	if len(column.Choices) > 0 {
 		described["choices"] = column.Choices
 	}
@@ -253,8 +254,8 @@ func describeForeignKeyForModel(key query.ForeignKey) map[string]any {
 	}
 }
 
-// The server is asked every time, and its answer also goes to the tree. A cached column list
-// read before an ALTER is worse than one more request.
+// The server is asked every time, and its answer also goes to the tree. A cached column
+// list from before an ALTER is worse than one more request.
 var describeTable = defineTableReadTool(
 	"describe_table",
 	"Get the columns, types, and foreign keys of one table, in the connected database or "+
@@ -345,7 +346,7 @@ func describeRelationshipForModel(relationship db.Relationship) map[string]any {
 	}
 }
 
-// touchesTable is true where the key starts at this relation or points at it.
+// touchesTable is true if the key starts at this table or refers to it.
 func touchesTable(relationship db.Relationship, table db.TableRef) bool {
 	starts := relationship.Schema == table.Schema && relationship.Table == table.Name
 	points := relationship.TargetSchema == table.Schema &&
@@ -418,8 +419,8 @@ var listRelationships = ToolDefinition{
 }
 
 func describePlanRowForModel(row result.PlanRow) map[string]any {
-	// A count the server did not measure or estimate is written as null, not as a zero, and
-	// not left out.
+	// A count the server did not measure or estimate is written as null, not as zero and
+	// not omitted.
 	var estimatedRows, actualRows, selfMs any
 	if row.Node.HasEstimatedRows {
 		estimatedRows = row.Node.EstimatedRows
@@ -471,7 +472,7 @@ var explainQuery = ToolDefinition{
 		sql, _ := readText(read, "sql")
 		askedToAnalyze, _ := readFlag(read, "analyze")
 
-		// What the server cannot do at all is answered before the user is asked about a
+		// An unsupported operation is reported before the user is asked about a
 		// statement that would never be sent.
 		if !deps.Session.Capabilities().PlansStatement {
 			return map[string]any{
@@ -541,7 +542,7 @@ var validateQuery = ToolDefinition{
 		if !faulty {
 			return map[string]any{"checked": true, "problem": nil}
 		}
-		// The offset is written as null where the server placed the fault nowhere.
+		// The offset is written as null if the server gave no position for the error.
 		var offset any
 		if found.HasOffset {
 			offset = found.Offset
@@ -552,7 +553,8 @@ var validateQuery = ToolDefinition{
 	},
 }
 
-// Definitions returns everything a caller may ask one connection. Only the last one writes.
+// Definitions returns every operation a caller can run on one connection. Only the last one
+// writes.
 func Definitions() []ToolDefinition {
 	return []ToolDefinition{
 		listTables, describeTable, listIndexes, listConstraints, getTableDDL,

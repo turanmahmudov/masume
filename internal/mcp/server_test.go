@@ -10,11 +10,11 @@ import (
 	"github.com/turanmahmudov/masume/internal/agent"
 )
 
-// buildTestResponder answers a responder with one tool, and the log lines it wrote.
+// buildTestResponder returns a responder with one tool, and its log lines.
 func buildTestResponder(call func(input map[string]any) (any, error)) (*Responder, *[]string) {
 	written := &[]string{}
 	asker := CreateAsker(func(message string) { *written = append(*written, message) })
-	// The transport of the server has a writer by the time a client speaks.
+	// The transport of the server has a writer before the first message of a client.
 	asker.AttachWriter(func(any) {})
 	return CreateResponder(ResponderDeps{
 		Tools: []Tool{{
@@ -29,7 +29,7 @@ func buildTestResponder(call func(input map[string]any) (any, error)) (*Responde
 	}), written
 }
 
-// answerOne reads one message as JSON and answers it as the line a client would read.
+// answerOne parses one message as JSON and returns the answer as the line a client reads.
 func answerOne(t *testing.T, responder *Responder, written string) string {
 	t.Helper()
 	var message any
@@ -62,7 +62,7 @@ func TestAnswerEveryMethod(t *testing.T) {
 		{`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"nope"}}`,
 			`{"jsonrpc":"2.0","id":3,"error":{"code":-32602,` +
 				`"message":"no tool named \"nope\""}}`},
-		// A character a browser cares about is left as the statement wrote it.
+		// An HTML character stays as the statement wrote it.
 		{`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"one_tool"}}`,
 			`{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text",` +
 				`"text":"{\n  \"read\": \"a < b\"\n}"}]}}`},
@@ -94,7 +94,7 @@ func TestInitializeReportsTheVersionAsked(t *testing.T) {
 		t.Errorf("the log holds %v", *written)
 	}
 
-	// A version this server does not know falls back to the newest it speaks.
+	// An unknown version falls back to the newest version this server supports.
 	answered = answerOne(t, responder,
 		`{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocolVersion":"1999"}}`)
 	if !strings.Contains(answered, `"protocolVersion":"2025-06-18"`) {
@@ -156,14 +156,13 @@ func TestServeOverStdioAnswersEveryLine(t *testing.T) {
 	}
 }
 
-// A message with no line break of its own would grow the buffer of the reader until the
-// machine has no memory left, which makes the client the one that decides how much this
-// process takes.
+// A message without a line break would grow the buffer of the reader until the machine has
+// no memory left, and the client would control the memory of this process.
 func TestServeOverStdioRefusesAMessageAboveTheLimit(t *testing.T) {
 	responder, _ := buildTestResponder(func(map[string]any) (any, error) {
 		return map[string]any{"ran": true}, nil
 	})
-	// One line of the right shape, far above what the server reads.
+	// One valid line, far above the limit of the server.
 	long := `{"jsonrpc":"2.0","id":1,"method":"ping","params":{"pad":"` +
 		strings.Repeat("x", maxMessageBytes) + `"}}`
 
@@ -179,8 +178,8 @@ func TestServeOverStdioRefusesAMessageAboveTheLimit(t *testing.T) {
 	}
 }
 
-// A long message under the limit is read whole, over as many buffer fills as it takes, and
-// the message after it is read as its own.
+// A long message below the limit is read complete, over several buffer reads, and the next
+// message is read as a separate message.
 func TestServeOverStdioReadsALongMessageWholeAndTheNextOneAfterIt(t *testing.T) {
 	responder, _ := buildTestResponder(func(map[string]any) (any, error) {
 		return map[string]any{"ran": true}, nil

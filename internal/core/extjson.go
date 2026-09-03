@@ -7,14 +7,14 @@ import (
 	"time"
 )
 
-// A document holds values JSON has no room for: an identity, a moment, a decimal number.
-// Extended JSON writes each of those as an object with one member whose name begins with a
-// dollar. A reader that does not know the names draws the wrapper in place of the value, so
-// they are read back here.
+// A document holds values that JSON cannot express: an id, a timestamp, a decimal number.
+// Extended JSON writes each of them as an object with one member whose name starts with a
+// dollar sign. A reader that does not know these names displays the wrapper instead of the
+// value, so this file unwraps them.
 
-// The names of the types a document value can have, as the server names them. They are the
-// names a MongoDB column already carries, so a value read out of a wrapper and a value read
-// from a column are named the same way.
+// The type names of a document value, as the server uses them. They are also the type
+// names of a MongoDB column, so an unwrapped value and a column value use the same
+// names.
 const (
 	DocumentTypeObjectID  = "objectId"
 	DocumentTypeString    = "string"
@@ -38,15 +38,15 @@ const (
 	DocumentTypeNull      = "null"
 )
 
-// DocumentScalar is a value an extended JSON wrapper holds: the value as a reader sees it,
-// and the name of the type it was written for.
+// DocumentScalar is the content of an extended JSON wrapper: the value in display form,
+// and the name of its type.
 type DocumentScalar struct {
 	Text string
 	Type string
 }
 
-// ReadDocumentScalar returns the value an extended JSON wrapper holds. It answers false for
-// every value that is not one, which is drawn as the JSON it already is.
+// ReadDocumentScalar returns the content of an extended JSON wrapper. It returns false for
+// any other value, which is displayed as plain JSON.
 func ReadDocumentScalar(value JSONValue) (DocumentScalar, bool) {
 	if !value.IsObject || len(value.Members) == 0 {
 		return DocumentScalar{}, false
@@ -92,7 +92,7 @@ func ReadDocumentScalar(value JSONValue) (DocumentScalar, bool) {
 	return DocumentScalar{}, false
 }
 
-// readWrappedText reads a wrapper that holds one string, such as an identity.
+// readWrappedText reads a wrapper that holds one string, such as an id.
 func readWrappedText(held JSONValue, named string) (DocumentScalar, bool) {
 	text, isText := ReadJSONTextValue(held.Scalar)
 	if !isText {
@@ -101,8 +101,8 @@ func readWrappedText(held JSONValue, named string) (DocumentScalar, bool) {
 	return DocumentScalar{Text: text, Type: named}, true
 }
 
-// readWrappedNumber reads a wrapper that holds a number. Extended JSON writes the number as
-// text, so that a reader of another language does not round it away.
+// readWrappedNumber reads a wrapper that holds a number. Extended JSON writes the number
+// as text, so that a reader in another language does not round it.
 func readWrappedNumber(held JSONValue, named string) (DocumentScalar, bool) {
 	if text, isText := ReadJSONTextValue(held.Scalar); isText {
 		return DocumentScalar{Text: text, Type: named}, true
@@ -113,8 +113,8 @@ func readWrappedNumber(held JSONValue, named string) (DocumentScalar, bool) {
 	return DocumentScalar{Text: held.Scalar, Type: named}, true
 }
 
-// readWrappedDate reads a moment. It is written as the milliseconds since the epoch where
-// the writer kept every type, and as the moment itself where the writer wrote for a reader.
+// readWrappedDate reads a timestamp. A writer in strict mode writes the milliseconds since
+// the epoch, and a writer in relaxed mode writes the date and time.
 func readWrappedDate(held JSONValue) (DocumentScalar, bool) {
 	if text, isText := ReadJSONTextValue(held.Scalar); isText {
 		return DocumentScalar{Text: text, Type: DocumentTypeDate}, true
@@ -132,15 +132,14 @@ func readWrappedDate(held JSONValue) (DocumentScalar, bool) {
 	}, true
 }
 
-// readWrappedBinary reads bytes, which are written as base64 beside the kind of bytes they
-// are. The reader is shown how many bytes there are, because the base64 of a photograph is
-// no more readable than the photograph.
+// readWrappedBinary reads bytes, which are written as base64 with a subtype. The display
+// shows the number of bytes, because the base64 of a photograph is not readable.
 func readWrappedBinary(held JSONValue) (DocumentScalar, bool) {
 	if !held.IsObject {
 		return DocumentScalar{}, false
 	}
 	written, _ := ReadJSONTextValue(findMember(held, "base64").Scalar)
-	// Four characters of base64 carry three bytes, and the padding carries none.
+	// Four base64 characters hold three bytes, and the padding holds none.
 	count := len(written) / 4 * 3
 	count -= strings.Count(written, "=")
 	written = "bytes"
@@ -152,8 +151,8 @@ func readWrappedBinary(held JSONValue) (DocumentScalar, bool) {
 	}, true
 }
 
-// readWrappedRegex reads a pattern and the options beside it, and writes them the way a
-// pattern is written.
+// readWrappedRegex reads a pattern with its options and returns them in the usual pattern
+// form.
 func readWrappedRegex(held JSONValue) (DocumentScalar, bool) {
 	if !held.IsObject {
 		return DocumentScalar{}, false
@@ -163,8 +162,8 @@ func readWrappedRegex(held JSONValue) (DocumentScalar, bool) {
 	return DocumentScalar{Text: "/" + pattern + "/" + options, Type: DocumentTypeRegex}, true
 }
 
-// readWrappedTimestamp reads the timestamp a replica set orders its work by, which is a
-// second and a count inside that second.
+// readWrappedTimestamp reads the timestamp a replica set uses to order its operations. It
+// is a second and a counter inside that second.
 func readWrappedTimestamp(held JSONValue) (DocumentScalar, bool) {
 	if !held.IsObject {
 		return DocumentScalar{}, false
@@ -177,7 +176,7 @@ func readWrappedTimestamp(held JSONValue) (DocumentScalar, bool) {
 	return DocumentScalar{Text: seconds + ":" + within, Type: DocumentTypeTimestamp}, true
 }
 
-// findMember returns the member of that name, or nothing where the object has none.
+// findMember returns the member with that name, and false if the object has none.
 func findMember(value JSONValue, name string) JSONValue {
 	for _, member := range value.Members {
 		if member.Name == name {
@@ -187,8 +186,8 @@ func findMember(value JSONValue, name string) JSONValue {
 	return JSONValue{}
 }
 
-// ReadJSONTextValue reads a JSON string back as the text it holds. It answers false where
-// the value written is not a string.
+// ReadJSONTextValue returns the text of a JSON string. It returns false if the written
+// value is not a string.
 func ReadJSONTextValue(written string) (string, bool) {
 	if len(written) < 2 || written[0] != '"' {
 		return "", false
@@ -200,8 +199,8 @@ func ReadJSONTextValue(written string) (string, bool) {
 	return held, true
 }
 
-// ReadJSONScalarType names the type of a value that carries no wrapper, so every row of a
-// document tree names a type whether the value was wrapped or not.
+// ReadJSONScalarType returns the type of a value without a wrapper, so every row of a
+// document tree shows a type for a wrapped and for an unwrapped value.
 func ReadJSONScalarType(written string) string {
 	switch {
 	case written == "" || written == "null":
@@ -217,9 +216,9 @@ func ReadJSONScalarType(written string) string {
 	return DocumentTypeLong
 }
 
-// ReadDocumentValue returns a value of a document as a reader sees it, with the name of its
-// type. An object and an array are answered as they stand, because those are opened rather
-// than drawn on one line.
+// ReadDocumentValue returns a document value in display form, with the name of its type.
+// An object and an array are returned unchanged, because the tree expands them instead of
+// showing them on one line.
 func ReadDocumentValue(value JSONValue) DocumentScalar {
 	if held, isWrapped := ReadDocumentScalar(value); isWrapped {
 		return held

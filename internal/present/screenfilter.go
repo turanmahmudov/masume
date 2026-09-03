@@ -11,35 +11,35 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// A filter over the rows on screen. It hides rows and reads none, so its counts are of the
-// page, not of the relation. A WHERE narrows the whole relation.
+// A filter over the rows on screen. It hides rows and reads none, so its counts are the
+// counts of the page and not of the table. A WHERE clause filters the whole table.
 
-// ValueCount is one value of the column, and how many rows on screen have it.
+// ValueCount is one value of a column and the number of rows on screen that have it.
 type ValueCount struct {
 	Value string
 	Count int
 }
 
-// ScreenFilter is the filter of the grid: the values kept per column, and a term over
+// ScreenFilter is the filter of the grid: the kept values per column, and a search term over
 // every column.
 type ScreenFilter struct {
-	// The values kept per column. A column without an entry is not filtered.
+	// The kept values per column. A column without an entry is not filtered.
 	Values map[int]map[string]bool
 	Search string
 }
 
-// NoScreenFilter hides nothing.
+// NoScreenFilter hides no row.
 func NoScreenFilter() ScreenFilter {
 	return ScreenFilter{Values: map[int]map[string]bool{}}
 }
 
-// IsEmpty is true where the filter hides nothing.
+// IsEmpty is true if the filter hides no row.
 func (filter ScreenFilter) IsEmpty() bool {
 	return len(filter.Values) == 0 && filter.Search == ""
 }
 
-// CountColumnValues returns the values of one column, the most common first, then in the
-// order they were found.
+// CountColumnValues returns the values of one column, the most frequent first, and then in
+// the order they were found.
 func CountColumnValues(rows [][]string, columnIndex int) []ValueCount {
 	counts := map[string]int{}
 	order := []string{}
@@ -64,10 +64,9 @@ func CountColumnValues(rows [][]string, columnIndex int) []ValueCount {
 	return counted
 }
 
-// IsRowShown is true if the row matches every filtered column and holds the term somewhere.
-// A cell that holds a document draws its shape and not its text, so the search reads the
-// document itself: a reader looking for a city inside an address would otherwise be told the
-// collection holds none.
+// IsRowShown is true if the row matches every filtered column and contains the search term.
+// A cell with a document shows a summary and not the text, so the search reads the document
+// itself. Without this a search for a city inside an address would find nothing.
 func IsRowShown(row []string, values []any, filter ScreenFilter) bool {
 	for columnIndex, kept := range filter.Values {
 		value := ""
@@ -96,8 +95,8 @@ func IsRowShown(row []string, values []any, filter ScreenFilter) bool {
 	return false
 }
 
-// ApplyValueFilter keeps the chosen values of one column. Keeping every value, or none,
-// clears the entry.
+// ApplyValueFilter sets the selected values of one column. A selection of every value, or of
+// no value, removes the entry.
 func ApplyValueFilter(
 	filter ScreenFilter, columnIndex int, kept map[string]bool, available int,
 ) ScreenFilter {
@@ -115,18 +114,18 @@ func ApplyValueFilter(
 	return ScreenFilter{Values: values, Search: filter.Search}
 }
 
-// ApplySearchTerm keeps the term the user typed. An empty term clears the search.
+// ApplySearchTerm sets the term the user typed. An empty term clears the search.
 func ApplySearchTerm(filter ScreenFilter, term string) ScreenFilter {
 	return ScreenFilter{Values: filter.Values, Search: strings.TrimSpace(term)}
 }
 
-// fnvPrime64 is the prime of FNV-1a, which mixes one index into the running hash. The
-// library hashes a text, and a number is mixed in by hand.
+// fnvPrime64 is the prime of FNV-1a. It mixes one index into the hash. The library hashes a
+// text, and a number is mixed in here.
 const fnvPrime64 = 1099511628211
 
-// Fingerprint identifies the filter exactly, for a caller that keeps what it drew from one.
-// The banner is a summary and two different filters can read alike in it, so this reads every
-// value rather than counting them.
+// Fingerprint identifies the filter exactly, for a caller that caches the result of one. The
+// banner is a summary and two different filters can have the same banner, so this hashes every
+// value and not the number of values.
 func (filter ScreenFilter) Fingerprint() uint64 {
 	held := fnv.New64a()
 	_, _ = held.Write([]byte(filter.Search))
@@ -140,7 +139,7 @@ func (filter ScreenFilter) Fingerprint() uint64 {
 
 	for _, index := range indexes {
 		running = running*fnvPrime64 + uint64(index) + 1
-		// The kept values are a set, so each one is added rather than written in turn.
+		// The kept values are a set, so each one is added and the order is not used.
 		for value := range filter.Values[index] {
 			one := fnv.New64a()
 			_, _ = one.Write([]byte(value))
@@ -150,8 +149,8 @@ func (filter ScreenFilter) Fingerprint() uint64 {
 	return running
 }
 
-// DescribeScreenFilter writes the filter as the banner shows it, so a hidden row is
-// explained.
+// DescribeScreenFilter returns the filter in the form of the banner, so the user sees why a
+// row is hidden.
 func DescribeScreenFilter(filter ScreenFilter, columnNames []string) string {
 	indexes := make([]int, 0, len(filter.Values))
 	for index := range filter.Values {

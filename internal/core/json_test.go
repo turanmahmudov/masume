@@ -18,8 +18,8 @@ func TestReadJsonAgainstTheOtherClient(t *testing.T) {
 		{`3`, `3`, `3`},
 		{`true`, `true`, `true`},
 		{`null`, `null`, `null`},
-		// A whole number keeps every digit: a double holds only 53 bits, and a column of
-		// identities read through one names another row.
+		// An integer keeps all of its digits. A double holds 53 bits only, so a large
+		// id read through a double becomes a different id.
 		{`{"a":12345678901234567890}`, `{"a":12345678901234567890}`,
 			"{\n  \"a\": 12345678901234567890\n}"},
 		{`{"a":-9007199254740993}`, `{"a":-9007199254740993}`,

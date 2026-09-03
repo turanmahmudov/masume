@@ -1,13 +1,14 @@
 name: Engine problem
-description: A server the client opens wrongly, or will not open.
+description: A server that the client opens incorrectly, or cannot open.
 labels: ["engine", "needs triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Use this for a server that will not connect, a catalog read that returns the wrong
-        thing, a plan the client cannot read, or a flavour of an engine that behaves apart
-        from the standard one. Please put no password and no private host name in this issue.
+        Use this template for a server that does not connect, a catalog read that returns
+        wrong data, a plan that the client cannot read, or an engine variant that behaves
+        differently from the standard one. Please put no password and no private host name
+        in this issue.
 
   - type: dropdown
     id: engine
@@ -28,7 +29,7 @@ body:
         - TiDB
         - PlanetScale
         - Aurora MySQL
-        - An engine the client does not open yet
+        - An engine that the client does not support yet
     validations:
       required: true
 
@@ -36,7 +37,7 @@ body:
     id: server-version
     attributes:
       label: Server version
-      description: What the server reports.
+      description: The version that the server reports.
       placeholder: MariaDB 11.4.3
     validations:
       required: true
@@ -49,9 +50,9 @@ body:
         - The connection is refused or never opens
         - A catalog read returns the wrong data
         - The plan cannot be read
-        - A statement is refused that the server accepts
-        - The DDL is written wrongly
-        - A type is drawn wrongly
+        - The client refuses a statement that the server accepts
+        - The DDL is generated incorrectly
+        - A type is displayed incorrectly
         - Something else
     validations:
       required: true
@@ -69,7 +70,7 @@ body:
     attributes:
       label: How to reproduce it
       description: >
-        The statements that set the case up, where they can be shared, and the steps in the
+        The statements that set up the case, if you can share them, and the steps in the
         client. A case that runs against a container from `compose.yaml` is the most useful.
       render: sql
 
@@ -77,6 +78,6 @@ body:
     id: version
     attributes:
       label: Version
-      description: What `masume --version` writes.
+      description: The output of `masume --version`.
     validations:
       required: true

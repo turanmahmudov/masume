@@ -3,7 +3,7 @@
 <h3 align="center">A database client for the terminal</h3>
 
 <p align="center">
-  <em>Open a database, read it, and give an agent the same catalog.</em>
+  <em>Browse and query a database in the terminal. Let an AI agent use the same connections.</em>
 </p>
 
 <p align="center">
@@ -24,83 +24,83 @@
 
 ### Browse
 
-Schemas, tables, views, functions, sequences, types, triggers and roles. Open a table for its data, columns, indexes, constraints, DDL and plan.
+The object tree lists schemas, tables, views, functions, sequences, types, triggers and roles. Select a table to see its data, columns, indexes, constraints, DDL and query plan.
 
 ![The object tree](vhs/shots/01-object-tree.png)
 
 ### Diagram
 
-A table and the tables a foreign key joins to it.
+An ER diagram shows a table and the tables it is linked to by foreign keys.
 
-![An ER diagram of a table and the tables a foreign key joins to it](vhs/shots/07-er-diagram.png)
+![An ER diagram of a table and its related tables](vhs/shots/07-er-diagram.png)
 
 ### Query
 
-Syntax highlighting. Completion out of the catalog. Faults marked in the gutter before the statement runs.
+The editor has syntax highlighting and autocompletion based on the database catalog. Errors are marked in the gutter before you run the statement.
 
 ![The SQL editor with the completion menu open](vhs/shots/08-completion.png)
 
 ### Results
 
-Sort, filter, follow a foreign key, freeze a column, mask a column. An edit is staged where it is made. Review the whole set as SQL, then run it.
+Sort, filter, follow a foreign key, freeze a column, or mask a column. Edits are staged in the grid. Nothing is written until you review the changes as SQL and run them.
 
 ![A result grid](vhs/shots/09-result.png)
 
 ### Explain
 
-Plans as a tree, estimated or measured.
+Query plans are displayed as a tree, with estimated or measured costs.
 
 ![A query plan drawn as a tree](vhs/shots/10-plan.png)
 
 ### Agents
 
-A chat in the client, and an MCP server over stdio. The chat uses the open connection. `masume --mcp` opens the profiles named in the config. Both use the same tools, under limits, and both ask before they write.
+masume has a built-in AI chat and an MCP server over stdio. The chat uses the current connection. `masume --mcp` connects to the profiles listed in the config. Both use the same tools with the same access limits, and both ask for confirmation before a write.
 
 ---
 
 ## Features
 
-**Multi-engine support:** PostgreSQL, MySQL, SQLite, Redis and MongoDB, and the hosted services built on them
+**Multiple engines:** PostgreSQL, MySQL, SQLite, Redis and MongoDB, plus hosted services based on them
 
-**MCP server:** `masume --mcp` serves named profiles over stdio, capped per profile and for the whole server
+**MCP server:** `masume --mcp` exposes selected profiles to an agent over stdio, with an access level per profile and for the whole server
 
-**AI chat:** ask about a statement, diagnose the error it returned, or check its plan, over Anthropic or OpenAI
+**AI chat:** ask about a statement, its error, or its query plan. Supports Anthropic and OpenAI
 
-**Completion from the catalog:** names as they are typed, and faults marked in the gutter before the statement runs
+**Autocompletion from the catalog:** table and column names are suggested as you type. Errors are marked in the gutter before the statement runs
 
-**Every view of a table:** data, columns, indexes, constraints, DDL, the plan, and an ER diagram
+**All table details:** data, columns, indexes, constraints, DDL, query plan, and an ER diagram
 
-**Staged edits:** insert, edit, duplicate and delete rows, review it all as SQL, then run it or discard it
+**Staged edits:** insert, edit, duplicate and delete rows. Review the changes as SQL, then run or discard them
 
-**A stack of filters:** filter by a value, by many values, or by a `WHERE`, then pop one off
+**Filters:** filter by one value, by several values, or by a `WHERE` clause. Filters stack, and one key removes the last one
 
-**Follow a foreign key** to the row it points at
+**Follow a foreign key** to the referenced row
 
-**Query plans** as a tree, estimated or measured, or raw
+**Query plans** as a tree with estimated or measured costs, or as raw text
 
-**Named parameters:** a statement with `:name` opens a card and asks for the values
+**Named parameters:** a statement with `:name` placeholders opens a form for the values
 
-**Server activity:** what other sessions are running, and stop one, on an engine that lists them
+**Server activity:** list the other sessions and their statements, and stop one, on engines that support it
 
-**Redis and MongoDB:** a tab takes Redis commands or the calls of the Mongo shell
+**Redis and MongoDB:** a query tab accepts Redis commands or MongoDB shell syntax
 
-**Export and copy:** CSV, JSON, Markdown, `INSERT` statements, a row as JSON, a column as an `IN` clause
+**Export and copy:** CSV, JSON, Markdown, `INSERT` statements, one row as JSON, or one column as an `IN` clause
 
-**History and saved queries,** with the open tabs restored after a restart
+**Query history and saved queries.** Open tabs are restored after a restart
 
-**Transactions by hand:** autocommit off, then begin, commit, roll back
+**Manual transactions:** disable autocommit, then begin, commit or roll back
 
-**Read-only profiles:** the session is set read-only on the server, so nothing on it can write
+**Read-only profiles:** the session is set read-only on the server, so writes are impossible
 
-**Multiple themes,** or take the colours from the terminal and follow them as they change
+**Eleven built-in themes,** or use the terminal colours. When the terminal theme changes, masume updates
 
-**AI is optional:** `[ai] enabled = false` removes every AI feature, key and mention
+**AI is optional:** `[ai] enabled = false` disables all AI features and hides them from the interface
 
 ---
 
 ## Install
 
-There is no tagged release and no archive to download yet. Each command below builds the head of `master`.
+There is no tagged release yet, so there are no prebuilt binaries. Each command below builds the latest commit on `master`.
 
 - **Go 1.27 or later:** `go install github.com/turanmahmudov/masume/cmd/masume@master`
 - **mise:** `mise use -g "go:github.com/turanmahmudov/masume/cmd/masume@master"`
@@ -117,23 +117,23 @@ mise run install
 
 ```
 masume                        open the client
-masume --mcp                  serve named profiles to an agent over stdio
-masume --mcp --profile=NAME   serve that one profile alone
-masume --mcp --check          open every named profile once, report, and exit
-masume --version              write the version and exit
+masume --mcp                  run the MCP server for the configured profiles
+masume --mcp --profile=NAME   run the MCP server for one profile
+masume --mcp --check          connect to every configured profile once, print a report, and exit
+masume --version              print the version and exit
 ```
 
-The config file is `$XDG_CONFIG_HOME/masume/config.toml`. History is `$XDG_STATE_HOME/masume/history.sqlite`. See [docs/mcp.md](docs/mcp.md) for the MCP server.
+The config file is `$XDG_CONFIG_HOME/masume/config.toml`. The history file is `$XDG_STATE_HOME/masume/history.sqlite`. See [docs/mcp.md](docs/mcp.md) for the MCP server.
 
 ## Status
 
-Early. There is no tagged release yet, and the config file may still change shape before `v1`. Linux and macOS, amd64 and arm64. There is no Windows build.
+The project is in an early stage. There is no tagged release yet, and the config file format can change before `v1`. It builds on Linux and macOS, for amd64 and arm64. There is no Windows build.
 
-The tier 1 engines run against a real server in CI on every push. The rest speak a protocol masume already supports, and rest on the unit tests. [docs/engines.md](docs/engines.md) says which is which, and what each engine cannot do. Read it before pointing masume at anything that matters.
+The tier 1 engines are tested against a real server in CI on every push. The other engines use the protocol of a tier 1 engine and are covered by unit tests only. [docs/engines.md](docs/engines.md) lists the tiers and the limitations of each engine. Read it before you use masume on a production database.
 
 ## First connection
 
-The first run writes a starter config if none is there. Run `masume`, press `Ctrl+N` for the picker, then `n` to add a connection. Or write it by hand:
+On the first run, masume creates a starter config file if there is none. Run `masume`, press `Ctrl+N` to open the connection picker, then press `n` to add a connection. Or write the profile by hand:
 
 ```toml
 [profile.shop]
@@ -147,7 +147,7 @@ env      = "dev"
 mode     = "write"
 ```
 
-`auth = "prompt"` asks at connect and keeps the password in memory only.
+`auth = "prompt"` asks for the password at connect time and keeps it in memory only.
 
 ## Docs
 
@@ -155,11 +155,11 @@ mode     = "write"
 | --- | --- |
 | [Configuration](docs/configuration.md) | Profiles, passwords, interface, limits |
 | [Engines](docs/engines.md) | Support tiers and capabilities |
-| [Keys](docs/keys.md) | Every action and its chord |
-| [Themes](docs/themes.md) | The built-in themes, and writing one |
-| [AI chat](docs/ai.md) | Providers, tools, what leaves the machine |
+| [Keys](docs/keys.md) | Every action and its key binding |
+| [Themes](docs/themes.md) | Built-in themes, and how to write a custom one |
+| [AI chat](docs/ai.md) | Providers, tools, what is sent to the provider |
 | [MCP server](docs/mcp.md) | Tools, limits, confirming a write |
-| [Architecture](docs/architecture.md) | How the source is laid out |
+| [Architecture](docs/architecture.md) | How the source is organized |
 
 ## Contributing
 

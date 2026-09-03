@@ -1,10 +1,10 @@
 # Keys
 
-Press `?` inside masume for the help screen, or `Ctrl+K` for the command palette, which finds an action by name. This page is the same list, written for the config file.
+Press `?` inside masume for the help screen, or `Ctrl+K` for the command palette, which searches actions by name. This page lists the same actions with the names used in the config file.
 
-An action belongs to a scope, and the scope decides which pane handles the chord. Every action has a chord in the default preset, so nothing is reachable from the palette alone.
+Every action belongs to a scope. The scope determines which pane handles the key. Every action has a key binding in the default preset, so every action is reachable without the palette.
 
-To rebind one, name it in `config.toml`. A line that is written replaces what the preset bound. A line left out keeps it.
+To rebind an action, add it to `config.toml`. A line you write replaces the preset binding. Actions you do not list keep the preset binding.
 
 ```toml
 [keys]
@@ -17,15 +17,15 @@ run-at-cursor = ["ctrl+r", "f5"]
 sort-column = ["o"]
 ```
 
-An action bound to `[]` has no chord until one is written.
+An action bound to `[]` has no key binding.
 
-`alt`, `meta` and `option` name the same modifier. The preset and this page write `alt`. The help screen writes `meta`. A space in a chord is a sequence of presses: `alt+p s` is Alt+P, then S.
+`alt`, `meta` and `option` are names for the same modifier. The preset and this page use `alt`. The help screen uses `meta`. A space in a binding means a sequence of key presses: `alt+p s` is Alt+P, then S.
 
 ## Cards
 
 `[keys.dialog]`
 
-| Action | Chord |
+| Action | Key |
 | --- | --- |
 | `answer-no` | `n` |
 | `answer-yes` | `y` |
@@ -62,20 +62,20 @@ An action bound to `[]` has no chord until one is written.
 
 ## Finding and replacing
 
-One key does both. `Alt+F` opens the `find` field, and the field itself offers the rest.
+One key does both. `Alt+F` opens the `find` field. From there:
 
-- Type a term and press Enter to mark every match. `F3` and `Shift+F3` step through them.
-- Or press `Ctrl+R` instead of Enter. The field becomes `replace … with`, titled with the term that was typed, and the next text replaces **every** match in one step. The bar reports how many it wrote.
+- Type a search term and press Enter to highlight every match. `F3` and `Shift+F3` move between the matches.
+- Or press `Ctrl+R` instead of Enter. The field changes to `replace … with`, and its title shows the search term. The text you enter next replaces **every** match in one step. The status bar reports the number of replacements.
 
-The term is typed once either way. `Ctrl+Z` takes the whole replace back in one step, however many matches it wrote.
+In both cases you type the search term once. `Ctrl+Z` undoes the whole replace in one step, regardless of the number of matches.
 
-Matching is plain text, so `id` matches `customer_id` too. The title names the term so it can be read before the replace runs.
+Matching is plain text substring matching, so `id` also matches `customer_id`. The title shows the search term, so you can check it before the replace runs.
 
 ## Editor
 
 `[keys.editor]`
 
-| Action | Chord |
+| Action | Key |
 | --- | --- |
 | `caret-down` | `down` or `shift+down` |
 | `caret-left` | `left` or `shift+left` |
@@ -111,7 +111,7 @@ Matching is plain text, so `id` matches `customer_id` too. The title names the t
 
 `[keys.global]`
 
-| Action | Chord |
+| Action | Key |
 | --- | --- |
 | `activate-tab` | `alt+digit` |
 | `ai-fix-error` | `ctrl+h` |
@@ -165,7 +165,7 @@ Matching is plain text, so `id` matches `customer_id` too. The title names the t
 
 `[keys.grid]`
 
-| Action | Chord |
+| Action | Key |
 | --- | --- |
 | `add-sort-column` | `S` |
 | `clear-rewrites` | `c` |
@@ -210,7 +210,7 @@ Matching is plain text, so `id` matches `customer_id` too. The title names the t
 
 `[keys.list]`
 
-| Action | Chord |
+| Action | Key |
 | --- | --- |
 | `choose-row` | `return` |
 | `cursor-down` | `down` |
@@ -224,7 +224,7 @@ Matching is plain text, so `id` matches `customer_id` too. The title names the t
 
 `[keys.plan]`
 
-| Action | Chord |
+| Action | Key |
 | --- | --- |
 | `ai-check-plan` | `i` |
 | `copy-plan` | `y` |
@@ -234,11 +234,9 @@ Matching is plain text, so `id` matches `customer_id` too. The title names the t
 
 `[keys.document]`
 
-The tree that opens the rows of a result as documents. It is offered wherever a value holds
-fields or elements: a document of a collection, and a `json` or `jsonb` column of a SQL
-server.
+The document tree shows the rows of a result as documents. It is available wherever a value has fields or elements: a document of a MongoDB collection, or a `json` or `jsonb` column of a SQL database.
 
-| Action | Chord |
+| Action | Key |
 | --- | --- |
 | `copy-path` | `shift+y` |
 | `copy-value` | `y` |
@@ -258,7 +256,7 @@ server.
 
 `[keys.tree]`
 
-| Action | Chord |
+| Action | Key |
 | --- | --- |
 | `cursor-down` | `down` |
 | `cursor-first-row` | `home` |

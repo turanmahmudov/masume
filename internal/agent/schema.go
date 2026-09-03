@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
-// The arguments of a tool, written once and read two ways: as the JSON Schema a caller is
-// given, and as the check the input goes through. An unknown field is refused rather than
-// dropped, because a dropped field takes its default and the model reads that default as
-// the value it asked for.
+// The arguments of a tool, defined one time and used two ways: as the JSON Schema given to
+// a caller, and as the validation of the input. An unknown field gives an error and is not
+// ignored, because an ignored field takes its default and the model reads that default as
+// the value it sent.
 
-// The kinds of value a tool takes.
+// The kinds of value a tool accepts.
 const (
 	kindString  = "string"
 	kindInteger = "integer"
@@ -25,19 +25,18 @@ type field struct {
 	kind        string
 	description string
 	required    bool
-	// positive is true for a whole number that must be above zero.
+	// positive is true for an integer that must be above zero.
 	positive bool
 }
 
-// schemaDialect is the dialect of JSON Schema every caller is told the arguments are written
-// in.
+// schemaDialect is the JSON Schema dialect reported to every caller.
 const schemaDialect = "http://json-schema.org/draft-07/schema#"
 
-// largestWholeNumber is the highest whole number a JSON number carries without losing a
-// digit, which is the upper limit of every count a tool takes.
+// largestWholeNumber is the highest integer a JSON number holds without a loss of
+// precision. It is the maximum of every count a tool accepts.
 const largestWholeNumber = 1<<53 - 1
 
-// buildSchema writes the arguments as the JSON Schema a caller reads.
+// buildSchema converts the arguments into the JSON Schema a caller reads.
 func buildSchema(fields []field) map[string]any {
 	properties := map[string]any{}
 	required := []string{}
@@ -64,14 +63,14 @@ func buildSchema(fields []field) map[string]any {
 	return schema
 }
 
-// BuildEmptySchema writes the schema of a tool that takes no arguments.
+// BuildEmptySchema returns the schema of a tool without arguments.
 func BuildEmptySchema() map[string]any {
 	return buildSchema(nil)
 }
 
-// ExtendSchema returns this schema with one more text field the caller must send, which is how
-// the server adds the profile a call names. The schema of a definition is built once, so it is
-// copied rather than written into.
+// ExtendSchema returns the schema with one more required text field. The server uses it to
+// add the profile of a call. The schema of a definition is built one time, so this function
+// copies it and does not modify it.
 func ExtendSchema(schema map[string]any, name, description string) map[string]any {
 	extended := map[string]any{}
 	maps.Copy(extended, schema)
@@ -87,7 +86,7 @@ func ExtendSchema(schema map[string]any, name, description string) map[string]an
 	return extended
 }
 
-// castProperties reads the properties of a schema, and returns nothing where it has none.
+// castProperties returns the properties of a schema, and false if it has none.
 func castProperties(schema map[string]any) map[string]any {
 	properties, is := schema["properties"].(map[string]any)
 	if !is {
@@ -96,8 +95,8 @@ func castProperties(schema map[string]any) map[string]any {
 	return properties
 }
 
-// readInput checks the input against the arguments. It returns the values it read, and the
-// reason it could not read them.
+// readInput validates the input against the arguments. It returns the values, or the reason
+// the input is invalid.
 func readInput(fields []field, input map[string]any) (map[string]any, string) {
 	known := map[string]field{}
 	for _, held := range fields {
@@ -135,7 +134,7 @@ func readInput(fields []field, input map[string]any) (map[string]any, string) {
 	return read, ""
 }
 
-// readValue returns one value as the kind the argument asks for.
+// readValue returns one value in the kind the argument defines.
 func readValue(held field, value any) (any, string) {
 	switch held.kind {
 	case kindString:
@@ -163,8 +162,8 @@ func readValue(held field, value any) (any, string) {
 	return nil, "this field cannot be read"
 }
 
-// readWholeNumber returns a number as a whole one. JSON carries every number as a float,
-// so a value with a fraction is refused rather than cut.
+// readWholeNumber returns a number as an integer. JSON sends every number as a float, so a
+// value with a fraction gives an error and is not truncated.
 func readWholeNumber(value any) (int, string) {
 	switch held := value.(type) {
 	case float64:
@@ -180,19 +179,19 @@ func readWholeNumber(value any) (int, string) {
 	return 0, "a whole number is wanted"
 }
 
-// readText returns a text argument the input carried, and whether it carried one.
+// readText returns a text argument of the input, and whether the input has one.
 func readText(read map[string]any, name string) (string, bool) {
 	written, is := read[name].(string)
 	return written, is && written != ""
 }
 
-// readCount returns a whole number the input carried, and whether it carried one.
+// readCount returns an integer argument of the input, and whether the input has one.
 func readCount(read map[string]any, name string) (int, bool) {
 	counted, is := read[name].(int)
 	return counted, is
 }
 
-// readFlag returns a true or false the input carried, and whether it carried one.
+// readFlag returns a boolean argument of the input, and whether the input has one.
 func readFlag(read map[string]any, name string) (bool, bool) {
 	answered, is := read[name].(bool)
 	return answered, is

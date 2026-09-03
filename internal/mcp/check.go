@@ -8,22 +8,23 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// What `--mcp --check` reports: every open profile, connected once. A fault in the setup is
-// easier to find here than through the client of an agent.
+// The report of `--mcp --check`: one connection to every open profile. A configuration error
+// is easier to find here than through the client of an agent.
 
 // ProfileCheck is the result of the check of one profile.
 type ProfileCheck struct {
 	Name   string
 	Target string
 	Access cfg.McpAccess
-	// TableCount is how many relations the connection read.
+	// TableCount is the number of tables the connection read.
 	TableCount int
-	// Problem is empty where the connection opened and the relations were read.
+	// Problem is empty if the connection opened and the tables were read.
 	Problem string
 }
 
-// CheckOpenProfiles opens every profile an agent may reach, one at a time, so the failures are
-// reported in the order of the file and a tunnel started for one profile can serve the next.
+// CheckOpenProfiles opens every profile an agent can use, one after the other, so the errors
+// are reported in the order of the file and a tunnel started for one profile can serve the
+// next one.
 func CheckOpenProfiles(ctx context.Context, deps AccessDeps) []ProfileCheck {
 	checks := []ProfileCheck{}
 
@@ -51,7 +52,7 @@ func CheckOpenProfiles(ctx context.Context, deps AccessDeps) []ProfileCheck {
 	return checks
 }
 
-// DescribeCheck writes one line per profile, with the fault where there is one.
+// DescribeCheck returns one line per profile, with the error if there is one.
 func DescribeCheck(check ProfileCheck) string {
 	head := check.Name + " (" + string(check.Access) + ") " + check.Target
 	if check.Problem != "" {

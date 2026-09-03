@@ -1,12 +1,12 @@
 name: Feature request
-description: Ask for something the client does not do yet.
+description: Ask for something that the client does not do yet.
 labels: ["enhancement", "needs triage"]
 body:
   - type: textarea
     id: problem
     attributes:
       label: The problem
-      description: What you are trying to do, and what stops you today.
+      description: What you want to do, and what stops you today.
       placeholder: |
         I read a table with 300 columns, and I cannot ... .
     validations:
@@ -17,7 +17,7 @@ body:
     attributes:
       label: What it should do
       description: >
-        What you want, as the user would meet it: the key, the card, the row of the bar, or
+        What you want, as a user would see it: the key, the card, the status bar entry, or
         the setting in the config file.
     validations:
       required: true
@@ -47,12 +47,12 @@ body:
     id: alternatives
     attributes:
       label: What you do now
-      description: The way around it you use now, if there is one.
+      description: The workaround you use now, if there is one.
 
   - type: checkboxes
     id: checks
     attributes:
-      label: Before you open it
+      label: Before you open the issue
       options:
         - label: I searched the open and closed issues for the same request.
           required: true

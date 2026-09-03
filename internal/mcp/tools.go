@@ -11,12 +11,12 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// Everything an agent may call: the profiles, and the tools of one connection.
+// Every call an agent can make: the profiles, and the tools of one connection.
 
-// profileField describes the argument the server adds to every tool of a connection.
+// profileField is the argument the server adds to every tool of a connection.
 const profileField = "The name of the connection to work on, as list_profiles reports it."
 
-// Tool is one tool as the protocol describes it, with its input schema.
+// Tool is one tool in the form of the protocol, with its input schema.
 type Tool struct {
 	Name        string
 	Description string
@@ -24,16 +24,16 @@ type Tool struct {
 	Call        func(ctx context.Context, input map[string]any) (any, error)
 }
 
-// ToolDeps is what the tools of the server reach.
+// ToolDeps holds the resources the tools of the server use.
 type ToolDeps struct {
 	AccessDeps
-	// Asker asks the user through the client of the agent before a costly write.
+	// Asker asks the user through the client of the agent before an expensive write.
 	Asker *Asker
-	// RecordQuery writes what ran into the history the screens read.
+	// RecordQuery writes the statement into the history the screens read.
 	RecordQuery func(entry hist.HistoryEntry)
 }
 
-// BuildTools returns everything an agent may call: the profiles, and the tools of one
+// BuildTools returns every call an agent can make: the profiles, and the tools of one
 // connection.
 func BuildTools(deps ToolDeps) []Tool {
 	tools := []Tool{buildListProfilesTool(deps)}
@@ -66,7 +66,7 @@ func buildListProfilesTool(deps ToolDeps) Tool {
 	}
 }
 
-// describeProfileForAgent writes one connection as the agent reads it.
+// describeProfileForAgent returns one connection in the form the agent reads.
 func describeProfileForAgent(config cfg.McpConfig, profile cfg.Profile) map[string]any {
 	var description any
 	if profile.Description != "" {
@@ -87,7 +87,7 @@ func describeProfileForAgent(config cfg.McpConfig, profile cfg.Profile) map[stri
 	return described
 }
 
-// buildConnectionTool binds one tool of the chat to the connection a call names.
+// buildConnectionTool binds one tool of the chat to the connection of the call.
 func buildConnectionTool(deps ToolDeps, definition agent.ToolDefinition) Tool {
 	schema := definition.InputSchema
 	if deps.ScopedProfile == "" {
@@ -97,8 +97,9 @@ func buildConnectionTool(deps ToolDeps, definition agent.ToolDefinition) Tool {
 	return Tool{
 		Name: definition.Name, Description: definition.Description, InputSchema: schema,
 		Call: func(ctx context.Context, input map[string]any) (any, error) {
-			// `profile` is an argument of the server, not of the tool, and the schema of the
-			// tool refuses an unknown field. So it is read and removed.
+			// `profile` is an argument of the server and not of the tool, and the
+			// schema of the tool rejects an unknown field. So it is read and
+			// removed.
 			asked := map[string]any{}
 			for name, value := range input {
 				if name != "profile" {
@@ -109,14 +110,15 @@ func buildConnectionTool(deps ToolDeps, definition agent.ToolDefinition) Tool {
 			if err != nil {
 				return nil, err
 			}
-			// From here the call reaches a server, and the next call may start beside it.
+			// From here the call reaches a server, and the next call can start in
+			// parallel.
 			releaseReader(ctx)
 			connection, err := OpenNamedConnection(ctx, deps.AccessDeps, profile)
 			if err != nil {
 				return nil, err
 			}
-			// Only this tool for this connection. Building the whole catalog would create
-			// eight tools nobody calls.
+			// Only this tool for this connection. The whole catalogue would build
+			// eight tools that nobody calls.
 			return definition.Call(ctx, agent.ToolDeps{
 				Session: connection.Session,
 				Tables:  connection.Tables,
@@ -131,7 +133,8 @@ type runnableSession interface {
 	agent.StoppableSession
 }
 
-// buildRunner returns how a statement runs for an agent: confirmed, timed, and stored.
+// buildRunner returns the runner of a statement for an agent: with a confirmation, a time
+// limit, and a history entry.
 func buildRunner(
 	deps ToolDeps, profile cfg.Profile, session runnableSession,
 ) agent.StatementRunner {
@@ -167,10 +170,10 @@ func buildRunner(
 	return runner
 }
 
-// findRunRefusal returns whether a statement may run: first the access level of the
-// connection, then the `confirm_writes` setting of the profile, asked the way the screens ask
-// it. The client of the agent shows the question if it can. If it cannot, the statement does
-// not run.
+// findRunRefusal decides whether a statement can run: first the access level of the
+// connection, then the `confirm_writes` setting of the profile, with the same question the
+// screens use. The client of the agent shows the question if it can. If it cannot, the
+// statement does not run.
 func findRunRefusal(
 	ctx context.Context, deps ToolDeps, profile cfg.Profile,
 	risk statement.WriteRisk, statements []string,

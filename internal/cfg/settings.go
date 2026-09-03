@@ -6,7 +6,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// IconKind is one kind a tree row can have. The config file uses these words.
+// IconKind is the kind of one tree row. The config file uses these words.
 type IconKind string
 
 // The kinds a tree row can have.
@@ -34,8 +34,8 @@ const (
 	IconAi               IconKind = "ai"
 	IconProblem          IconKind = "problem"
 
-	// The marks of a control rather than of a kind of object: what a row does, what a
-	// press on it would do, and what the client is waiting for.
+	// The icons of a control and not of a kind of object: the action of a row, the
+	// result of a key press on it, and the state the client waits for.
 	IconFoldClosed IconKind = "fold-closed"
 	IconFoldOpen   IconKind = "fold-open"
 	IconField      IconKind = "field"
@@ -50,7 +50,7 @@ const (
 	IconNewTab     IconKind = "new-tab"
 )
 
-// IconKinds lists every kind a config file may name a glyph for.
+// IconKinds lists every kind a config file can set a glyph for.
 var IconKinds = []IconKind{
 	IconSchema, IconTable, IconView, IconMaterializedView, IconFunction, IconSequence,
 	IconType, IconTrigger, IconColumn, IconIndex, IconPlan, IconPrimaryKey, IconForeignKey,
@@ -60,7 +60,7 @@ var IconKinds = []IconKind{
 	IconPrompt, IconStepBack, IconStepOn, IconBanner, IconNewTab,
 }
 
-// IsIconKind is true where the text names a kind.
+// IsIconKind is true if the text is a kind name.
 func IsIconKind(written string) bool {
 	for _, kind := range IconKinds {
 		if string(kind) == written {
@@ -70,21 +70,20 @@ func IsIconKind(written string) bool {
 	return false
 }
 
-// IconSetName is the set of glyphs the tree draws.
+// IconSetName is the name of the glyph set the tree draws.
 type IconSetName string
 
-// The two sets the app ships. A set names which glyphs are drawn, not whether any are: a
-// glyph written as nothing in `[ui.icon_glyphs]` turns that one kind off.
+// The two sets included in the app. A set selects which glyphs are drawn, not whether
+// glyphs are drawn at all: an empty glyph in `[ui.icon_glyphs]` disables one kind.
 const (
 	IconsPlain IconSetName = "plain"
 	IconsASCII IconSetName = "ascii"
 )
 
-// IconSetNames lists the sets a config file may name.
+// IconSetNames lists the sets a config file can use.
 var IconSetNames = []IconSetName{IconsPlain, IconsASCII}
 
-// DescribeIconSetNames writes the sets a config file may name, so a report says what to
-// write instead.
+// DescribeIconSetNames returns the valid set names, so an error message can list them.
 func DescribeIconSetNames() string {
 	written := make([]string, 0, len(IconSetNames))
 	for _, name := range IconSetNames {
@@ -94,31 +93,31 @@ func DescribeIconSetNames() string {
 		". A glyph written as nothing turns one kind off."
 }
 
-// FindIconSetName reads this text as a set name.
+// FindIconSetName parses the text as a set name.
 func FindIconSetName(written string) (IconSetName, bool) {
 	return core.FindAllowed(IconSetNames, written)
 }
 
-// UISettings holds everything under `[ui]`, which belongs to the app and not to a
+// UISettings holds everything under `[ui]`. These settings belong to the app and not to a
 // profile.
 type UISettings struct {
 	IconSet IconSetName
-	// A glyph the user chose for one kind, such as a Nerd Font glyph.
+	// A glyph the user selected for one kind, for example a Nerd Font glyph.
 	IconGlyphs        map[IconKind]string
 	HideSystemSchemas bool
-	// The name of the colour theme, or empty for the default.
+	// The name of the colour theme, or empty for the default theme.
 	Theme string
-	// Colours set here instead of in a theme file, laid over the chosen theme.
+	// Colours set here and not in a theme file. They are applied over the selected theme.
 	Colors ThemeTables
 	// The colour settings under `[ui]` that could not be read.
 	ColorProblems []string
-	// The settings under `[ui]` that name something the client does not have, such as a
-	// kind of icon or a set of them. A name that is not there is reported rather than
-	// dropped, so a misspelling is found instead of read as silence.
+	// The settings under `[ui]` that name something the client does not have, for
+	// example an icon kind or an icon set. An unknown name is reported and not ignored,
+	// so the user sees a spelling error.
 	Problems []string
 }
 
-// DefaultUISettings holds the settings the app opens with.
+// DefaultUISettings holds the settings the app starts with.
 func DefaultUISettings() UISettings {
 	return UISettings{
 		IconSet:           IconsPlain,
@@ -128,8 +127,8 @@ func DefaultUISettings() UISettings {
 	}
 }
 
-// ParseUISettings reads `[ui]`. A wrong setting falls back to the default, so a
-// misspelled name does not stop the app.
+// ParseUISettings reads `[ui]`. An invalid setting uses the default, so a spelling error
+// does not stop the app.
 func ParseUISettings(document Table) UISettings {
 	settings := DefaultUISettings()
 	ui, present := FindSection(document, "ui")

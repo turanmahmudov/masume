@@ -10,11 +10,11 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/language"
 )
 
-// The only tool that changes data. The runner of the caller decides whether it may run.
-// This asks, runs and reports.
+// The only tool that changes data. The runner of the caller decides whether it can run.
+// This file asks, runs and reports.
 
-// describeCellForModel writes one cell as JSON: a number stays a number, and everything
-// else becomes text.
+// describeCellForModel returns one cell as a JSON value: a number stays a number, and every
+// other type becomes text.
 func describeCellForModel(value any, dataType string) any {
 	switch held := value.(type) {
 	case nil:
@@ -48,9 +48,8 @@ func describeResultForModel(answered db.QueryResult) map[string]any {
 		rows = append(rows, written)
 	}
 
-	// Every field is written, and the count of rows a statement changed is null where the
-	// server reported none, because a field that is missing reads as one the model forgot to
-	// ask for.
+	// Every field is written. The number of changed rows is null if the server reported
+	// none, because a missing field looks like a field the model did not request.
 	var affected any
 	if answered.HasAffected {
 		affected = answered.Affected

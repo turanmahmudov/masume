@@ -10,20 +10,21 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// Writes one table into the text of the config file and leaves every other line as it was,
-// so the comments and the layout of the reader survive a write. A rewrite of the whole
-// document would drop both.
+// Writes one table into the text of the config file and keeps every other line unchanged,
+// so a write does not remove the comments and the layout of the user. A rewrite of the
+// whole document would remove both.
 
-// ConfigFileError marks a config file that cannot be read. Nothing is written over one.
+// ConfigFileError is the error class for a config file that cannot be read. The client
+// never writes over such a file.
 type ConfigFileError struct{ Reason string }
 
 func (err ConfigFileError) Error() string { return err.Reason }
 
-// maxHeaderDepth is how deep a `[a.b.c]` header may nest before this stops reading it.
+// maxHeaderDepth is the maximum number of parts in a `[a.b.c]` header.
 const maxHeaderDepth = 8
 
-// readHeaderPath returns the key path of a `[table]` header line, and nothing where the line
-// is not one.
+// readHeaderPath returns the key path of a `[table]` header line, and false for any other
+// line.
 func readHeaderPath(line string) ([]string, bool) {
 	trimmed := strings.TrimSpace(line)
 	if !strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, "[[") ||
@@ -50,7 +51,7 @@ func readHeaderPath(line string) ([]string, bool) {
 	return parts, true
 }
 
-// readAssignmentKey returns the key one line sets, and nothing for a blank line or a comment.
+// readAssignmentKey returns the key a line sets, and false for a blank line or a comment.
 func readAssignmentKey(line string) (string, bool) {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -64,9 +65,9 @@ func readAssignmentKey(line string) (string, bool) {
 	return strings.Trim(key, `"`), key != ""
 }
 
-// writeTomlValue writes one value as TOML reads it back. The form writes text, whole
-// numbers and flags alone, and any other kind would be written as text and read back as
-// something else, so it stops the client where it is written rather than in the file.
+// writeTomlValue returns one value in TOML form. The form writes text, integers and
+// booleans only. Another type would be written as text and read back as a different value,
+// so this function panics at the call site instead of writing a bad file.
 func writeTomlValue(value any) string {
 	switch held := value.(type) {
 	case string:
@@ -79,9 +80,9 @@ func writeTomlValue(value any) string {
 	panic(fmt.Sprintf("a profile holds a %T, which no config file can be written from", value))
 }
 
-// buildProfileKeys returns the keys the form writes, the values of the ones that hold a
-// value, and every key the form owns. A file engine writes no host, port or user, because
-// those would not read back as a profile.
+// buildProfileKeys returns the keys the form writes, the values of the keys that have one,
+// and the full set of keys the form controls. A file engine writes no host, port or user,
+// because those keys are not valid for it.
 func buildProfileKeys(profile Profile) ([]string, map[string]any, map[string]bool) {
 	written := map[string]any{
 		"engine":   string(profile.Engine),
@@ -96,10 +97,10 @@ func buildProfileKeys(profile Profile) ([]string, map[string]any, map[string]boo
 	for key := range written {
 		managed[key] = true
 	}
-	// A key with no value is left out rather than written empty. The reader of the file
-	// takes the default for a key that is not there, and refuses one that is there and
-	// names nothing, so an empty value would write a file that cannot be read back. The
-	// key stays managed, so the line of a value the form cleared is taken out.
+	// A key without a value is omitted and not written empty. The reader uses the default
+	// for a missing key and rejects a key with an empty value, so an empty value would
+	// write a file that cannot be read back. The key stays in the managed set, so the
+	// line of a value the form cleared is removed.
 	for key, value := range map[string]string{
 		"auth":             string(profile.Auth),
 		"env":              string(profile.Environment),
@@ -118,7 +119,7 @@ func buildProfileKeys(profile Profile) ([]string, map[string]any, map[string]boo
 		}
 	}
 
-	// The order the file reads best in, not the order of a map.
+	// A fixed order that is easy to read, not the order of a map.
 	order := []string{
 		"engine", "host", "port", "database", "user", "auth",
 		"password", "password_env", "password_command",
@@ -133,8 +134,8 @@ func buildProfileKeys(profile Profile) ([]string, map[string]any, map[string]boo
 	return kept, written, managed
 }
 
-// findBlockEnd returns where the block of a header ends: at the next header, or at the end of
-// the file.
+// findBlockEnd returns the end of the block of a header: the next header, or the end of the
+// file.
 func findBlockEnd(lines []string, from int) int {
 	for at := from; at < len(lines); at++ {
 		if _, isHeader := readHeaderPath(lines[at]); isHeader {
@@ -144,8 +145,8 @@ func findBlockEnd(lines []string, from int) int {
 	return len(lines)
 }
 
-// findWrittenEnd returns the same end, without the lines that lead into the next header: the
-// blank lines between the two blocks, and a comment written above the header that follows.
+// findWrittenEnd returns the same end without the lines that belong to the next header: the
+// blank lines between the two blocks, and a comment above the next header.
 func findWrittenEnd(lines []string, blockEnd, from int) int {
 	leadsIntoHeader := blockEnd < len(lines)
 	at := blockEnd
@@ -171,8 +172,8 @@ func matchesPath(left, right []string) bool {
 	return true
 }
 
-// writeProfileBlock writes the profile into the text, and keeps every line outside its block
-// exactly as it was.
+// writeProfileBlock writes the profile into the text and keeps every line outside its block
+// unchanged.
 func writeProfileBlock(text string, profile Profile) string {
 	order, values, managed := buildProfileKeys(profile)
 
@@ -185,7 +186,7 @@ func writeProfileBlock(text string, profile Profile) string {
 	}
 
 	if start == -1 {
-		// A table the file does not name yet goes after everything it holds.
+		// A table that is not in the file yet is added at the end.
 		header := "[profile." + quoteHeaderName(profile.Name) + "]"
 		block := append([]string{header}, written...)
 		if strings.TrimSpace(text) == "" {
@@ -205,26 +206,27 @@ func writeProfileBlock(text string, profile Profile) string {
 		pending[key] = true
 	}
 
-	// An untouched key keeps its line, and with it any comment written on it.
+	// An unchanged key keeps its line, and with it any comment on that line.
 	for _, line := range lines[start+1 : end] {
 		key, isAssignment := readAssignmentKey(line)
 		if !isAssignment {
 			kept = append(kept, line)
 			continue
 		}
-		// A setting the form never showed stays exactly as it was. Only the keys the form
-		// owns are written again, so editing a connection never takes the page size or the
-		// keepalive out of the file.
+		// A setting the form does not show stays unchanged. Only the keys the form
+		// controls are written again, so an edit of a connection never removes the page
+		// size or the keepalive from the file.
 		if !managed[key] {
 			kept = append(kept, line)
 			continue
 		}
-		// A key the form owns and cleared is dropped, so clearing a password takes its
-		// line out instead of leaving the old one behind.
+		// A key that the form controls and cleared is removed, so a cleared password
+		// deletes its line and does not leave the old value.
 		if _, holdsValue := values[key]; !holdsValue {
 			continue
 		}
-		// A key already written is dropped, so a file that named one twice ends with one.
+		// A key that is already written is removed, so a file with the same key twice keeps
+		// one copy.
 		if !pending[key] {
 			continue
 		}
@@ -243,8 +245,8 @@ func writeProfileBlock(text string, profile Profile) string {
 	return strings.Join(rebuilt, "\n")
 }
 
-// findProfileHeaderLine returns the line the block of this profile opens on, and -1 where
-// the text holds no block of that name.
+// findProfileHeaderLine returns the header line of the block of this profile, and -1 if the
+// text has no block with that name.
 func findProfileHeaderLine(lines []string, name string) int {
 	path := []string{"profile", name}
 	for at, line := range lines {
@@ -256,9 +258,9 @@ func findProfileHeaderLine(lines []string, name string) int {
 	return -1
 }
 
-// renameProfileBlock writes a new name over the header of a block and leaves every line
-// under it as it was. A rename that took the block out and wrote a new one would lose the
-// settings the form does not show, `mcp` and `page_size` among them, and every comment.
+// renameProfileBlock replaces the name in the header of a block and keeps every line below
+// it unchanged. A rename that deleted the block and wrote a new one would lose the settings
+// the form does not show, such as `mcp` and `page_size`, and every comment.
 func renameProfileBlock(text, from, to string) string {
 	lines := strings.Split(text, "\n")
 	start := findProfileHeaderLine(lines, from)
@@ -269,7 +271,7 @@ func renameProfileBlock(text, from, to string) string {
 	return strings.Join(lines, "\n")
 }
 
-// removeProfileBlock takes the block of one profile out of the text.
+// removeProfileBlock deletes the block of one profile from the text.
 func removeProfileBlock(text, name string) string {
 	lines := strings.Split(text, "\n")
 	start := findProfileHeaderLine(lines, name)
@@ -281,8 +283,8 @@ func removeProfileBlock(text, name string) string {
 	return strings.Join(append(kept, lines[end:]...), "\n")
 }
 
-// quoteHeaderName writes a profile name in a header, and quotes one the reader would not read
-// back as written.
+// quoteHeaderName returns a profile name for a header, with quotes if the reader would
+// otherwise parse it differently.
 func quoteHeaderName(name string) string {
 	for _, character := range name {
 		isPlain := character == '-' || character == '_' ||
@@ -296,7 +298,8 @@ func quoteHeaderName(name string) string {
 	return name
 }
 
-// readConfigText returns the text of the config file, and an empty text where there is none.
+// readConfigText returns the text of the config file, or an empty string if there is no
+// file.
 func readConfigText(path string) (string, error) {
 	held, err := os.ReadFile(path)
 	if err != nil {
@@ -305,7 +308,7 @@ func readConfigText(path string) (string, error) {
 		}
 		return "", err
 	}
-	// A file that does not parse is left as it is, so no write can go over one.
+	// A file that does not parse is kept unchanged, so no write can replace it.
 	if _, decodeErr := DecodeDocument(string(held)); decodeErr != nil {
 		return "", ConfigFileError{Reason: fmt.Sprintf(
 			"%s is not valid TOML, so it was left as it is: %v", path, decodeErr)}
@@ -313,11 +316,12 @@ func readConfigText(path string) (string, error) {
 	return string(held), nil
 }
 
-// writeConfigText writes the file, and creates the directory it belongs in. The text is
-// written beside the file and moved over it, so a write that fails part way leaves the file
-// it replaces whole. A config file cut short would lose every profile in it.
+// writeConfigText writes the file and creates its directory. The text is written to a
+// temporary file in the same directory and then moved over the target, so a write that
+// fails part way leaves the old file complete. A truncated config file would lose every
+// profile.
 func writeConfigText(path, text string) error {
-	// The directory may hold passwords.
+	// The directory can hold passwords.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -334,8 +338,8 @@ func writeConfigText(path, text string) error {
 	if _, err := file.WriteString(text); err != nil {
 		return dropTemporary(err)
 	}
-	// The write reaches the disk before the move, so a machine that stops here comes back
-	// to the old file and never to an empty one.
+	// The data reaches the disk before the move, so a machine that stops here restarts
+	// with the old file and never with an empty one.
 	if err := file.Sync(); err != nil {
 		return dropTemporary(err)
 	}
@@ -350,18 +354,18 @@ func writeConfigText(path, text string) error {
 	return nil
 }
 
-// SaveProfileToFile writes the profile into the config file. A rename takes the old block
-// out first.
+// SaveProfileToFile writes the profile into the config file. A rename removes the old block
+// first.
 func SaveProfileToFile(profile Profile, replacing, path string) error {
 	text, err := readConfigText(path)
 	if err != nil {
 		return err
 	}
 	if replacing != "" && replacing != profile.Name {
-		// The block is renamed where it can be, so the settings the form does not show
-		// and the comments written beside them all stay. Where the file already holds a
-		// block of the new name, the old one goes and the settings are written into the
-		// block that stays, because two blocks of one name are no file.
+		// The block is renamed if possible, so the settings the form does not show and
+		// the comments beside them stay. If the file already has a block with the new
+		// name, the old block is deleted and the settings are written into the block that
+		// stays, because two blocks with one name is not a valid file.
 		if findProfileHeaderLine(strings.Split(text, "\n"), profile.Name) == -1 {
 			text = renameProfileBlock(text, replacing, profile.Name)
 		} else {
@@ -376,7 +380,7 @@ func SaveProfileToFile(profile Profile, replacing, path string) error {
 	return writeConfigText(path, written)
 }
 
-// RemoveProfileFromFile takes the profile out of the config file.
+// RemoveProfileFromFile deletes the profile from the config file.
 func RemoveProfileFromFile(name, path string) error {
 	text, err := readConfigText(path)
 	if err != nil {
@@ -385,7 +389,8 @@ func RemoveProfileFromFile(name, path string) error {
 	return writeConfigText(path, removeProfileBlock(text, name))
 }
 
-// SaveTheme writes the chosen theme under `[ui] theme`, and keeps the rest of the file.
+// SaveTheme writes the selected theme to `[ui] theme` and keeps the rest of the file
+// unchanged.
 func SaveTheme(name, path string) error {
 	text, err := readConfigText(path)
 	if err != nil {

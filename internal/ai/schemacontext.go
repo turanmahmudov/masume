@@ -8,20 +8,21 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// maxOtherSchemasNamed is the count above which the list of other databases is cut.
+// maxOtherSchemasNamed is the number of other databases the list shows before it is
+// truncated.
 const maxOtherSchemasNamed = 300
 
-// SchemaContextSource is what the schema context is built from.
+// SchemaContextSource holds the data the schema context is built from.
 type SchemaContextSource struct {
 	DialectName string
-	// DefaultSchema is the database the connection opened, on a server that can hold more.
+	// DefaultSchema is the database of the connection, on a server that has several.
 	DefaultSchema string
-	// Tables holds every relation this connection can see.
+	// Tables holds every table this connection can see.
 	Tables []db.TableRef
 }
 
-// BuildSchemaContext writes what the model is told first: the dialect and the databases. No
-// table is named here, because the tools list them.
+// BuildSchemaContext returns the first part of the prompt: the dialect and the databases. It
+// names no table, because the tools list them.
 func BuildSchemaContext(source SchemaContextSource) string {
 	held := map[string]bool{}
 	otherSchemas := []string{}

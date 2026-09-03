@@ -50,8 +50,8 @@ func TestDescribeMissingKeyNamesTheTableAndTheVariable(t *testing.T) {
 	}
 }
 
-// A provider with no key has to be refused here, with the message that says what to write.
-// A model opened with an empty key reaches the provider and comes back as a 401.
+// A provider without a key must give an error here, with a message that says what to
+// configure. A model opened with an empty key sends the request and gets a 401.
 func TestOpenModelRefusesAProviderWithNoKey(t *testing.T) {
 	config := cfg.AiConfig{Providers: map[cfg.AiProviderID]cfg.AiProviderSettings{
 		cfg.ProviderOpenai: {Model: "gpt-5"},

@@ -7,21 +7,20 @@ import (
 	"time"
 )
 
-// A log of the traffic of this client, to read with `tail -f` while it runs. Each log names
-// its own file, and all of them are written the same way.
+// A log of the traffic of this client, to read with `tail -f` while it runs. Each log has
+// its own file, and all logs use the same format.
 
-// maxLogBytes is the size above which a log is rolled: the old file becomes `<name>.1` and a
-// new one starts. A log holds every statement and every answer, so a client left open for
-// weeks would fill the disk.
+// maxLogBytes is the size at which a log is rotated: the old file becomes `<name>.1` and a
+// new file starts. A log records every statement and every result, so a client that runs
+// for weeks would fill the disk.
 const maxLogBytes = 2_000_000
 
 type LogFile struct {
 	path string
-	// guard is held while a line is written, so two lines of one file stay in the order they
-	// were written.
+	// guard is locked while a line is written, so the lines of one file keep their order.
 	guard sync.Mutex
-	// size is what this process last wrote, so the file is not measured again for every
-	// line.
+	// size is the size after the last write of this process, so the file is not measured
+	// again for every line.
 	size     int64
 	measured bool
 }
@@ -30,9 +29,9 @@ func NewLogFile(path string) *LogFile {
 	return &LogFile{path: path}
 }
 
-// Append writes one line, with the time it was written. A failed write is dropped, because a
-// log must not break the work it records. The file is opened for the owner alone, because a
-// log holds the rows a statement returned.
+// Append writes one line with a timestamp. A write error is ignored, because a log must
+// not stop the work it records. The file permissions allow the owner only, because a log
+// contains the rows a statement returned.
 func (log *LogFile) Append(message string) {
 	line := time.Now().UTC().Format("2006-01-02T15:04:05.000Z") + " " + message + "\n"
 
@@ -45,15 +44,15 @@ func (log *LogFile) Append(message string) {
 		}
 		if found, err := os.Stat(log.path); err == nil {
 			log.size = found.Size()
-			// A file an older build left behind is readable by everyone, so it is
-			// narrowed the first time this process writes to it.
+			// A file from an older build is readable by everyone. The first write of
+			// this process restricts the permissions.
 			if found.Mode().Perm() != 0o600 {
 				_ = os.Chmod(log.path, 0o600)
 			}
 		}
 		log.measured = true
 	}
-	// Rolled before the line, so the size limit is never passed.
+	// Rotate before the write, so the size limit is never exceeded.
 	if log.size+int64(len(line)) > maxLogBytes {
 		_ = os.Rename(log.path, log.path+".1")
 		log.size = 0
@@ -69,10 +68,10 @@ func (log *LogFile) Append(message string) {
 	}
 }
 
-// maxLoggedRunes is the length above which a line of a log is cut.
+// maxLoggedRunes is the length at which a log line is truncated.
 const maxLoggedRunes = 500
 
-// CutForLog shortens a line of a log, because one answer can hold a whole relation.
+// CutForLog truncates a log line, because one result can contain a whole table.
 func CutForLog(text string) string {
 	written := []rune(text)
 	if len(written) <= maxLoggedRunes {

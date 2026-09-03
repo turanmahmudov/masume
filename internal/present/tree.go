@@ -13,17 +13,17 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// The ids of the three folders the tree draws around the rows of the server.
+// The ids of the three folders the tree draws around the server rows.
 const (
 	RolesID      = "roles"
 	FavouritesID = "favourites"
 	RecentID     = "recent"
 )
 
-// TreeNodeKind says what one tree row shows.
+// TreeNodeKind is the content type of one tree row.
 type TreeNodeKind string
 
-// The kinds a tree row can be.
+// The kinds of tree row.
 const (
 	NodeSchema     TreeNodeKind = "schema"
 	NodeTable      TreeNodeKind = "table"
@@ -34,11 +34,11 @@ const (
 	NodeRole       TreeNodeKind = "role"
 	NodeFavourites TreeNodeKind = "favourites"
 	NodeRecent     TreeNodeKind = "recent"
-	// A favourite whose table or schema the server no longer has.
+	// A favourite whose table or schema no longer exists on the server.
 	NodeLostFavourite TreeNodeKind = "lost-favourite"
 )
 
-// TreeNode is what one tree row stands for.
+// TreeNode is the object one tree row represents.
 type TreeNode struct {
 	Kind      TreeNodeKind
 	Schema    string
@@ -50,7 +50,7 @@ type TreeNode struct {
 	Favourite core.Favourite
 }
 
-// TreeRow is one drawn row of the tree.
+// TreeRow is one visible row of the tree.
 type TreeRow struct {
 	ID         string
 	Depth      int
@@ -59,7 +59,7 @@ type TreeRow struct {
 	Expandable bool
 	Expanded   bool
 	Selectable bool
-	// The kind of the row, which the pane draws as a glyph and a colour.
+	// The kind of the row. The pane draws it as a glyph and a colour.
 	Icon    cfg.IconKind
 	HasIcon bool
 	// True if the user marked this object.
@@ -67,7 +67,7 @@ type TreeRow struct {
 	Node   TreeNode
 }
 
-// TableIcons name the glyph of each kind of relation.
+// TableIcons give the glyph of each kind of table.
 var TableIcons = map[db.RelationKind]cfg.IconKind{
 	db.RelationTable:            cfg.IconTable,
 	db.RelationView:             cfg.IconView,
@@ -89,7 +89,7 @@ func FindFavouriteOf(node TreeNode) (core.Favourite, bool) {
 	return core.Favourite{}, false
 }
 
-// Matches is true where the filter keeps a row with any of these fields.
+// Matches is true if the filter matches any of these fields.
 func Matches(filter string, fields ...string) bool {
 	if filter == "" {
 		return true
@@ -102,7 +102,7 @@ func Matches(filter string, fields ...string) bool {
 	return false
 }
 
-// rowOptions holds what one row is built from, with the defaults most rows use.
+// rowOptions holds the values of one row, with the defaults of most rows.
 type rowOptions struct {
 	id         string
 	depth      int
@@ -132,7 +132,8 @@ func withIcon(options rowOptions, icon cfg.IconKind) rowOptions {
 	return options
 }
 
-// FormatAge writes how long ago a schema was opened, short enough for the detail column.
+// FormatAge returns the time since a schema was opened, short enough for the detail
+// column.
 func FormatAge(elapsed time.Duration) string {
 	seconds := max(int64(math.Round(elapsed.Seconds())), 0)
 	if seconds < 60 {
@@ -170,7 +171,7 @@ var (
 	}
 )
 
-// buildFolderRow draws the folder row of a group, open or closed.
+// buildFolderRow returns the folder row of a group, open or closed.
 func buildFolderRow(folder treeFolder, count int, open bool) TreeRow {
 	return buildRow(withIcon(rowOptions{
 		id: folder.id, label: folder.label, detail: strconv.Itoa(count),
@@ -178,8 +179,8 @@ func buildFolderRow(folder treeFolder, count int, open bool) TreeRow {
 	}, folder.icon))
 }
 
-// buildFavouriteSchemaRow draws a marked schema. One the server no longer has is drawn as
-// lost, not removed.
+// buildFavouriteSchemaRow returns the row of a marked schema. A schema that no longer exists
+// is marked as lost and is not removed.
 func buildFavouriteSchemaRow(favourite core.Favourite, knownSchemas map[string]bool) TreeRow {
 	known := knownSchemas[favourite.Schema]
 	options := rowOptions{
@@ -196,8 +197,8 @@ func buildFavouriteSchemaRow(favourite core.Favourite, knownSchemas map[string]b
 	return buildRow(withIcon(options, icon))
 }
 
-// buildFavouriteTableRow draws a marked relation. One the server no longer has is drawn as
-// lost, not removed.
+// buildFavouriteTableRow returns the row of a marked table. A table that no longer exists is
+// marked as lost and is not removed.
 func buildFavouriteTableRow(
 	favourite core.Favourite, tablesByName map[string]db.TableRef,
 ) TreeRow {
@@ -217,7 +218,8 @@ func buildFavouriteTableRow(
 	return buildRow(withIcon(options, icon))
 }
 
-// buildFavouriteRows draws the objects the user marked, in the order they were marked.
+// buildFavouriteRows returns the rows of the objects the user marked, in the order of the
+// marks.
 func buildFavouriteRows(
 	favourites []core.Favourite, knownSchemas map[string]bool,
 	tablesByName map[string]db.TableRef, open bool,
@@ -239,7 +241,7 @@ func buildFavouriteRows(
 	return rows
 }
 
-// buildRecentRows draws the schemas opened recently, without a mark.
+// buildRecentRows returns the rows of the schemas opened recently, without a mark.
 func buildRecentRows(recent []core.RecentSchema, open bool, now time.Time) []TreeRow {
 	if len(recent) == 0 {
 		return nil
@@ -261,7 +263,8 @@ func buildRecentRows(recent []core.RecentSchema, open bool, now time.Time) []Tre
 	return rows
 }
 
-// buildRoleRows draws the roles of the server, which are read but never opened.
+// buildRoleRows returns the rows of the roles of the server. A role is read and never
+// opened.
 func buildRoleRows(roles []db.DbRole, open bool) []TreeRow {
 	if len(roles) == 0 {
 		return nil
@@ -279,19 +282,19 @@ func buildRoleRows(roles []db.DbRole, open bool) []TreeRow {
 	return rows
 }
 
-// categoryLabels name the folder each kind of object hangs under.
+// categoryLabels give the folder of each kind of object.
 var categoryLabels = map[db.SchemaObjectKind]string{
 	db.ObjectFunction: "functions", db.ObjectSequence: "sequences",
 	db.ObjectType: "types", db.ObjectTrigger: "triggers",
 }
 
-// categoryIcons name the glyph of each folder of objects.
+// categoryIcons give the glyph of each object folder.
 var categoryIcons = map[db.SchemaObjectKind]cfg.IconKind{
 	db.ObjectFunction: cfg.IconFunction, db.ObjectSequence: cfg.IconSequence,
 	db.ObjectType: cfg.IconType, db.ObjectTrigger: cfg.IconTrigger,
 }
 
-// IsSystemSchema is true where the engine of the connection keeps that schema for itself.
+// IsSystemSchema is true if the engine of the connection reserves that schema for itself.
 func IsSystemSchema(schema string, engine core.Engine) bool {
 	return core.ResolveEngineInfo(engine).HoldsSystemSchema(schema)
 }
@@ -310,77 +313,77 @@ func resolveColumnIcon(column db.ColumnDetail, referencing map[string]bool) cfg.
 	return cfg.IconColumn
 }
 
-// TableDetailStateKind says how far the read of one table got.
+// TableDetailStateKind is the state of the read of one table.
 type TableDetailStateKind string
 
-// The three states the read of a table can be in.
+// The three states of the read of a table.
 const (
 	DetailLoading TableDetailStateKind = "loading"
 	DetailReady   TableDetailStateKind = "ready"
 	DetailFailed  TableDetailStateKind = "failed"
 )
 
-// TableDetailState is the state of the read of one table. A failure is kept, so a fold can
-// show it.
+// TableDetailState is the state of the read of one table. It keeps the error, so a folded
+// row can show it.
 type TableDetailState struct {
 	Kind    TableDetailStateKind
 	Detail  db.TableDetail
 	Message string
 }
 
-// BuildTableID names one relation, so what was read for it can be found again.
+// BuildTableID returns the id of one table, so the data read for it can be found again.
 func BuildTableID(table db.TableRef) string {
 	return "table:" + table.Schema + "." + table.Name
 }
 
-// TreeSummary holds the counts the pane writes on its border: what is shown, and what is
-// not.
+// TreeSummary holds the counts the pane writes on its border: the visible rows and the
+// hidden rows.
 type TreeSummary struct {
 	ShownSchemas        int
 	TotalSchemas        int
 	HiddenSystemSchemas int
 }
 
-// TreeResult holds the rows to draw and the summary for the border.
+// TreeResult holds the rows to draw and the summary of the border.
 type TreeResult struct {
 	Rows    []TreeRow
 	Summary TreeSummary
 }
 
-// TreeInput is everything BuildTree reads to build the tree.
+// TreeInput holds every input of BuildTree.
 type TreeInput struct {
 	Tables  []db.TableRef
 	Objects []db.SchemaObject
 	Roles   []db.DbRole
-	// The columns of each table, once read. Keyed by the table row id.
+	// The columns of each table after the read, keyed by the table row id.
 	Details  map[string]TableDetailState
 	Expanded map[string]bool
 	Filter   string
-	// A filter opened inside a schema searches only that schema. An empty scope searches
+	// A filter opened inside a schema searches that schema only. An empty scope searches
 	// the whole tree.
 	FilterScope       string
 	Favourites        []core.Favourite
 	Recent            []core.RecentSchema
 	HideSystemSchemas bool
 	Engine            core.Engine
-	// The current time, for the age beside a recent schema.
+	// The current time, for the age of a recent schema.
 	Now time.Time
 }
 
-// treePlan is what every row builder reads, once the input of the tree is settled.
+// treePlan holds the resolved input every row builder reads.
 type treePlan struct {
 	expanded map[string]bool
 	details  map[string]TableDetailState
-	// The favourite ids, so a row the user marked is drawn marked.
+	// The favourite ids, so a marked row is drawn with its mark.
 	marked map[string]bool
-	// True while a filter searches the whole tree, which opens every folder it searched.
+	// True while a filter searches the whole tree. Every searched folder is then open.
 	globalFilter bool
-	// The schema a filter was opened inside.
+	// The schema the filter was opened inside.
 	scopedSchema string
 }
 
-// buildColumnRows draws the columns of an open table, or the one row that says the read is
-// not done.
+// buildColumnRows returns the rows of the columns of an open table, or one row that reports
+// the state of the read.
 func buildColumnRows(plan treePlan, table db.TableRef, tableID string) []TreeRow {
 	state, read := plan.details[tableID]
 	if !read || state.Kind != DetailReady {
@@ -418,8 +421,8 @@ func buildColumnRows(plan treePlan, table db.TableRef, tableID string) []TreeRow
 	return rows
 }
 
-// buildTableRows draws every relation of one schema, each with its columns under it if it
-// is open.
+// buildTableRows returns the rows of every table of one schema, each one with its columns
+// below it if the table is open.
 func buildTableRows(plan treePlan, tables []db.TableRef) []TreeRow {
 	rows := []TreeRow{}
 	for _, table := range tables {
@@ -443,8 +446,8 @@ func buildTableRows(plan treePlan, tables []db.TableRef) []TreeRow {
 	return rows
 }
 
-// buildCategoryRows draws the folders a schema holds beside its relations, each with its
-// objects if open.
+// buildCategoryRows returns the object folders of a schema, each one with its objects if the
+// folder is open.
 func buildCategoryRows(
 	plan treePlan, schema string, byKind map[db.SchemaObjectKind][]db.SchemaObject,
 ) []TreeRow {
@@ -478,8 +481,8 @@ func buildCategoryRows(
 	return rows
 }
 
-// buildSchemaRows draws one schema, with its relations and its other objects under it if
-// it is open.
+// buildSchemaRows returns the rows of one schema, with its tables and its other objects
+// below it if the schema is open.
 func buildSchemaRows(
 	plan treePlan, schema string, tables []db.TableRef,
 	byKind map[db.SchemaObjectKind][]db.SchemaObject, hasObjects bool,
@@ -508,11 +511,11 @@ func buildSchemaRows(
 	return rows
 }
 
-// readSchemaFilter answers the filter that applies inside one schema. A filter opened on a
-// schema searches only that schema, and any other scope searches the whole tree.
+// readSchemaFilter returns the filter that applies inside one schema. A filter opened on a
+// schema searches that schema only. Any other scope searches the whole tree.
 type readSchemaFilter func(schema string) string
 
-// buildSchemaFilter returns what each schema is searched for.
+// buildSchemaFilter returns the filter of each schema.
 func buildSchemaFilter(filter, scopedSchema string, globalFilter bool) readSchemaFilter {
 	return func(schema string) string {
 		if globalFilter || schema == scopedSchema {
@@ -522,9 +525,9 @@ func buildSchemaFilter(filter, scopedSchema string, globalFilter bool) readSchem
 	}
 }
 
-// groupTablesBySchema keeps the relations each schema matched with, and every relation by
-// its full name, which the marked rows are drawn from. One pass, so the work does not grow
-// with schemas times relations.
+// groupTablesBySchema returns the matching tables of each schema, and every table by its
+// full name, which the marked rows use. It runs in one pass, so the cost does not grow with
+// the number of schemas times the number of tables.
 func groupTablesBySchema(
 	tables []db.TableRef, readFilterFor readSchemaFilter,
 ) (map[string][]db.TableRef, map[string]db.TableRef) {
@@ -540,7 +543,7 @@ func groupTablesBySchema(
 	return bySchema, byName
 }
 
-// groupObjectsBySchema keeps the other objects each schema matched with, under their kind.
+// groupObjectsBySchema returns the other matching objects of each schema, grouped by kind.
 func groupObjectsBySchema(
 	objects []db.SchemaObject, readFilterFor readSchemaFilter,
 ) map[string]map[db.SchemaObjectKind][]db.SchemaObject {
@@ -559,7 +562,7 @@ func groupObjectsBySchema(
 	return bySchema
 }
 
-// collectSchemaNames returns every schema the catalog holds, as a set and in order.
+// collectSchemaNames returns every schema of the catalog, as a set and as an ordered list.
 func collectSchemaNames(
 	tables []db.TableRef, objects []db.SchemaObject,
 ) (map[string]bool, []string) {
@@ -578,8 +581,8 @@ func collectSchemaNames(
 	return held, sorted
 }
 
-// keepDrawnSchemas returns the schemas the tree draws, and how many the server keeps for
-// itself were left out.
+// keepDrawnSchemas returns the schemas the tree draws, and the number of system schemas it
+// skipped.
 func keepDrawnSchemas(sorted []string, engine core.Engine, hideSystem bool) ([]string, int) {
 	if !hideSystem {
 		return sorted, 0
@@ -596,8 +599,8 @@ func keepDrawnSchemas(sorted []string, engine core.Engine, hideSystem bool) ([]s
 	return kept, hidden
 }
 
-// keepKnownRecent returns the schemas opened lately that the tree still draws, up to the
-// most the folder holds.
+// keepKnownRecent returns the recently opened schemas that the tree still draws, up to the
+// limit of the folder.
 func keepKnownRecent(recent []core.RecentSchema, drawn []string) []core.RecentSchema {
 	shown := map[string]bool{}
 	for _, schema := range drawn {
@@ -612,7 +615,7 @@ func keepKnownRecent(recent []core.RecentSchema, drawn []string) []core.RecentSc
 	return kept
 }
 
-// keepMatchingRoles returns the roles the filter matched.
+// keepMatchingRoles returns the roles that match the filter.
 func keepMatchingRoles(roles []db.DbRole, filter string) []db.DbRole {
 	kept := make([]db.DbRole, 0, len(roles))
 	for _, role := range roles {
@@ -623,8 +626,8 @@ func keepMatchingRoles(roles []db.DbRole, filter string) []db.DbRole {
 	return kept
 }
 
-// collectMarkedIDs returns the id of every object the user marked, so a row of the tree can
-// be drawn as marked without reading the whole list again.
+// collectMarkedIDs returns the id of every object the user marked, so a tree row can show
+// its mark without a second read of the list.
 func collectMarkedIDs(favourites []core.Favourite) map[string]bool {
 	marked := map[string]bool{}
 	for _, favourite := range favourites {
@@ -633,8 +636,8 @@ func collectMarkedIDs(favourites []core.Favourite) map[string]bool {
 	return marked
 }
 
-// buildSchemaGroupRows draws every schema that holds something, and returns how many were
-// drawn. A search of the whole tree leaves out a schema nothing in it matched.
+// buildSchemaGroupRows returns the rows of every schema that has content, and the number of
+// schemas it drew. A search of the whole tree skips a schema without a match.
 func buildSchemaGroupRows(
 	plan treePlan, schemas []string, tablesBySchema map[string][]db.TableRef,
 	objectsBySchema map[string]map[db.SchemaObjectKind][]db.SchemaObject,
@@ -653,7 +656,7 @@ func buildSchemaGroupRows(
 	return rows, drawn
 }
 
-// BuildTree returns the rows to draw and the counts for the border.
+// BuildTree returns the rows to draw and the counts of the border.
 func BuildTree(input TreeInput) TreeResult {
 	filter := strings.TrimSpace(input.Filter)
 	engine := input.Engine
@@ -702,8 +705,8 @@ func BuildTree(input TreeInput) TreeResult {
 	}
 }
 
-// CollectDefaultExpanded opens one schema. Several stay closed, because MySQL calls every
-// database a schema. The marked and recent ones always open.
+// CollectDefaultExpanded opens one schema. Several schemas stay closed, because MySQL calls
+// every database a schema. The marked and the recent folders are always open.
 func CollectDefaultExpanded(
 	tables []db.TableRef, objects []db.SchemaObject,
 	favourites []core.Favourite, recent []core.RecentSchema,
@@ -731,18 +734,18 @@ func CollectDefaultExpanded(
 	return open
 }
 
-// The line down the left of a tree. Without it the depth is only the indent, which a
-// reader has to count.
+// The guide line on the left of a tree. Without it the indent is the only indication of the
+// depth, and the user has to count it.
 const (
-	// guideContinues marks a fold with more rows below it at this depth.
+	// guideContinues marks a branch with more rows below this row at this depth.
 	guideContinues = "│ "
-	// guideLast marks the last row of a fold, which closes the line of its siblings.
+	// guideLast marks the last row of a branch, which ends the line of its siblings.
 	guideLast = "╰ "
-	// guideClear marks a fold that ended above this row, so nothing is drawn at this depth.
+	// guideClear marks a branch that ended above this row, so this depth draws nothing.
 	guideClear = "  "
 )
 
-// buildGuide writes the prefix of one row, one cell per depth above it.
+// buildGuide returns the prefix of one row, one cell per depth above it.
 func buildGuide(depth int, open []bool) string {
 	var guide strings.Builder
 	for level := 1; level <= depth; level++ {
@@ -759,7 +762,7 @@ func buildGuide(depth int, open []bool) string {
 	return guide.String()
 }
 
-// markDepthOpen keeps the depth of the row open, and closes every deeper depth.
+// markDepthOpen keeps this depth open and closes every deeper depth.
 func markDepthOpen(open []bool, depth int) []bool {
 	for len(open) <= depth {
 		open = append(open, false)
@@ -771,11 +774,11 @@ func markDepthOpen(open []bool, depth int) []bool {
 	return open
 }
 
-// BuildTreeGuidesWithin writes the prefix of each row from one place to the next, and returns
-// them in that order. The rows are read from the bottom up: a depth stays open while a row is
-// still at it, and every deeper depth closes at the next row above it. So the walk begins at
-// the last row whatever the window is, and only the prefixes inside the window are written: a
-// pane of forty rows over an open catalog of thousands wrote every one of them.
+// BuildTreeGuidesWithin returns the prefix of each row between two positions, in that order.
+// The rows are read from the bottom to the top: a depth stays open while a row is at that
+// depth, and every deeper depth closes at the next row above it. So the walk starts at the
+// last row for every window, and only the prefixes inside the window are built. Before this,
+// a pane of forty rows over an open catalog of thousands built every prefix.
 func BuildTreeGuidesWithin(rows []TreeRow, from, to int) []string {
 	from = max(from, 0)
 	to = min(to, len(rows))

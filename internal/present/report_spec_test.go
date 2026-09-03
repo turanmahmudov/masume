@@ -8,8 +8,8 @@ import (
 )
 
 func TestFormatWhenShowsTheDateOnlyForAnotherDay(t *testing.T) {
-	// A list of today shows the seconds, because two rows can land in the same minute. A
-	// row from another day shows the date instead, so it is never read as today.
+	// A list of today shows the seconds, because two rows can be in the same minute. A
+	// row from another day shows the date, so it is never read as today.
 	now := time.Date(2026, 3, 14, 15, 30, 0, 0, time.UTC)
 	for _, held := range []struct {
 		name string

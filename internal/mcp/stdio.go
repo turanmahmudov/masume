@@ -12,10 +12,10 @@ import (
 )
 
 // The transport of the protocol: one message per line, over standard input and standard
-// output. It reads, hands each message to the responder, and writes what comes back.
+// output. It reads a message, passes it to the responder, and writes the answer.
 
-// releaseKey names the function that lets the transport read the next message while this call
-// waits.
+// releaseKey is the context key of the function that lets the transport read the next
+// message while this call waits.
 type releaseKey struct{}
 
 // releaseReader lets the server read the next message while this call waits for the user,
@@ -26,32 +26,33 @@ func releaseReader(ctx context.Context) {
 	}
 }
 
-// The two limits on what one client can ask of this server. Both hold whatever the client
-// sends: a message with no line break would otherwise grow the buffer until the machine has
-// no memory left, and a client that never waits for an answer would start a goroutine, and
-// a connection behind it, for every line.
+// The two limits on the load one client can put on this server. Both apply to any input: a
+// message without a line break would grow the buffer until the machine has no memory left,
+// and a client that never waits for an answer would start a goroutine, and a connection, for
+// every line.
 const (
-	// maxMessageBytes is the longest message this server reads. A call carries a
-	// statement, and no statement a person writes comes near this.
+	// maxMessageBytes is the maximum length of a message. A call holds a statement, and
+	// no statement a person writes is near this size.
 	maxMessageBytes = 1 << 20
-	// maxCallsAtOnce is how many calls may run beside each other. A call that reached a
-	// server has released the reader, so without this the count would be the count of
-	// the lines the client sent. It is a backstop, well above any real client.
+	// maxCallsAtOnce is the number of calls that can run in parallel. A call that
+	// reached a server released the reader, so without this limit the number would be
+	// the number of lines the client sent. It is a safety limit, far above the load of a
+	// real client.
 	maxCallsAtOnce = 64
 )
 
-// ServeOverStdio runs until the client closes its end. One message is answered before the next
-// is read, so the answers keep the order of the calls, and a call that asks the user releases
-// the reader first.
+// ServeOverStdio runs until the client closes the stream. It answers one message before it
+// reads the next one, so the answers keep the order of the calls. A call that asks the user
+// releases the reader first.
 func ServeOverStdio(
 	ctx context.Context, responder *Responder, input io.Reader, write func(line string),
 ) {
 	reader := bufio.NewReader(input)
 	answering := sync.WaitGroup{}
-	// Every answer is written before the server ends, because a call that was taken is
-	// answered.
+	// Every answer is written before the server stops, because every accepted call gets
+	// an answer.
 	defer answering.Wait()
-	// Room for the calls that released the reader and are still running.
+	// Capacity for the calls that released the reader and still run.
 	room := make(chan struct{}, maxCallsAtOnce)
 
 	for {
@@ -71,12 +72,12 @@ func ServeOverStdio(
 }
 
 // errMessageTooLong is returned for a line above the limit. The rest of that line cannot be
-// told from the message after it, so the server stops rather than answer a part of it.
+// separated from the next message, so the server stops and does not answer a part of it.
 var errMessageTooLong = errors.New("the message is longer than the server reads")
 
-// readMessageLine reads one message, up to the limit. It reads a buffer at a time, because
-// a reader asked for a whole line grows to hold whatever a client sends before the first
-// line break, and that is the client saying how much memory this process takes.
+// readMessageLine reads one message, up to the limit. It reads one buffer at a time, because
+// a reader that asks for a whole line grows to the size the client sends before the first
+// line break, and the client would then control the memory of this process.
 func readMessageLine(reader *bufio.Reader) (string, error) {
 	var held strings.Builder
 	for {
@@ -92,8 +93,8 @@ func readMessageLine(reader *bufio.Reader) (string, error) {
 	}
 }
 
-// answerOneLine reads one line as a message and returns it, and comes back once the answer is
-// written or the call began to wait for the user.
+// answerOneLine parses one line as a message and answers it. It returns after the answer is
+// written, or after the call starts to wait for the user.
 func answerOneLine(
 	ctx context.Context, responder *Responder, answering *sync.WaitGroup,
 	room chan struct{}, line string, write func(line string),
@@ -104,10 +105,10 @@ func answerOneLine(
 		return
 	}
 
-	// A call takes a place before it starts. A message that is no call takes none: the
-	// answer of the user to a question the server asked is one of those, and the calls
-	// waiting for it are what fills the room, so holding it back would leave them waiting
-	// for ever.
+	// A call takes a slot before it starts. A message that is not a call takes none. The
+	// answer of the user to a question of the server is such a message, and the calls
+	// that wait for it fill the slots, so a slot for the answer would block them for
+	// ever.
 	held := readIncomingMessage(message)
 	takesRoom := held.kind == messageCall
 	if takesRoom {

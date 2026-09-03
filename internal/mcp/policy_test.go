@@ -8,7 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// buildTestProfile answers one profile of a name, with the settings a case needs.
+// buildTestProfile returns one profile with that name and the settings of the test.
 func buildTestProfile(name string) cfg.Profile {
 	return cfg.Profile{
 		Name: name, Engine: core.EngineSqlite, Database: "/tmp/" + name + ".db",
@@ -208,8 +208,8 @@ func TestReadServerArguments(t *testing.T) {
 	}
 }
 
-// An argument the server cannot read must be refused, because a mistyped `--profile` that
-// is dropped opens every profile the config file names.
+// An unknown argument must give an error. A misspelled `--profile` that is ignored would
+// open every profile of the config file.
 func TestReadServerArgumentsRefusesWhatItCannotRead(t *testing.T) {
 	for _, argv := range [][]string{
 		{"--mcp", "--profile"},

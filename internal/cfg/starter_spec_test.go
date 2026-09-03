@@ -98,9 +98,9 @@ func TestStarterConfigNamesNoProfileToAnAgent(t *testing.T) {
 	}
 }
 
-// The starter config shows every setting at its default, so a fresh file must change
-// nothing. This holds it to that: what the starter loads has to equal what the code
-// falls back to when there is no file at all.
+// The starter config shows every setting at its default value, so a new file must change
+// nothing. This test compares the settings loaded from the starter file with the defaults
+// used when there is no file.
 func TestStarterConfigShowsTheDefaultsAndChangesNothing(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "masume", "config.toml")
 	if _, err := cfg.EnsureConfigFile(path); err != nil {
@@ -154,8 +154,8 @@ func TestStarterConfigShowsTheDefaultsAndChangesNothing(t *testing.T) {
 	}
 }
 
-// The theme the starter names has to be one masume ships, or a first run opens on a
-// theme that is not there.
+// The theme in the starter config must be a theme included in masume, or the first run
+// starts with a theme that does not exist.
 func TestStarterConfigNamesAThemeThatExists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "masume", "config.toml")
 	if _, err := cfg.EnsureConfigFile(path); err != nil {

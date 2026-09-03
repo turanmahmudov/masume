@@ -6,14 +6,14 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// What one tool call does, as a step a reader can follow: the table it reads, or the statement
-// it runs, and not the name of the tool.
+// A readable description of one tool call: the table it reads, or the statement it runs, and
+// not the name of the tool.
 
-// maxShownSQL is enough of a statement to know which one it is, and short enough for one line
-// of the panel, with the step and the seconds beside it.
+// maxShownSQL is long enough to identify a statement and short enough for one line of the
+// panel, next to the step and the run time.
 const maxShownSQL = 48
 
-// activityStep is what a step says when the call names no subject, and when it names one.
+// activityStep holds the text of a step without a subject and the text with a subject.
 type activityStep struct {
 	alone  string
 	naming func(subject string) string
@@ -33,7 +33,7 @@ var tableSteps = map[string]activityStep{
 		func(table string) string { return "reading what joins to " + table }},
 }
 
-// sqlSteps holds the calls that carry a statement.
+// sqlSteps holds the calls that contain a statement.
 var sqlSteps = map[string]activityStep{
 	"validate_query": {"checking a query",
 		func(sql string) string { return "checking " + sql }},
@@ -41,7 +41,7 @@ var sqlSteps = map[string]activityStep{
 		func(sql string) string { return "running " + sql }},
 }
 
-// findShownSQL returns the statement of a call on one line, and whether it carries one.
+// findShownSQL returns the statement of a call on one line, and whether the call has one.
 func findShownSQL(input map[string]any) (string, bool) {
 	asked, is := input["sql"].(string)
 	if !is || strings.TrimSpace(asked) == "" {
@@ -54,7 +54,7 @@ func findShownSQL(input map[string]any) (string, bool) {
 	return written, true
 }
 
-// writeStep returns the words of one step, with the subject where the call names one.
+// writeStep returns the text of one step, with the subject if the call has one.
 func writeStep(step activityStep, subject string, named bool) string {
 	if !named {
 		return step.alone
@@ -62,7 +62,7 @@ func writeStep(step activityStep, subject string, named bool) string {
 	return step.naming(subject)
 }
 
-// DescribeToolActivity writes what one tool call does.
+// DescribeToolActivity returns a description of one tool call.
 func DescribeToolActivity(toolName string, input map[string]any) string {
 	if step, known := tableSteps[toolName]; known {
 		table, named := input["table"].(string)

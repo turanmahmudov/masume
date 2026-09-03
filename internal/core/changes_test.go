@@ -2,8 +2,8 @@ package core
 
 import "testing"
 
-// The staged work runs in a settled order, so the same edits always write the same statements
-// and the review card lists them as they will run.
+// The staged changes run in a fixed order, so the same edits always give the same
+// statements and the review card lists them in run order.
 func TestSortedEditsAnswerTheSameOrderEveryTime(t *testing.T) {
 	pending := NewPendingChanges()
 	// Added out of order on purpose.
@@ -18,7 +18,7 @@ func TestSortedEditsAnswerTheSameOrderEveryTime(t *testing.T) {
 	if len(first) != 4 {
 		t.Fatalf("four edits sorted into %d", len(first))
 	}
-	// Row first, then column, so the statements follow the rows of the grid.
+	// Row first, then column, so the statements follow the row order of the grid.
 	for at := 1; at < len(first); at++ {
 		before, held := first[at-1], first[at]
 		if before.RowIndex > held.RowIndex {
@@ -31,7 +31,7 @@ func TestSortedEditsAnswerTheSameOrderEveryTime(t *testing.T) {
 		}
 	}
 
-	// The same set sorts the same way again, because a map walks in no order of its own.
+	// The same set sorts the same way again, because a map has no order of its own.
 	second := SortedEdits(pending)
 	for at := range first {
 		if first[at] != second[at] {
@@ -57,8 +57,8 @@ func TestSortedDeletedRowsAnswerTheRowsInOrder(t *testing.T) {
 	}
 }
 
-// The count is what the bar shows and what the close question asks about, so it counts every
-// kind of staged work and never one twice.
+// The status bar and the close dialog both use this count, so it must include every kind
+// of staged change and count none of them twice.
 func TestCountChangesCountsEveryKindOfStagedWork(t *testing.T) {
 	pending := NewPendingChanges()
 	if held := CountChanges(pending); held != 0 {
@@ -75,8 +75,8 @@ func TestCountChangesCountsEveryKindOfStagedWork(t *testing.T) {
 	}
 }
 
-// The key of a cell tells one cell from another, so two cells never share one and an edit
-// never lands on the wrong cell.
+// The key of a cell is unique, so two cells never share a key and an edit never goes to the
+// wrong cell.
 func TestBuildEditKeyNamesOneCellOnly(t *testing.T) {
 	seen := map[string]bool{}
 	for row := range 4 {
@@ -88,14 +88,14 @@ func TestBuildEditKeyNamesOneCellOnly(t *testing.T) {
 			seen[key] = true
 		}
 	}
-	// A row and a column the other way round are different cells.
+	// A row and a column in the other order are different cells.
 	if BuildEditKey(1, 2) == BuildEditKey(2, 1) {
 		t.Error("a row and a column swapped name the same cell")
 	}
 }
 
-// The three kinds of chosen value read as the three things they are, so the review card shows
-// what will be written and never one for another.
+// The three kinds of selected value have three different texts, so the review card shows
+// what will be written and never one kind in place of another.
 func TestDescribeCellValueTellsTheKindsApart(t *testing.T) {
 	written := map[string]string{}
 	for _, held := range []struct {
@@ -124,15 +124,15 @@ func TestDescribeCellValueTellsTheKindsApart(t *testing.T) {
 	}
 }
 
-// A sort turns over where it stands, and a column asked for without adding orders the rows
-// alone, because that is what clicking a heading means.
+// A sort reverses in place, and a column selected without add becomes the only sort key,
+// which is what a click on a heading means.
 func TestApplySortColumnTurnsOverAndReplaces(t *testing.T) {
 	first := ApplySortColumn(nil, "customer", false)
 	if len(first) != 1 || first[0].Column != "customer" {
 		t.Fatalf("the sort reads %+v", first)
 	}
 
-	// Asking again turns the direction over and keeps the one column.
+	// A second selection reverses the direction and keeps the single column.
 	again := ApplySortColumn(first, "customer", false)
 	if len(again) != 1 {
 		t.Fatalf("asking again gave %d columns", len(again))
@@ -141,15 +141,15 @@ func TestApplySortColumnTurnsOverAndReplaces(t *testing.T) {
 		t.Error("asking for the same column again did not turn the direction over")
 	}
 
-	// A different column without adding orders the rows alone.
+	// Another column without add becomes the only sort key.
 	other := ApplySortColumn(again, "total", false)
 	if len(other) != 1 || other[0].Column != "total" {
 		t.Errorf("a new column without adding gave %+v", other)
 	}
 }
 
-// A column added to the sort joins the end, where it orders the rows least, and a column
-// already there keeps its place so the first column still orders first.
+// A column added to the sort goes to the end, where it has the least effect. A column that
+// is already in the sort keeps its position, so the first column still sorts first.
 func TestApplySortColumnAddedKeepsThePlaceOfTheFirst(t *testing.T) {
 	held := ApplySortColumn(nil, "customer", false)
 	held = ApplySortColumn(held, "total", true)
@@ -160,7 +160,7 @@ func TestApplySortColumnAddedKeepsThePlaceOfTheFirst(t *testing.T) {
 		t.Errorf("the first column is %q, wanted the one asked for first", held[0].Column)
 	}
 
-	// Turning the first over must not move it behind the second.
+	// A reverse of the first key must not move it after the second key.
 	turned := ApplySortColumn(held, "customer", true)
 	if turned[0].Column != "customer" {
 		t.Errorf("turning the first over moved it: the first is now %q", turned[0].Column)
@@ -178,7 +178,7 @@ func TestFindSortDirectionAnswersTheColumnAsked(t *testing.T) {
 	if held := FindSortDirection(sort, "total"); held != SortDescending {
 		t.Errorf("the direction of total reads %q", held)
 	}
-	// A column not in the sort answers something a caller can turn over.
+	// A column that is not in the sort gives a direction the caller can reverse.
 	held := FindSortDirection(sort, "nothing")
 	if TurnSortDirection(held) == held {
 		t.Errorf("a column not in the sort reads %q, which does not turn over", held)
@@ -194,8 +194,8 @@ func TestTurnSortDirectionGoesBothWays(t *testing.T) {
 	}
 }
 
-// A filter built from a cell tests that column against that value, and the excluding form is
-// the opposite test rather than the same one.
+// A filter built from a cell compares that column with that value, and the exclude form
+// uses the opposite test.
 func TestBuildCellFilterTestsTheColumnAgainstTheValue(t *testing.T) {
 	keep := BuildCellFilter("customer", "ada", false)
 	if keep.Column != "customer" {
@@ -207,7 +207,7 @@ func TestBuildCellFilterTestsTheColumnAgainstTheValue(t *testing.T) {
 	}
 }
 
-// A null cannot be compared with equals, so a cell holding one filters on the null test.
+// A null cannot be compared with equals, so a cell with a null uses the null test.
 func TestBuildCellFilterUsesTheNullTestForANull(t *testing.T) {
 	held := BuildCellFilter("total", nil, false)
 	if held.Test != FilterIsNull {

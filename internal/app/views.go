@@ -1,5 +1,5 @@
-// Package app holds the state of the client: which screen is active, the open
-// connections, the tabs of each and the result of every run. Nothing here draws.
+// Package app holds the state of the client: the active screen, the open connections, the
+// tabs of each connection, and the result of every run. Nothing in this package draws.
 package app
 
 import (
@@ -9,14 +9,14 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// ResultView is one way of looking at a result.
+// ResultView is one display mode of a result.
 type ResultView string
 
-// The views a tab can offer.
+// The views a tab can have.
 const (
 	ViewData ResultView = "data"
-	// ViewTree opens the rows as documents: a value that holds fields or elements is
-	// opened into them rather than cut to the width of a column.
+	// ViewTree shows the rows as documents: a value with fields or elements is expanded
+	// and not truncated to the column width.
 	ViewTree        ResultView = "tree"
 	ViewFields      ResultView = "fields"
 	ViewStatistics  ResultView = "statistics"
@@ -27,35 +27,35 @@ const (
 	ViewPlan        ResultView = "plan"
 )
 
-// DefaultView is the view a tab opens on, and falls back to.
+// DefaultView is the view a tab starts with and falls back to.
 const DefaultView = ViewData
 
-// TabKind says what a tab is bound to.
+// TabKind is the binding of a tab.
 type TabKind string
 
 // The three kinds of tab.
 const (
-	// TabTable is bound to one relation, so it can describe it.
+	// TabTable is bound to one table, so it can describe that table.
 	TabTable TabKind = "table"
-	// TabObject shows the definition of one schema object. Nothing runs for it.
+	// TabObject shows the definition of one schema object. It runs no statement.
 	TabObject TabKind = "object"
 	// TabQuery is bound to the text in its editor.
 	TabQuery TabKind = "query"
 )
 
-// The views each kind of tab offers, before the plan is left out.
+// The views of each kind of tab, before the plan is removed.
 var (
 	tableViews = []ResultView{
 		ViewData, ViewTree, ViewColumns, ViewIndexes, ViewConstraints, ViewDDL, ViewPlan,
 	}
 	queryViews = []ResultView{ViewData, ViewTree, ViewFields, ViewPlan}
-	// A schema object is shown by its definition only.
+	// A schema object has the definition view only.
 	objectViews = []ResultView{ViewDDL}
-	// The message shown for a statement with no result set.
+	// The message shown for a statement without a result set.
 	outcomeViews = []ResultView{ViewStatistics, ViewPlan}
 )
 
-// ListOfferedViews returns the views this kind of tab offers, before the plan is left out.
+// ListOfferedViews returns the views of this kind of tab, before the plan is removed.
 func ListOfferedViews(kind TabKind, hasResultSet bool) []ResultView {
 	switch kind {
 	case TabTable:
@@ -69,10 +69,10 @@ func ListOfferedViews(kind TabKind, hasResultSet bool) []ResultView {
 	return outcomeViews
 }
 
-// ViewDataKind says what the pane draws in place of the grid.
+// ViewDataKind is the content the pane draws in place of the grid.
 type ViewDataKind string
 
-// The kinds of thing a view can be drawing.
+// The kinds of content a view can draw.
 const (
 	DataIdle          ViewDataKind = "idle"
 	DataTree          ViewDataKind = "tree"
@@ -88,11 +88,11 @@ const (
 	DataGrid          ViewDataKind = "grid"
 )
 
-// Statistic is one line about what a statement did, for the statistics view.
+// Statistic is one line of the statistics view about the result of a statement.
 type Statistic struct {
 	Label string
 	Value string
-	// True for the line that reports what the statement changed.
+	// True for the line that reports the changes of the statement.
 	Leading bool
 }
 
@@ -108,6 +108,6 @@ type PaneContent struct {
 	Lines         []string
 	Statistics    []Statistic
 	Plan          query.QueryPlan
-	// When the read began, so the wheel of the wait can say how long it has run.
+	// The start time of the read, so the wait indicator can show the elapsed time.
 	StartedAt time.Time
 }

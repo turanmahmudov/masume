@@ -2,21 +2,22 @@ package ai
 
 import "github.com/turanmahmudov/masume/internal/cfg"
 
-// Kept apart from the client, because a screen asks this before any reply.
+// This is separate from the client, because a screen asks these questions before the first
+// request.
 
-// FindAPIKey returns the key of this provider, and whether the config carries one.
+// FindAPIKey returns the key of this provider, and whether the config has one.
 func FindAPIKey(settings cfg.AiProviderSettings) (string, bool) {
 	key := cfg.FindConfiguredValue(settings.APIKey, settings.APIKeyEnv)
 	return key, key != ""
 }
 
-// HasCredentials is true where the config has what this provider needs.
+// HasCredentials is true if the config has the credentials this provider needs.
 func HasCredentials(config cfg.AiConfig, id cfg.AiProviderID) bool {
 	_, held := FindAPIKey(config.Providers[id])
 	return held
 }
 
-// DescribeMissingKey writes what to do for a provider with no key.
+// DescribeMissingKey returns the instructions for a provider without a key.
 func DescribeMissingKey(config cfg.AiConfig, id cfg.AiProviderID) string {
 	settings := config.Providers[id]
 	table := "[ai.providers." + string(id) + "]"

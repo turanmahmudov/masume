@@ -54,7 +54,7 @@ func TestReadInputChecksEachKind(t *testing.T) {
 		{map[string]any{"sql": "s", "limit": float64(10)}, true, ""},
 		{map[string]any{"sql": "s", "analyze": "yes"}, false, "analyze"},
 		{map[string]any{"sql": "s", "analyze": true}, true, ""},
-		// A field a caller sent as null is read as one it did not send.
+		// A field a caller sent as null is treated as a field the caller did not send.
 		{map[string]any{"sql": "s", "limit": nil}, true, ""},
 	}
 	for _, held := range cases {
@@ -131,7 +131,7 @@ func TestExtendSchemaAddsTheProfile(t *testing.T) {
 		t.Errorf("the needed fields are %v, wanted sql then profile", required)
 	}
 
-	// The schema of a definition is built once, so the one it was made from is untouched.
+	// The schema of a definition is built one time, so the source schema stays unchanged.
 	if len(schema["properties"].(map[string]any)) != len(scratchFields) {
 		t.Error("the schema it was made from grew a field")
 	}

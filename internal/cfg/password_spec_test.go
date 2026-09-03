@@ -7,7 +7,8 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// buildServerProfile answers a profile on a server, which is what needs a password.
+// buildServerProfile returns a profile on a server, which is the case that needs a
+// password.
 func buildServerProfile(auth cfg.AuthMode) cfg.Profile {
 	return cfg.Profile{
 		Name: "shop", Engine: core.EnginePostgres, Host: "localhost", Port: 5432,
@@ -15,9 +16,9 @@ func buildServerProfile(auth cfg.AuthMode) cfg.Profile {
 	}
 }
 
-// A password is read only for the mode that stores one. A profile that runs a command or asks
-// the user must not fall back to a password left in the file, or a stale one would be sent to
-// the server without the user knowing which was used.
+// A stored password is read only in the mode that stores one. A profile that runs a command
+// or asks the user must not fall back to a password left in the file, or an old password
+// would be sent to the server and the user would not know which one was used.
 func TestFindStoredPasswordReadsOnlyThePasswordMode(t *testing.T) {
 	for _, held := range []struct {
 		name string
@@ -38,8 +39,8 @@ func TestFindStoredPasswordReadsOnlyThePasswordMode(t *testing.T) {
 	}
 }
 
-// A password may name an environment variable instead of holding the secret, so a config file
-// can be shared without it.
+// A password can name an environment variable instead of holding the secret, so a config
+// file can be shared without the secret.
 func TestFindStoredPasswordReadsAnEnvironmentVariable(t *testing.T) {
 	const variable = "MASUME_SPEC_PASSWORD"
 	t.Setenv(variable, "from-the-environment")
@@ -50,14 +51,14 @@ func TestFindStoredPasswordReadsAnEnvironmentVariable(t *testing.T) {
 		t.Errorf("the password reads %q, wanted the value of the variable", answered)
 	}
 
-	// A variable that is not set answers nothing rather than its own name.
+	// A variable that is not set gives an empty password and not its own name.
 	profile.PasswordEnv = "MASUME_SPEC_PASSWORD_NOT_SET"
 	if answered := cfg.FindStoredPassword(profile); answered != "" {
 		t.Errorf("a variable that is not set read %q", answered)
 	}
 }
 
-// The password in the file wins over the variable, because it is the more specific of the two.
+// The password in the file has priority over the variable, because it is more specific.
 func TestFindStoredPasswordPrefersTheValueInTheFile(t *testing.T) {
 	const variable = "MASUME_SPEC_PASSWORD"
 	t.Setenv(variable, "from-the-environment")
@@ -70,7 +71,7 @@ func TestFindStoredPasswordPrefersTheValueInTheFile(t *testing.T) {
 	}
 }
 
-// A command that prints the password is run, and what it prints is the password.
+// A command that prints the password is run, and its output is the password.
 func TestResolveProfilePasswordRunsTheCommand(t *testing.T) {
 	profile := buildServerProfile(cfg.AuthCommand)
 	profile.PasswordCommand = "printf secret-from-command"
@@ -84,8 +85,8 @@ func TestResolveProfilePasswordRunsTheCommand(t *testing.T) {
 	}
 }
 
-// A command that fails must report it rather than answer an empty password, which the server
-// would refuse with a message about the password instead of about the command.
+// A command that fails must return an error and not an empty password. The server would
+// refuse an empty password with a message about the password and not about the command.
 func TestResolveProfilePasswordReportsACommandThatFails(t *testing.T) {
 	profile := buildServerProfile(cfg.AuthCommand)
 	profile.PasswordCommand = "exit 3"
@@ -95,7 +96,7 @@ func TestResolveProfilePasswordReportsACommandThatFails(t *testing.T) {
 	}
 }
 
-// A file needs no password, whatever the profile says, so the client never stops to ask.
+// A file needs no password, whatever the profile sets, so the client never asks for one.
 func TestNeedsPasswordPromptIsFalseForAFile(t *testing.T) {
 	profile := cfg.Profile{
 		Name: "notes", Engine: core.EngineSqlite, Database: "/tmp/notes.db",
@@ -130,10 +131,9 @@ func TestNeedsPasswordPromptFollowsTheMode(t *testing.T) {
 	}
 }
 
-// MongoDB authenticates as a named user, and a profile that names one is asked for its
-// password like any other server. A profile that names none is not: a server with
-// authentication turned off refuses a connection that carries a user, so there is
-// nothing a password could be checked against.
+// MongoDB authenticates as a named user. A profile with a user asks for a password like any
+// other server. A profile without a user does not: a server with authentication off refuses
+// a connection that sends a user, so there is nothing to check the password against.
 func TestNeedsPasswordPromptFollowsTheUserWhereTheEngineLeavesItOpen(t *testing.T) {
 	for _, held := range []struct {
 		name string

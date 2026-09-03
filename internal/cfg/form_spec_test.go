@@ -11,7 +11,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// buildFormProfile answers a profile the connection form can be built from.
+// buildFormProfile returns a profile the connection form can be built from.
 func buildFormProfile() cfg.Profile {
 	return cfg.Profile{
 		Name: "shop", Engine: core.EnginePostgres, Host: "db.example.com", Port: 6543,
@@ -21,8 +21,8 @@ func buildFormProfile() cfg.Profile {
 	}
 }
 
-// The form is what the reader edits, so it has to carry every value the profile holds and
-// read back into the same profile.
+// The user edits the profile through the form, so the form must hold every value of the
+// profile and convert back into the same profile.
 func TestBuildProfileFromFieldsRoundTripsAProfile(t *testing.T) {
 	source := buildFormProfile()
 	fields := cfg.BuildFormFields(source, true)
@@ -57,8 +57,8 @@ func TestBuildProfileFromFieldsRoundTripsAProfile(t *testing.T) {
 	}
 }
 
-// A field the reader emptied has to be reported rather than saved as a profile that cannot
-// open, because the reader would only find out on the next connect.
+// An empty required field must be reported and not saved as a profile that cannot connect,
+// because the user would see the problem only at the next connection.
 func TestBuildProfileFromFieldsReportsAFieldThatIsNeeded(t *testing.T) {
 	source := buildFormProfile()
 	fields := cfg.ApplyFieldChange(cfg.BuildFormFields(source, true), "name", "")
@@ -68,7 +68,7 @@ func TestBuildProfileFromFieldsReportsAFieldThatIsNeeded(t *testing.T) {
 	}
 }
 
-// A port that is not a number cannot be dialled, so the form says so rather than saving it.
+// A port that is not a number cannot be used, so the form reports it and does not save it.
 func TestBuildProfileFromFieldsReportsAPortThatIsNotANumber(t *testing.T) {
 	source := buildFormProfile()
 	for _, written := range []string{"nope", "-1", "0"} {
@@ -79,8 +79,7 @@ func TestBuildProfileFromFieldsReportsAPortThatIsNotANumber(t *testing.T) {
 	}
 }
 
-// A field change touches the one field and leaves the rest, so editing the host does not
-// clear the user.
+// A field change modifies one field only, so an edit of the host does not clear the user.
 func TestApplyFieldChangeTouchesOneFieldOnly(t *testing.T) {
 	fields := cfg.BuildFormFields(buildFormProfile(), true)
 	before := cfg.ReadField(fields, "user")
@@ -94,8 +93,8 @@ func TestApplyFieldChangeTouchesOneFieldOnly(t *testing.T) {
 	}
 }
 
-// A URL pasted into the form fills the fields it names, which is the quickest way to open a
-// server somebody sent a URL for.
+// A URL pasted into the form fills the fields it contains, which is the fastest way to open
+// a server from a URL.
 func TestApplyConnectionUrlFillsTheFieldsItNames(t *testing.T) {
 	held, is := cfg.ParseConnectionURL("postgres://reader@db.example.com:6543/shop")
 	if !is {
@@ -115,9 +114,9 @@ func TestApplyConnectionUrlFillsTheFieldsItNames(t *testing.T) {
 	}
 }
 
-// A `rediss://` URL asks for TLS by its scheme alone, and a Redis client reads it that way.
-// Read as a plain `redis://`, it would open in the clear on a connection the user asked to
-// have encrypted.
+// A `rediss://` URL requests TLS through its scheme, and a Redis client reads it that way.
+// Treated as a plain `redis://`, it would open an unencrypted connection where the user
+// asked for encryption.
 func TestParseConnectionUrlKeepsTheTlsOfTheScheme(t *testing.T) {
 	held, is := cfg.ParseConnectionURL("rediss://cache.example.com:6380/0")
 	if !is {
@@ -127,7 +126,7 @@ func TestParseConnectionUrlKeepsTheTlsOfTheScheme(t *testing.T) {
 		t.Errorf("the mode reads %q, wanted %q", held.SSLMode, core.SSLVerifyFull)
 	}
 
-	// A mode written into the URL still decides.
+	// A mode in the URL has priority.
 	named, is := cfg.ParseConnectionURL("rediss://cache.example.com:6380/0?sslmode=require")
 	if !is {
 		t.Fatal("the URL with a mode was not read")
@@ -136,7 +135,7 @@ func TestParseConnectionUrlKeepsTheTlsOfTheScheme(t *testing.T) {
 		t.Errorf("the mode reads %q, wanted %q", named.SSLMode, core.SSLRequire)
 	}
 
-	// A plain `redis://` asks for nothing, as a Redis client reads it.
+	// A plain `redis://` requests no TLS, as a Redis client reads it.
 	plain, is := cfg.ParseConnectionURL("redis://cache.example.com:6379/0")
 	if !is {
 		t.Fatal("the plain URL was not read")
@@ -146,8 +145,8 @@ func TestParseConnectionUrlKeepsTheTlsOfTheScheme(t *testing.T) {
 	}
 }
 
-// A field the form hides for one engine must not be asked for: a file has no host and no port,
-// and asking would leave the reader filling in what nothing reads.
+// A field the form hides for one engine must not be required: a file has no host and no
+// port, and the user would fill in a value that nothing uses.
 func TestFindShownFieldsLeavesOutWhatAnEngineDoesNotNeed(t *testing.T) {
 	file := cfg.BuildFormFields(cfg.Profile{
 		Name: "notes", Engine: core.EngineSqlite, Database: "/tmp/notes.db",
@@ -163,7 +162,7 @@ func TestFindShownFieldsLeavesOutWhatAnEngineDoesNotNeed(t *testing.T) {
 		t.Error("a file is not asked for its path")
 	}
 
-	// A server is asked for both.
+	// A server needs both fields.
 	server := cfg.BuildFormFields(buildFormProfile(), true)
 	shownServer := map[string]bool{}
 	for _, field := range cfg.FindShownFields(server) {
@@ -174,8 +173,8 @@ func TestFindShownFieldsLeavesOutWhatAnEngineDoesNotNeed(t *testing.T) {
 	}
 }
 
-// A profile is written into the config file and read back as the same profile, or the form
-// would lose what the reader typed the moment the client restarts.
+// A profile written into the config file must read back as the same profile, or the form
+// loses the values the user typed at the next start of the client.
 func TestSaveProfileToFileWritesAProfileThatReadsBack(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	source := buildFormProfile()
@@ -209,16 +208,16 @@ func TestSaveProfileToFileWritesAProfileThatReadsBack(t *testing.T) {
 		}
 	}
 
-	// The writer writes the keys the connection form edits. A setting the form never shows,
-	// such as the page size, is not written for a profile that never had a file, and takes
-	// its default. Where such a setting is already in the file it is kept, which is what
-	// TestSaveProfileToFileKeepsTheSettingsTheFormNeverShows covers.
+	// The writer writes the keys the connection form edits. A setting the form does not
+	// show, such as the page size, is not written for a new profile and uses its default.
+	// A setting that is already in the file is kept, which
+	// TestSaveProfileToFileKeepsTheSettingsTheFormNeverShows tests.
 	if held.PageSize != cfg.DefaultPageSize {
 		t.Errorf("the page size read back as %d, wanted the default", held.PageSize)
 	}
 }
 
-// A second profile joins the file rather than taking the place of the first.
+// A second profile is added to the file and does not replace the first.
 func TestSaveProfileToFileKeepsTheProfilesAlreadyThere(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 
@@ -237,8 +236,7 @@ func TestSaveProfileToFileKeepsTheProfilesAlreadyThere(t *testing.T) {
 	findProfile(t, loaded, "warehouse")
 }
 
-// A profile saved under a new name replaces the one it was renamed from, so the file never
-// holds both.
+// A profile saved under a new name replaces the old one, so the file never contains both.
 func TestSaveProfileToFileReplacesTheProfileItRenames(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 
@@ -262,8 +260,8 @@ func TestSaveProfileToFileReplacesTheProfileItRenames(t *testing.T) {
 	}
 }
 
-// The settings of the reader that are not profiles stay as they were, because saving one
-// connection must not rewrite the theme.
+// The settings that are not profiles stay unchanged, because a save of one connection must
+// not rewrite the theme.
 func TestSaveProfileToFileKeepsTheRestOfTheFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte("[ui]\ntheme = \"nord\"\n"), 0o600); err != nil {
@@ -286,9 +284,9 @@ func TestSaveProfileToFileKeepsTheRestOfTheFile(t *testing.T) {
 	}
 }
 
-// The connection form shows some of what a profile holds, not all of it. Saving from the form
-// must keep the settings it never showed, or editing a host by hand in the client would erase
-// the page size, the keepalive and the pre-connect command written in the file.
+// The connection form shows a part of a profile only. A save from the form must keep the
+// settings it does not show, or an edit of the host in the client would delete the page
+// size, the keepalive and the pre-connect command from the file.
 func TestSaveProfileToFileKeepsTheSettingsTheFormNeverShows(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	if err := os.WriteFile(path, []byte(`[profile.shop]
@@ -304,7 +302,7 @@ autocommit = true
 		t.Fatalf("cannot write the config file: %v", err)
 	}
 
-	// The reader edits the host in the form and saves. Everything else stays as it was.
+	// The user edits the host in the form and saves. Everything else stays unchanged.
 	loaded := cfg.LoadConfig(path)
 	held := findProfile(t, loaded, "shop")
 	held.Host = "other.example.com"

@@ -6,8 +6,8 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// The report names how many changes went, and the verb agrees with the count: a reader who
-// staged one change reads about one.
+// The report gives the number of discarded changes, and the verb matches the count: a user
+// with one staged change reads about one change.
 func TestDescribeDroppedChangesAgreesWithTheCount(t *testing.T) {
 	cases := []struct {
 		count int

@@ -11,11 +11,11 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/engines"
 )
 
-// One connection per profile, kept for the life of the process. A server with no terminal
-// cannot ask for a password, so a profile that needs one is refused with the reason.
+// One connection per profile, held for the life of the process. A server without a terminal
+// cannot ask for a password, so a profile that needs one gives an error with the reason.
 
-// FindUnreachableReason returns why a server without a terminal cannot open this profile, or
-// nothing where it can.
+// FindUnreachableReason returns the reason a server without a terminal cannot open this
+// profile, or an empty string if it can.
 func FindUnreachableReason(profile cfg.Profile) string {
 	if !cfg.NeedsPasswordPrompt(profile) {
 		return ""
@@ -24,7 +24,7 @@ func FindUnreachableReason(profile cfg.Profile) string {
 		"cannot do; give it password_env or password_command to reach it from here"
 }
 
-// Connection is one connection this server opened, and the relations it holds.
+// Connection is one connection of this server, with its table list.
 type Connection struct {
 	Session db.Session
 
@@ -34,15 +34,15 @@ type Connection struct {
 	readAt     time.Time
 }
 
-// Tables returns the relations of the connection.
+// Tables returns the tables of the connection.
 func (connection *Connection) Tables() []db.TableRef {
 	connection.guard.Lock()
 	defer connection.guard.Unlock()
 	return connection.tables
 }
 
-// RefreshTables reads the relations again once the list is older than the interval, so a
-// table created during the session is found.
+// RefreshTables reads the tables again if the list is older than the interval, so a table
+// created during the session becomes visible.
 func (connection *Connection) RefreshTables(ctx context.Context) error {
 	connection.guard.Lock()
 	stale := time.Since(connection.readAt) >= core.CatalogTTL
@@ -61,39 +61,39 @@ func (connection *Connection) RefreshTables(ctx context.Context) error {
 	return nil
 }
 
-// stop closes the connection and whatever was started to reach it.
+// stop closes the connection and the processes started for it.
 func (connection *Connection) stop() {
 	_ = connection.Session.Close()
 	connection.preConnect.Stop()
 }
 
-// Sessions opens one connection per profile and keeps it.
+// Sessions opens one connection per profile and holds it.
 type Sessions struct {
 	adapters engines.Adapters
 
 	guard sync.Mutex
-	// Each entry is the attempt, not the connection, so two calls at the same time share
-	// one attempt.
+	// Each entry is the attempt and not the connection, so two calls at the same time
+	// share one attempt.
 	opening map[string]*attempt
 }
 
-// openTimeout is how long one attempt at opening a connection may take. A server that never
-// answers would otherwise hold every later call to the same profile.
+// openTimeout is the time limit of one attempt to open a connection. Without it a server
+// that never answers would block every later call to the same profile.
 const openTimeout = 30 * time.Second
 
-// attempt is one attempt at opening a connection, which several calls may wait on.
+// attempt is one attempt to open a connection. Several calls can wait on it.
 type attempt struct {
 	done       chan struct{}
 	connection *Connection
 	err        error
 }
 
-// CreateSessions builds the store of connections this server opens.
+// CreateSessions returns the connection store of this server.
 func CreateSessions(adapters engines.Adapters) *Sessions {
 	return &Sessions{adapters: adapters, opening: map[string]*attempt{}}
 }
 
-// OpenConnection returns the connection of this profile, and opens it on the first call.
+// OpenConnection returns the connection of this profile and opens it on the first call.
 func (sessions *Sessions) OpenConnection(
 	ctx context.Context, profile cfg.Profile,
 ) (*Connection, error) {
@@ -116,15 +116,15 @@ func (sessions *Sessions) OpenConnection(
 	}
 }
 
-// runOpenAttempt opens one connection for every call that waits on this attempt. It runs on a
-// context of its own, so a call that gives up leaves the attempt for the calls beside it.
+// runOpenAttempt opens one connection for every call that waits on this attempt. It runs on
+// its own context, so a call that cancels leaves the attempt for the other calls.
 func (sessions *Sessions) runOpenAttempt(started *attempt, profile cfg.Profile) {
 	ctx, cancel := context.WithTimeout(context.Background(), openTimeout)
 	defer cancel()
 
 	started.connection, started.err = openProfileConnection(ctx, profile, sessions.adapters)
 	if started.err != nil {
-		// Dropped, so the next call tries again instead of answering the old failure.
+		// Removed, so the next call tries again and does not return the old error.
 		sessions.guard.Lock()
 		delete(sessions.opening, profile.Name)
 		sessions.guard.Unlock()
@@ -132,7 +132,7 @@ func (sessions *Sessions) runOpenAttempt(started *attempt, profile cfg.Profile) 
 	close(started.done)
 }
 
-// CloseAll closes every connection this server opened.
+// CloseAll closes every connection of this server.
 func (sessions *Sessions) CloseAll() {
 	sessions.guard.Lock()
 	open := make([]*attempt, 0, len(sessions.opening))
@@ -150,8 +150,8 @@ func (sessions *Sessions) CloseAll() {
 	}
 }
 
-// openProfileConnection opens one connection, reads its relations, and stops whatever it
-// started where any of that fails.
+// openProfileConnection opens one connection and reads its tables. If any step fails, it
+// stops the processes it started.
 func openProfileConnection(
 	ctx context.Context, profile cfg.Profile, adapters engines.Adapters,
 ) (*Connection, error) {

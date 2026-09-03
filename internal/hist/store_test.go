@@ -9,9 +9,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// A nil store is what the client holds where the history file could not be opened. Every call
-// has to answer rather than stop the client, because a reader who cannot write a history still
-// opens every connection.
+// The client holds a nil store if the history file could not be opened. Every call must
+// return and not stop the client, because a user who cannot write a history can still open
+// every connection.
 func TestANilStoreAnswersEveryCall(t *testing.T) {
 	var store *Store
 
@@ -70,8 +70,8 @@ func TestRecordAndListRecentKeepTheNewestFirst(t *testing.T) {
 	}
 }
 
-// The history of one profile is not the history of another, or a reader would see statements
-// that ran somewhere else.
+// The history of one profile is separate from the history of another, or the user would see
+// statements that ran on a different server.
 func TestListRecentKeepsTheProfilesApart(t *testing.T) {
 	store := openTestStore(t)
 
@@ -113,7 +113,8 @@ func TestListRecentHoldsToItsLimit(t *testing.T) {
 	}
 }
 
-// A statement that failed is kept with its message, so a reader can see what went wrong.
+// A statement that failed is stored with its error message, so the user can see the
+// reason.
 func TestRecordKeepsTheMessageOfAStatementThatFailed(t *testing.T) {
 	store := openTestStore(t)
 	if err := store.Record(HistoryEntry{
@@ -132,8 +133,8 @@ func TestRecordKeepsTheMessageOfAStatementThatFailed(t *testing.T) {
 	}
 }
 
-// A query kept by name is replaced when it is kept again, so a reader never has two of one
-// name and never has to remove one first.
+// A query saved under a name is replaced by the next save with that name, so the user never
+// has two queries with one name and never has to delete one first.
 func TestSaveQueryReplacesTheOneOfThatName(t *testing.T) {
 	store := openTestStore(t)
 
@@ -176,7 +177,7 @@ func TestDeleteSavedRemovesOnlyThatQuery(t *testing.T) {
 	}
 }
 
-// The tabs are read back as they were left, because the next connect opens them again.
+// The tabs are read back unchanged, because the next connection opens them again.
 func TestSaveAndFindWorkspaceRoundTrip(t *testing.T) {
 	store := openTestStore(t)
 
@@ -212,7 +213,8 @@ func TestSaveAndFindWorkspaceRoundTrip(t *testing.T) {
 	}
 }
 
-// Saving again replaces the tabs, so a workspace never grows the tabs of an earlier run.
+// A second save replaces the tabs, so a workspace never collects the tabs of an earlier
+// run.
 func TestSaveWorkspaceReplacesWhatWasThere(t *testing.T) {
 	store := openTestStore(t)
 
@@ -233,8 +235,9 @@ func TestSaveWorkspaceReplacesWhatWasThere(t *testing.T) {
 	}
 }
 
-// Every save runs on its own goroutine, so one can reach the file after a newer one. The
-// number of the snapshot decides, or a press would bring back the tabs of an earlier one.
+// Every save runs in its own goroutine, so an older save can reach the file after a newer
+// one. The snapshot number decides which one is stored, or a key press would restore the
+// tabs of an earlier snapshot.
 func TestSaveWorkspaceDropsASnapshotOlderThanTheOneWritten(t *testing.T) {
 	store := openTestStore(t)
 
@@ -254,7 +257,7 @@ func TestSaveWorkspaceDropsASnapshotOlderThanTheOneWritten(t *testing.T) {
 		t.Errorf("the workspace holds %+v, wanted the newer snapshot", held.Tabs)
 	}
 
-	// A newer one still writes.
+	// A newer snapshot is still written.
 	if err := store.SaveWorkspace("shop", SavedWorkspace{
 		Change: 3, Tabs: []SavedTab{{Kind: "query", SQL: "newest"}},
 	}); err != nil {
@@ -265,7 +268,7 @@ func TestSaveWorkspaceDropsASnapshotOlderThanTheOneWritten(t *testing.T) {
 		t.Errorf("the workspace holds %+v, wanted the newest snapshot", held.Tabs)
 	}
 
-	// Each profile is numbered on its own.
+	// Each profile has its own snapshot number.
 	if err := store.SaveWorkspace("other", SavedWorkspace{
 		Change: 1, Tabs: []SavedTab{{Kind: "query", SQL: "first"}},
 	}); err != nil {
@@ -277,8 +280,8 @@ func TestSaveWorkspaceDropsASnapshotOlderThanTheOneWritten(t *testing.T) {
 	}
 }
 
-// A file this client cannot read is reported, because the tabs of the user are answered as
-// nothing otherwise, which reads as a profile that was never opened.
+// A file the client cannot read gives an error. Without the error the tabs are returned as
+// empty, which looks like a profile that was never opened.
 func TestFindWorkspaceReportsAFileItCannotRead(t *testing.T) {
 	store := openTestStore(t)
 	if err := store.SaveWorkspace("shop", SavedWorkspace{
@@ -303,8 +306,8 @@ func TestFindWorkspaceAnswersNothingForAProfileNeverSaved(t *testing.T) {
 	}
 }
 
-// The catalog is cached so a reconnect draws the tree at once. A payload written by an older
-// version carries another shape, so the version is checked and an old one is dropped.
+// The catalog is cached, so a reconnect draws the tree immediately. A payload from an older
+// version has another format, so the version is checked and an old payload is discarded.
 func TestSaveAndFindCatalogRoundTrip(t *testing.T) {
 	store := openTestStore(t)
 
@@ -329,7 +332,7 @@ func TestSaveAndFindCatalogRoundTrip(t *testing.T) {
 	}
 }
 
-// A mark goes on and comes off with the same call, so one key does both.
+// One call adds and removes the mark, so one key does both.
 func TestToggleFavouriteMarksAndUnmarks(t *testing.T) {
 	store := openTestStore(t)
 	favourite := core.Favourite{Kind: core.FavouriteTable, Schema: "public", Name: "orders"}
@@ -357,8 +360,8 @@ func TestToggleFavouriteMarksAndUnmarks(t *testing.T) {
 	}
 }
 
-// The recent schemas are ordered by a counter and not by the clock, because two visits inside
-// one millisecond read as equal and which came last is the whole point of the list.
+// The recent schemas are ordered by a counter and not by a timestamp, because two visits in
+// the same millisecond have the same timestamp and the order is the purpose of the list.
 func TestVisitSchemaKeepsTheOrderOfTwoVisitsInOneMoment(t *testing.T) {
 	store := openTestStore(t)
 
@@ -380,7 +383,7 @@ func TestVisitSchemaKeepsTheOrderOfTwoVisitsInOneMoment(t *testing.T) {
 	}
 }
 
-// Visiting a schema again moves it to the front rather than listing it twice.
+// A second visit to a schema moves it to the front and does not add a second entry.
 func TestVisitSchemaAgainMovesItToTheFront(t *testing.T) {
 	store := openTestStore(t)
 	for _, schema := range []string{"first", "second", "first"} {
@@ -401,8 +404,8 @@ func TestVisitSchemaAgainMovesItToTheFront(t *testing.T) {
 	}
 }
 
-// The file is made where its directory does not exist yet, because the first run of the client
-// has neither.
+// The file is created together with its directory, because the first run of the client has
+// neither.
 func TestOpenMakesTheDirectoryOfTheFile(t *testing.T) {
 	path := t.TempDir() + "/state/masume/history.sqlite"
 	store, err := Open(path)
@@ -418,8 +421,8 @@ func TestOpenMakesTheDirectoryOfTheFile(t *testing.T) {
 	}
 }
 
-// The file holds every statement that ran, so it holds the values written into one. On a
-// machine with more than one user, a file another user can read hands them that.
+// The file holds every statement that ran, and with it the values in those statements. On a
+// machine with several users, a readable file gives that data to another user.
 func TestOpenKeepsTheFilePrivateToItsOwner(t *testing.T) {
 	directory := t.TempDir() + "/state/masume"
 	path := directory + "/history.sqlite"
@@ -451,7 +454,7 @@ func TestOpenKeepsTheFilePrivateToItsOwner(t *testing.T) {
 	}
 }
 
-// A file an earlier run left readable by everyone is narrowed when it is opened again.
+// A file that an earlier run left readable by everyone is restricted at the next open.
 func TestOpenNarrowsAFileAnEarlierRunLeftOpen(t *testing.T) {
 	path := t.TempDir() + "/history.sqlite"
 	first, err := Open(path)
@@ -480,8 +483,8 @@ func TestOpenNarrowsAFileAnEarlierRunLeftOpen(t *testing.T) {
 	}
 }
 
-// A file written by an earlier run is opened as it is, so a reader never loses a history to an
-// upgrade.
+// A file from an earlier version is opened unchanged, so an upgrade never deletes a
+// history.
 func TestOpenReadsAFileWrittenByAnEarlierRun(t *testing.T) {
 	path := t.TempDir() + "/history.sqlite"
 

@@ -7,9 +7,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// A server hands over whatever a row holds, and a terminal acts on some of it. A byte that
-// moves the cursor or opens a colour would break the frame around it, so every value is made
-// text before it is drawn.
+// A server returns the content of a row unchanged, and the terminal acts on a part of it. A
+// byte that moves the cursor or starts a colour would break the frame, so every value is
+// converted to safe text before it is drawn.
 func TestSafeTextTakesOutWhatATerminalWouldActOn(t *testing.T) {
 	for _, held := range []struct {
 		name  string
@@ -32,8 +32,7 @@ func TestSafeTextTakesOutWhatATerminalWouldActOn(t *testing.T) {
 	}
 }
 
-// Bytes that are no text at all still have to draw as something, rather than as a hole in
-// the row.
+// Invalid bytes must still draw a character and not leave a gap in the row.
 func TestSafeTextAnswersTextForBytesThatAreNotText(t *testing.T) {
 	written := present.SafeText(string([]byte{0xff, 0xfe, 0x41}))
 	if written == "" {
@@ -44,8 +43,8 @@ func TestSafeTextAnswersTextForBytesThatAreNotText(t *testing.T) {
 	}
 }
 
-// The width of a row is counted in cells the terminal draws, so a wide character counts twice
-// and a mark that sits on the letter before it counts nothing.
+// The width of a row is the number of terminal cells, so a wide character counts as two and
+// a combining mark counts as zero.
 func TestMeasureTextCountsTheCellsATerminalDraws(t *testing.T) {
 	for _, held := range []struct {
 		name  string
@@ -66,7 +65,7 @@ func TestMeasureTextCountsTheCellsATerminalDraws(t *testing.T) {
 	}
 }
 
-// A cut must never leave more cells than the column has, or the row after it moves along.
+// A cut must never leave more cells than the column has, or the next row moves.
 func TestTruncateTextNeverPassesTheWidth(t *testing.T) {
 	for _, text := range []string{
 		"", "a", "ada", "a much longer value than the column",
@@ -81,17 +80,17 @@ func TestTruncateTextNeverPassesTheWidth(t *testing.T) {
 	}
 }
 
-// A cut of a wide character cannot leave half of it, so the cut falls before it and the row
-// is one cell short rather than one cell too long.
+// A cut cannot leave half of a wide character, so the cut is before it and the row is one
+// cell short and not one cell too long.
 func TestTruncateTextDoesNotSplitAWideCharacter(t *testing.T) {
-	// Three wide characters are six cells. Five cells hold two of them and a marker.
+	// Three wide characters are six cells. Five cells hold two of them and the ellipsis.
 	written := present.TruncateText("漢字漢", 5)
 	if measured := present.MeasureText(written); measured > 5 {
 		t.Errorf("%q measures %d cells, wanted 5 at most", written, measured)
 	}
 }
 
-// A pad fills a column out, so every row of a grid is the same width.
+// A pad fills the column, so every row of a grid has the same width.
 func TestPadTextFillsToTheWidth(t *testing.T) {
 	for _, held := range []struct {
 		text  string
@@ -106,8 +105,8 @@ func TestPadTextFillsToTheWidth(t *testing.T) {
 	}
 }
 
-// A value longer than the column is cut and a shorter one is padded, so a fit is always
-// exactly the width.
+// A value longer than the column is cut and a shorter value is padded, so the result is
+// always exactly the width.
 func TestFitTextIsAlwaysTheWidthAsked(t *testing.T) {
 	for _, text := range []string{"", "a", "ada", "a much longer value", "漢字漢字"} {
 		for _, width := range []int{1, 3, 8, 20} {
@@ -119,8 +118,8 @@ func TestFitTextIsAlwaysTheWidthAsked(t *testing.T) {
 	}
 }
 
-// A line break inside a value would push the rest of the frame down a row, so a value drawn
-// in one cell of the grid holds no break.
+// A line break inside a value would move the rest of the frame down one row, so a value in a
+// grid cell contains no line break.
 func TestSafeTextKeepsAValueOnOneRow(t *testing.T) {
 	for _, text := range []string{"line\nbreak", "line\r\nbreak", "a\n\nb"} {
 		written := present.SafeText(text)
@@ -130,8 +129,8 @@ func TestSafeTextKeepsAValueOnOneRow(t *testing.T) {
 	}
 }
 
-// A block of text keeps the breaks that make it a block, because the cell viewer draws it over
-// several rows. Every other control character still becomes a space.
+// A block of text keeps its line breaks, because the cell viewer draws it on several rows.
+// Every other control character becomes a space.
 func TestSafeLinesKeepsTheBreaksAndNothingElse(t *testing.T) {
 	written := present.SafeLines("first\rline\nsecond\aline")
 	if strings.Count(written, "\n") != 1 {
@@ -153,7 +152,7 @@ func TestWrapWordsKeepsEveryLineInsideTheWidth(t *testing.T) {
 	}
 }
 
-// A word longer than the width has to be broken, or it would run past the pane.
+// A word longer than the width must be broken, or it would exceed the pane.
 func TestWrapWordsBreaksAWordTooLongForTheWidth(t *testing.T) {
 	lines := present.WrapWords("supercalifragilistic", 6)
 	if len(lines) < 2 {
@@ -167,12 +166,12 @@ func TestWrapWordsBreaksAWordTooLongForTheWidth(t *testing.T) {
 }
 
 func TestCountWrappedRowsAgreesWithTheWrap(t *testing.T) {
-	// A card is sized from the count and then drawn with the wrap. A count one row short
-	// takes the last row of the text off the card.
+	// The card size comes from the count and the card is drawn with the wrap. A count
+	// that is one row too low moves the last row of the text off the card.
 	for _, text := range []string{
 		"", "   ", "short", "the server refused the statement because the relation does not exist",
-		// A row these fill to the last cell, with words still to come. The wrap starts a
-		// new row there, because the space that would follow the word needs a cell too.
+		// These words fill the row to the last cell and more words follow. The wrap
+		// starts a new row, because the space after the word also needs a cell.
 		"one two three four five six", "aa bb cc dd", "a b c d e f g h i j k l",
 		"  an indented line that has to wrap somewhere",
 		"averylongwordthatcannotbebroken on a space",
@@ -232,8 +231,8 @@ func TestFormatCountGroupsTheFigures(t *testing.T) {
 	}
 }
 
-// The bar says how many rows were read and whether there are more, so a truncated read is
-// never reported as the whole relation.
+// The status bar shows the number of rows read and whether more rows exist, so a truncated
+// read is never reported as the whole table.
 func TestFormatResultSizeSaysWhenThereAreMoreRows(t *testing.T) {
 	whole := present.FormatResultSize(3, false, 3, true)
 	if strings.Contains(whole, "+") {
@@ -254,7 +253,8 @@ func TestIsJsonTypeReadsTheTypesAServerNames(t *testing.T) {
 			t.Errorf("%q does not read as a JSON type", dataType)
 		}
 	}
-	// The name comes from the catalog of the server in lower case, so the match is exact.
+	// The name comes from the catalog of the server in lower case, so the comparison is
+	// exact.
 	for _, dataType := range []string{"", "text", "integer", "jsonish", "JSON"} {
 		if present.IsJSONType(dataType) {
 			t.Errorf("%q reads as a JSON type", dataType)
@@ -262,9 +262,8 @@ func TestIsJsonTypeReadsTheTypesAServerNames(t *testing.T) {
 	}
 }
 
-// A column that holds a document is drawn indented in a full-height viewer, whichever
-// server it came from. MongoDB names its own `object` and `array`, and a SQL server names
-// the same thing `json`.
+// A column that holds a document is indented in the full-height viewer, for every server.
+// MongoDB uses the type names `object` and `array`, and a SQL server uses `json`.
 func TestIsJSONTypeNamesEveryColumnThatHoldsADocument(t *testing.T) {
 	for _, held := range []struct {
 		dataType string
@@ -273,7 +272,7 @@ func TestIsJSONTypeNamesEveryColumnThatHoldsADocument(t *testing.T) {
 		{"json", true}, {"jsonb", true},
 		{"object", true}, {"array", true},
 		{"text", false}, {"varchar", false}, {"objectId", false},
-		// A column the sample saw under several types is not one that holds a document.
+		// A column the sample found with several types is not a document column.
 		{"mixed", false},
 	} {
 		if answered := present.IsJSONType(held.dataType); answered != held.want {
@@ -283,7 +282,7 @@ func TestIsJSONTypeNamesEveryColumnThatHoldsADocument(t *testing.T) {
 	}
 }
 
-// The viewer indents the document of a MongoDB cell, which the grid draws on one line.
+// The viewer indents the document of a MongoDB cell. The grid draws it on one line.
 func TestFormatForViewerIndentsAMongodbDocument(t *testing.T) {
 	written := present.FormatForViewer(`{"sku":"MN-003","qty":2}`, "object")
 	if !strings.Contains(written, "\n") {
@@ -295,8 +294,8 @@ func TestFormatForViewerIndentsAMongodbDocument(t *testing.T) {
 }
 
 func TestWrapWordsAlwaysEndsOnACharacterWiderThanTheRow(t *testing.T) {
-	// A character that does not fit would cut nothing, and the wrap would ask again with
-	// the same text. It takes a row of its own, so the wrap always moves on.
+	// A character that does not fit would cut nothing, and the wrap would repeat with the
+	// same text. It takes its own row, so the wrap always advances.
 	for _, held := range []struct {
 		name  string
 		text  string

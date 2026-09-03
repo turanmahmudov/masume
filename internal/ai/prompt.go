@@ -6,33 +6,33 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// Everything the model is told before the first question: what it is, what it may call, and
-// the shape of the connection. The contents of the editor go with the question instead,
-// because they change between questions and the provider caches the system prompt.
+// The text sent to the model before the first question: its role, the tools it can call, and
+// the structure of the connection. The content of the editor goes with the question, because
+// it changes between questions and the provider caches the system prompt.
 
-// maxEditorSQLChars is the length above which the contents of the editor are cut.
+// maxEditorSQLChars is the length at which the content of the editor is truncated.
 const maxEditorSQLChars = 4000
 
-// EditorContext is the contents of the editor, so a question can say "this query".
+// EditorContext is the content of the editor, so a question can refer to "this query".
 type EditorContext struct {
 	SQL string
-	// LastError is the message of the server from the last run, if it failed.
+	// LastError is the error message of the server from the last run, if it failed.
 	LastError string
 }
 
-// StatementLanguage says what a statement of the connected server is written in, so the
-// chat proposes one the server takes rather than SQL for a server that has none.
+// StatementLanguage is the statement language of the connected server, so the chat proposes
+// a statement the server accepts and not SQL for a server without SQL.
 type StatementLanguage struct {
-	// Name is what the language is called, such as SQL.
+	// Name is the name of the language, for example SQL.
 	Name string
-	// FenceTag opens the fenced block a proposed statement is written in.
+	// FenceTag is the tag of the fenced block that holds a proposed statement.
 	FenceTag string
-	// Example shows the shape of one statement, and is empty for SQL.
+	// Example shows the form of one statement. It is empty for SQL.
 	Example string
 }
 
-// describeStatementLanguage writes the opening lines of the prompt, which are the only
-// ones that differ between a server that takes SQL and one that takes a command.
+// describeStatementLanguage returns the first lines of the prompt. They are the only lines
+// that are different between a server with SQL and a server with commands.
 func describeStatementLanguage(language StatementLanguage) []string {
 	name := language.Name
 	if name == "" {
@@ -86,8 +86,8 @@ var systemPrompt = strings.Join([]string{
 	"Keep prose short.",
 }, "\n")
 
-// describeProfileInstructions writes the rules the user set for this connection, such as a
-// naming convention.
+// describeProfileInstructions returns the rules the user set for this connection, for
+// example a naming convention.
 func describeProfileInstructions(instructions string) string {
 	trimmed := strings.TrimSpace(instructions)
 	if trimmed == "" {
@@ -96,7 +96,7 @@ func describeProfileInstructions(instructions string) string {
 	return "\n\nInstructions the user set for this connection:\n" + trimmed
 }
 
-// DescribeEditorContext writes the contents of the editor, which are sent with the question.
+// DescribeEditorContext returns the content of the editor, which is sent with the question.
 func DescribeEditorContext(context EditorContext) string {
 	trimmed := strings.TrimSpace(context.SQL)
 	if trimmed == "" {
@@ -115,18 +115,18 @@ func DescribeEditorContext(context EditorContext) string {
 	return strings.Join(lines, "\n")
 }
 
-// ChatPromptSource is what the chat of one connection is told, beside the prompt above.
+// ChatPromptSource holds the connection data added to the prompt above.
 type ChatPromptSource struct {
 	DialectName string
-	// Language says what a statement of this server is written in.
+	// Language is the statement language of this server.
 	Language      StatementLanguage
 	DefaultSchema string
 	Tables        []db.TableRef
-	// Instructions holds the rules the user wrote for this connection.
+	// Instructions holds the rules the user set for this connection.
 	Instructions string
 }
 
-// BuildChatSystemPrompt writes the same text for every question of one connection, so the
+// BuildChatSystemPrompt returns the same text for every question of one connection, so the
 // provider can cache it.
 func BuildChatSystemPrompt(source ChatPromptSource) string {
 	schema := BuildSchemaContext(SchemaContextSource{

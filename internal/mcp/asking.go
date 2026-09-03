@@ -8,27 +8,29 @@ import (
 )
 
 // The only question the server asks. The protocol calls it elicitation: the server sends a
-// request the other way, and the client shows it to the user. A client that does not say it
-// can ask is never asked.
+// request in the other direction, and the client shows it to the user. A client that does
+// not report this capability never gets the question.
 
-// defaultAnswerTimeout is how long the user has to answer before the statement is dropped.
+// defaultAnswerTimeout is the time the user has to answer before the statement is
+// cancelled.
 const defaultAnswerTimeout = 120 * time.Second
 
-// Asker asks the user through the client of the agent, and reports the answer.
+// Asker sends the question to the user through the client of the agent and returns the
+// answer.
 type Asker struct {
 	logEvent func(message string)
-	// answerTimeout is how long one question waits.
+	// answerTimeout is the time one question waits for an answer.
 	answerTimeout time.Duration
 
 	guard sync.Mutex
-	// waiting holds one channel per question the client has not answered.
+	// waiting holds one channel per open question.
 	waiting      map[string]chan any
 	write        func(message any)
 	clientCanAsk bool
 	nextID       int
 }
 
-// CreateAsker builds the asker of one server.
+// CreateAsker returns the asker of one server.
 func CreateAsker(logEvent func(message string)) *Asker {
 	return &Asker{
 		logEvent:      logEvent,
@@ -37,15 +39,15 @@ func CreateAsker(logEvent func(message string)) *Asker {
 	}
 }
 
-// CanAsk is true where the client said at initialize that it can ask its user.
+// CanAsk is true if the client reported at initialize that it can ask its user.
 func (asker *Asker) CanAsk() bool {
 	asker.guard.Lock()
 	defer asker.guard.Unlock()
 	return asker.findAskWriter() != nil
 }
 
-// findAskWriter returns the writer to ask through, or nothing while the client cannot be
-// asked. The caller holds the lock.
+// findAskWriter returns the writer for the question, or false if the client cannot be asked.
+// The caller holds the lock.
 func (asker *Asker) findAskWriter() func(message any) {
 	if !asker.clientCanAsk {
 		return nil
@@ -63,14 +65,14 @@ func (asker *Asker) RememberClient(capabilities any) {
 	asker.clientCanAsk = is && elicitation != nil
 }
 
-// AttachWriter takes the write function, once the transport has one.
+// AttachWriter stores the write function after the transport has one.
 func (asker *Asker) AttachWriter(write func(message any)) {
 	asker.guard.Lock()
 	defer asker.guard.Unlock()
 	asker.write = write
 }
 
-// ReceiveAnswer is true where the message answered a question this asker sent.
+// ReceiveAnswer is true if the message is the answer to a question of this asker.
 func (asker *Asker) ReceiveAnswer(message map[string]any) bool {
 	id, is := message["id"].(string)
 	if !is {
@@ -88,7 +90,7 @@ func (asker *Asker) ReceiveAnswer(message map[string]any) bool {
 	return true
 }
 
-// AskConfirmation is true only where the user saw the question and agreed.
+// AskConfirmation is true only if the user saw the question and confirmed.
 func (asker *Asker) AskConfirmation(ctx context.Context, title, body string) bool {
 	asker.guard.Lock()
 	write := asker.findAskWriter()
@@ -98,7 +100,7 @@ func (asker *Asker) AskConfirmation(ctx context.Context, title, body string) boo
 	}
 	asker.nextID++
 	id := fmt.Sprintf("ask-%d", asker.nextID)
-	// Buffered, so the answer of a question that ran out of time is not held by anybody.
+	// Buffered, so the answer of a question that timed out blocks nothing.
 	answered := make(chan any, 1)
 	asker.waiting[id] = answered
 	asker.guard.Unlock()
@@ -112,7 +114,7 @@ func (asker *Asker) AskConfirmation(ctx context.Context, title, body string) boo
 		},
 	})
 
-	// The answer of the user is a message on the stream this call was read from.
+	// The answer of the user arrives on the same stream as this call.
 	releaseReader(ctx)
 	said := readsAsYes(asker.waitForAnswer(id, answered))
 	if said {
@@ -123,8 +125,9 @@ func (asker *Asker) AskConfirmation(ctx context.Context, title, body string) boo
 	return said
 }
 
-// waitForAnswer returns what the client said, and nothing where it said nothing in time. A
-// client that gives no answer leaves the statement unrun, so the server does not wait forever.
+// waitForAnswer returns the answer of the client, and false if no answer arrives in time. A
+// client without an answer leaves the statement unrun, so the server does not wait without a
+// limit.
 func (asker *Asker) waitForAnswer(id string, answered chan any) any {
 	timer := time.NewTimer(asker.answerTimeout)
 	defer timer.Stop()
@@ -138,7 +141,7 @@ func (asker *Asker) waitForAnswer(id string, answered chan any) any {
 		delete(asker.waiting, id)
 		asker.guard.Unlock()
 		if !pending {
-			// The answer arrived as the time ran out.
+			// The answer arrived at the same time as the timeout.
 			return <-answered
 		}
 		asker.logEvent("! " + id + " was not answered in time")
@@ -146,7 +149,7 @@ func (asker *Asker) waitForAnswer(id string, answered chan any) any {
 	}
 }
 
-// buildAnswerSchema writes the schema of the answer: one field the user confirms.
+// buildAnswerSchema returns the schema of the answer: one field the user confirms.
 func buildAnswerSchema(body string) map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -159,7 +162,7 @@ func buildAnswerSchema(body string) map[string]any {
 	}
 }
 
-// readsAsYes is true only for an answer the user gave, and only for a yes.
+// readsAsYes is true only for an answer of the user, and only for a confirmation.
 func readsAsYes(result any) bool {
 	answer, is := result.(map[string]any)
 	if !is || answer["action"] != "accept" {

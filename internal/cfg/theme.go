@@ -6,7 +6,7 @@ import (
 	"slices"
 )
 
-// SyntaxRule is one highlight as a theme writes it. Every part is optional.
+// SyntaxRule is one highlight rule of a theme. Every part is optional.
 type SyntaxRule struct {
 	Foreground    string
 	HasForeground bool
@@ -18,22 +18,23 @@ type SyntaxRule struct {
 	HasItalic     bool
 	Underline     bool
 	HasUnderline  bool
-	// Another highlight this one takes its style from, before its own keys apply.
+	// Another rule this one inherits its style from. The keys of this rule are applied
+	// after it.
 	Link    string
 	HasLink bool
 }
 
-// ThemeTables holds the three tables of a theme. `config.toml` has the same three
+// ThemeTables holds the three tables of a theme. `config.toml` has the same three tables
 // under `[ui]`, so one colour can be changed without a theme file.
 type ThemeTables struct {
-	// The colour names of the theme, each one a hex value.
+	// The named colours of the theme, each one a hex value.
 	Palette map[string]string
-	// One entry per colour of the theme, each one a hex value or a name.
+	// One entry per colour role, each one a hex value or a palette name.
 	Colors map[string]string
 	Syntax map[string]SyntaxRule
 }
 
-// NewThemeTables builds three empty tables.
+// NewThemeTables returns three empty tables.
 func NewThemeTables() ThemeTables {
 	return ThemeTables{
 		Palette: map[string]string{},
@@ -45,35 +46,35 @@ func NewThemeTables() ThemeTables {
 // Appearance says whether a theme is for a dark or a light terminal.
 type Appearance string
 
-// The two appearances a theme may write.
+// The two appearances a theme can set.
 const (
 	AppearanceDark  Appearance = "dark"
 	AppearanceLight Appearance = "light"
-	// AppearanceUnset means the file wrote none, so the theme it extends provides it.
+	// AppearanceUnset means the file sets none, so the parent theme provides it.
 	AppearanceUnset Appearance = ""
 )
 
-// ThemeDocument is a theme file, read but not resolved.
+// ThemeDocument is a parsed theme file, before the colours are resolved.
 type ThemeDocument struct {
 	ThemeTables
 	Name string
-	// The title a person reads. The name, if the file has no title.
+	// The title shown to the user. It is the theme name if the file has no title.
 	Title      string
 	Appearance Appearance
-	// The theme that fills in every key this one leaves out.
+	// The theme that provides every key this one does not set.
 	Extends string
 }
 
-// hexColor matches a colour a theme writes directly. Anything else is a name.
+// hexColor matches a colour written as a hex value. All other text is a palette name.
 var hexColor = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
 
-// IsHexColor is true where the text is a colour rather than a name.
+// IsHexColor is true if the text is a hex colour and not a palette name.
 func IsHexColor(value string) bool {
 	return hexColor.MatchString(value)
 }
 
-// sortedKeys returns the keys of a table in a stable order, so the problems a file
-// reports come out the same way every time.
+// sortedKeys returns the keys of a table in a stable order, so the problems of a file are
+// always reported in the same order.
 func sortedKeys(table Table) []string {
 	keys := make([]string, 0, len(table))
 	for key := range table {
@@ -83,7 +84,8 @@ func sortedKeys(table Table) []string {
 	return keys
 }
 
-// readColorTable reads a table of colours. Only text can be a colour or a name.
+// readColorTable reads a table of colours. Only a string can be a hex value or a palette
+// name.
 func readColorTable(table Table, label string, problems *[]string) map[string]string {
 	read := map[string]string{}
 	for _, key := range sortedKeys(table) {
@@ -97,8 +99,8 @@ func readColorTable(table Table, label string, problems *[]string) map[string]st
 	return read
 }
 
-// readPalette reads the palette. An entry cannot be a name, because the names
-// point at it.
+// readPalette reads the palette. A palette entry cannot be a palette name, because the
+// names refer to this table.
 func readPalette(table Table, problems *[]string) map[string]string {
 	read := readColorTable(table, "palette entry", problems)
 	for _, key := range sortedNames(read) {
@@ -159,8 +161,8 @@ func readSyntax(table Table, problems *[]string) map[string]SyntaxRule {
 	return read
 }
 
-// readAppearance returns the appearance the file wrote, or none so the caller can
-// look further.
+// readAppearance returns the appearance of the file, or AppearanceUnset so the caller can
+// use the parent theme.
 func readAppearance(root Table, problems *[]string) Appearance {
 	written, present := FindString(root, "appearance")
 	if !present {
@@ -185,8 +187,8 @@ func readTables(root Table, problems *[]string) ThemeTables {
 	}
 }
 
-// ParseThemeDocument reads one theme file. The caller gives the name, which is the
-// file name, so two files cannot use one theme name.
+// ParseThemeDocument reads one theme file. The caller passes the name, which is the file
+// name, so two files cannot have the same theme name.
 func ParseThemeDocument(document Table, name string) (ThemeDocument, []string) {
 	problems := []string{}
 	if document == nil {
@@ -208,8 +210,8 @@ func ParseThemeDocument(document Table, name string) (ThemeDocument, []string) {
 	}, problems
 }
 
-// ParseThemeTables reads the same three tables from `[ui]`, to lay over the chosen
-// theme.
+// ParseThemeTables reads the same three tables from `[ui]`. They are applied over the
+// selected theme.
 func ParseThemeTables(section Table) (ThemeTables, []string) {
 	problems := []string{}
 	if section == nil {

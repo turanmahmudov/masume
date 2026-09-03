@@ -7,34 +7,37 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// One question, answered: the model is asked, what it asks for is run, and it is asked again
-// with the answers, until it writes a reply or runs out of turns.
+// One question and its answer: the client sends the question, runs the calls the model
+// requests, and sends the results back, until the model writes a reply or reaches the step
+// limit.
 
-// MaxToolSteps is the number of calls after which a run must answer with what it has.
+// MaxToolSteps is the number of calls after which a run must answer with the data it has.
 const MaxToolSteps = 25
 
-// RunHooks is what the caller is told while a run happens.
+// RunHooks are the callbacks the caller gets during a run.
 type RunHooks struct {
-	// StartTextBlock says a block of text follows an earlier one.
+	// StartTextBlock reports that a block of text follows an earlier block.
 	StartTextBlock func()
 	AppendText     func(delta string)
-	// StartToolStep names the call that runs now, and FinishToolStep keeps it as done.
+	// StartToolStep reports the call that starts, and FinishToolStep reports its end.
 	StartToolStep  func(label string)
 	FinishToolStep func()
-	// CallTool runs one call of the catalogue and returns what it said, as JSON text.
+	// CallTool runs one call of the catalogue and returns its result as JSON text.
 	CallTool func(ctx context.Context, name string, input map[string]any) string
 	LogEvent func(message string)
 }
 
-// RunResult is what a whole run answered.
+// RunResult is the result of a whole run.
 type RunResult struct {
-	// ReceivedChars is how much text arrived, so a reply that said nothing can be reported.
+	// ReceivedChars is the number of characters received, so an empty reply can be
+	// reported.
 	ReceivedChars int
 	FinishReason  string
 	Usage         Usage
 }
 
-// RunChat asks the model, runs what it asks for, and returns once it wrote a reply.
+// RunChat sends the question, runs the calls the model requests, and returns after the
+// model writes a reply.
 func RunChat(
 	ctx context.Context, model Model, request Request, hooks RunHooks,
 ) (RunResult, error) {
@@ -46,7 +49,7 @@ func RunChat(
 		asked.Messages = messages
 
 		answer, err := model.Stream(ctx, asked, func(event Event) {
-			// A run the caller stopped writes nothing more, and the stop is the end of ctx.
+			// A run the caller stopped writes nothing more. The stop cancels ctx.
 			if ctx.Err() != nil {
 				return
 			}
@@ -81,7 +84,7 @@ func RunChat(
 	return result, nil
 }
 
-// runOneCall runs one call, and reports it as a step of the reply.
+// runOneCall runs one call and reports it as a step of the reply.
 func runOneCall(ctx context.Context, call ToolCall, hooks RunHooks) ToolAnswer {
 	hooks.StartToolStep(DescribeToolActivity(call.Name, call.Input))
 	hooks.LogEvent("> tool " + call.Name + " " + core.CutForLog(call.Arguments))
@@ -92,7 +95,7 @@ func runOneCall(ctx context.Context, call ToolCall, hooks RunHooks) ToolAnswer {
 	return ToolAnswer{CallID: call.ID, Name: call.Name, Output: output}
 }
 
-// addUsage sums what a step spent into the total of the run.
+// addUsage adds the token count of a step to the total of the run.
 func addUsage(total, step Usage) Usage {
 	return Usage{
 		InputTokens:       total.InputTokens + step.InputTokens,
@@ -101,17 +104,18 @@ func addUsage(total, step Usage) Usage {
 	}
 }
 
-// FindEmptyReplyProblem returns why a run wrote nothing, or nothing where it wrote a reply.
+// FindEmptyReplyProblem returns the reason a run wrote no reply, and an empty string if it
+// wrote one.
 func FindEmptyReplyProblem(received int, finishReason string) string {
 	if received > 0 {
 		return ""
 	}
-	// A run that stops on a tool call and says nothing ran out of steps.
+	// A run that stops at a tool call without text reached the step limit.
 	if finishReason == FinishToolCalls {
 		return "ran out of turns after " + strconv.Itoa(MaxToolSteps) + " tool calls, before " +
 			"it could answer; try asking again, or narrow the question"
 	}
-	// No error and no text: the model stopped short, often on a content filter.
+	// No error and no text: the model stopped early, often at a content filter.
 	if finishReason != FinishStop {
 		return "the model answered nothing (" + finishReason + ")"
 	}

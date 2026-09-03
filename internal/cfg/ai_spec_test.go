@@ -7,7 +7,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 )
 
-// readAiConfig reads the chat settings out of a config file.
+// readAiConfig reads the chat settings from a config file.
 func readAiConfig(t *testing.T, body string) cfg.AiConfig {
 	t.Helper()
 	document, err := cfg.DecodeDocument(body)
@@ -17,8 +17,8 @@ func readAiConfig(t *testing.T, body string) cfg.AiConfig {
 	return cfg.ParseAiConfig(document)
 }
 
-// A provider this client does not have is reported, because the chat opens on the default
-// one otherwise and the user is never told the name was misspelled.
+// An unknown provider is reported. Without the report the chat starts with the default
+// provider and the user does not see the spelling error.
 func TestParseAiConfigReportsAProviderItDoesNotHave(t *testing.T) {
 	for _, held := range []struct {
 		name string
@@ -49,7 +49,7 @@ func TestParseAiConfigReportsAProviderItDoesNotHave(t *testing.T) {
 	}
 }
 
-// A provider the client has is read and reported as nothing.
+// A known provider is read and reports no problem.
 func TestParseAiConfigReadsAProviderItHas(t *testing.T) {
 	config := readAiConfig(t,
 		"[ai]\ndefault_provider = \"openai\"\n[ai.providers.openai]\nmodel = \"a-model\"\n")

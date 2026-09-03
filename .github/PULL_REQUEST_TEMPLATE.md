@@ -10,27 +10,27 @@ Closes #
 
 ## How it was checked
 
-<!-- Say what you ran and what it answered. Please do not tick a box you did not run. -->
+<!-- List what you ran and the result. Please do not tick a box for a check you did not run. -->
 
-- [ ] `mise run check` is green.
-- [ ] `mise run test-integration-full` is green, if this change touches an engine.
+- [ ] `mise run check` passes.
+- [ ] `mise run test-integration-full` passes, if this change touches an engine.
 - [ ] There is a test that fails without this change.
 
 ## What the screen shows
 
 <!--
-If a user sees this change, put the frame before and the frame after here.
-`tmux capture-pane -p` writes a frame as text, and a screenshot works too.
+If this change is visible on screen, include the frame before and after.
+`tmux capture-pane -p` writes a frame as text. A screenshot works too.
 Remove any value you cannot share.
 -->
 
-## Anything the reviewer should know
+## Notes for the reviewer
 
 <!--
-Worth calling out, if it applies:
+Mention these if they apply:
 - A new dependency, and why it is needed.
-- A new config key. It belongs in `config.example.toml` too.
-- A new action. It needs a chord in the default preset, or a test will fail.
+- A new config key. Add it to `config.example.toml` too.
+- A new action. It needs a key binding in the default preset, otherwise a test fails.
 -->
 
-- [ ] Nothing here holds a password, a private host name, or real data.
+- [ ] Nothing here contains a password, a private host name, or real data.

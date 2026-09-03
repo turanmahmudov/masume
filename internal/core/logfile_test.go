@@ -26,7 +26,7 @@ func TestLogFileAppendWritesEveryLineInOrder(t *testing.T) {
 			t.Errorf("line %d reads %q, wanted it to end with %q", at+1, lines[at], wanted)
 		}
 	}
-	// Every line opens with the time it was written, as an hour of the day in UTC.
+	// Every line starts with the write time, as a UTC time of day.
 	if len(lines[0]) < 25 || lines[0][10] != 'T' || lines[0][23] != 'Z' {
 		t.Errorf("the line opens with %q, wanted a time", lines[0][:24])
 	}
@@ -56,7 +56,7 @@ func TestLogFileAppendRollsTheFileAtItsCap(t *testing.T) {
 }
 
 // A log holds every statement and every row a tool returned, so no other user of the
-// machine may read it.
+// machine can be allowed to read it.
 func TestLogFileAppendWritesForTheOwnerAlone(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "one.log")
 	NewLogFile(path).Append("first")
@@ -70,7 +70,8 @@ func TestLogFileAppendWritesForTheOwnerAlone(t *testing.T) {
 	}
 }
 
-// A log an older build left behind is readable by everyone, so the first write narrows it.
+// A log file from an older build is readable by everyone. The first write restricts the
+// permissions.
 func TestLogFileAppendNarrowsALogItFinds(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "old.log")
 	if err := os.WriteFile(path, []byte("older\n"), 0o644); err != nil {

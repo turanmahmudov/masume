@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// A word may end on the last cell of a row only where the text ends with it. Each case here
-// was read from a drawn frame.
+// A word can end on the last cell of a row only if the text ends with it. Every case here
+// comes from a drawn frame.
 func TestWrapWordsKeepsRoomForTheFollowingSpace(t *testing.T) {
 	for _, held := range []struct {
 		name  string

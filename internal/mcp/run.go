@@ -13,14 +13,14 @@ import (
 	"github.com/turanmahmudov/masume/internal/hist"
 )
 
-// The client without a screen: the same profiles and the same reads, served to an agent over
-// the Model Context Protocol. Only the protocol writes to standard output, so every message of
+// The client without a screen: the same profiles and the same reads, for an agent over the
+// Model Context Protocol. Only the protocol writes to standard output, so every message of
 // this file goes to standard error.
 
 const serverName = "masume"
 
-// RunServer serves an agent until the client closes its end, and returns the code the process
-// exits with.
+// RunServer serves an agent until the client closes the stream, and returns the exit code of
+// the process.
 func RunServer(argv []string, version string) int {
 	loaded := cfg.LoadConfig(cfg.ResolveConfigPath())
 	for _, problem := range loaded.Problems {
@@ -53,10 +53,11 @@ func RunServer(argv []string, version string) int {
 	return serveClient(ctx, deps, version)
 }
 
-// serveClient returns every message of one client, from the first to the closed stream.
+// serveClient answers every message of one client, from the first one to the end of the
+// stream.
 func serveClient(ctx context.Context, deps AccessDeps, version string) int {
-	// The history file is opened whatever it returns: a server that cannot write its history
-	// still opens every connection.
+	// The history file is opened in every case: a server that cannot write its history
+	// can still open every connection.
 	history, err := hist.Open(hist.DefaultPath())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, serverName+" mcp: history: "+err.Error())
@@ -67,18 +68,19 @@ func serveClient(ctx context.Context, deps AccessDeps, version string) int {
 	tools := BuildTools(ToolDeps{
 		AccessDeps: deps,
 		Asker:      asker,
-		// The statements of the agent go into the same history the screens read, so the user
-		// can see later what ran.
+		// The statements of the agent go into the same history the screens read, so the
+		// user can see later what ran.
 		RecordQuery: func(entry hist.HistoryEntry) { _ = history.Record(entry) },
 	})
 
-	// One line at a time, because a question to the user is written beside an answer.
+	// One line at a time, because a question to the user is written in parallel with an
+	// answer.
 	writing := sync.Mutex{}
 	writeLine := func(line string) {
 		writing.Lock()
 		defer writing.Unlock()
-		// A write that fails means the client closed its end. The read of the next message
-		// ends the server, so this only records why.
+		// A write error means the client closed the stream. The read of the next
+		// message stops the server, so this only records the reason.
 		if _, err := fmt.Fprintln(os.Stdout, line); err != nil {
 			LogEvent("! cannot write to standard output: " + err.Error())
 		}
@@ -97,9 +99,9 @@ func serveClient(ctx context.Context, deps AccessDeps, version string) int {
 	return 0
 }
 
-// ReadServerArguments returns the profile the server was started for and whether it was
-// asked to check and exit. An argument it cannot read is a fault, not a default: a mistyped
-// `--profile` would otherwise open every profile the config file names.
+// ReadServerArguments returns the profile the server was started for and whether it must
+// check and exit. An unknown argument is an error and not a default: a misspelled `--profile`
+// would otherwise open every profile of the config file.
 func ReadServerArguments(argv []string) (string, bool, error) {
 	scoped, check := "", false
 	for at := 0; at < len(argv); at++ {
@@ -126,7 +128,7 @@ func ReadServerArguments(argv []string) (string, bool, error) {
 	return scoped, check, nil
 }
 
-// describeServing writes what the server serves, read the way `list_profiles` reads it.
+// describeServing returns the profiles of the server, in the form used by `list_profiles`.
 func describeServing(deps AccessDeps) string {
 	if deps.ScopedProfile != "" {
 		profile, found := findProfileNamed(deps.Profiles, deps.ScopedProfile)
@@ -150,7 +152,7 @@ func describeServing(deps AccessDeps) string {
 	return "serving " + strings.Join(names, ", ")
 }
 
-// describeStartedProfiles names what the log of the server opens with.
+// describeStartedProfiles returns the first line of the log of the server.
 func describeStartedProfiles(deps AccessDeps) string {
 	if deps.ScopedProfile != "" {
 		return deps.ScopedProfile
@@ -158,14 +160,15 @@ func describeStartedProfiles(deps AccessDeps) string {
 	return strings.Join(deps.Config.Profiles, ", ")
 }
 
-// reportStart writes what the server opened, so the log of a client shows what the config
-// found.
+// reportStart writes the profiles the server opened, so the log of a client shows the result
+// of the config.
 func reportStart(deps AccessDeps) {
 	fmt.Fprintf(os.Stderr, "%s mcp: %s\n%s mcp: calls are logged to %s\n",
 		serverName, describeServing(deps), serverName, ResolveLogPath())
 }
 
-// reportCheck connects to every open profile once and reports, without waiting for a client.
+// reportCheck connects one time to every open profile and reports the result, without a
+// client.
 func reportCheck(ctx context.Context, deps AccessDeps) int {
 	checks := CheckOpenProfiles(ctx, deps)
 	if len(checks) == 0 {

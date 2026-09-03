@@ -1,18 +1,18 @@
-# masume config. Copy this to ~/.config/masume/config.toml and edit it.
+# masume config. Copy this file to ~/.config/masume/config.toml and edit it.
 #
-# The path is $XDG_CONFIG_HOME/masume/config.toml, and the themes of the user sit beside it
-# in a `themes` directory. A connection written in the client is written back into this file,
-# and every other line of it is kept.
+# The path is $XDG_CONFIG_HOME/masume/config.toml. Custom themes go in a `themes` directory
+# next to it. When you save a connection in the client, masume writes it back into this file
+# and keeps every other line unchanged.
 #
-# Never write a shared or a production password into a file that is tracked in git. Use
+# Never write a shared or a production password into a file that git tracks. Use
 # `auth = "prompt"`, `password_command`, or `password_env` instead.
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Example profiles. One profile is one connection, and the name after `profile.`
-# is what the picker lists.
+# Example profiles. One profile is one connection. The name after `profile.` is the
+# name shown in the picker.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# A local server, asked for its password at connect.
+# A local server. The password is asked for at connect time.
 [profile.shop]
 engine   = "postgres"
 host     = "127.0.0.1"
@@ -24,7 +24,7 @@ env      = "dev"
 mode     = "write"
 sslmode  = "prefer"
 
-# A file. SQLite needs no host, no port and no user.
+# A SQLite file. SQLite needs no host, port or user.
 [profile.notes]
 engine      = "sqlite"
 database    = "~/Documents/notes.db"
@@ -32,7 +32,7 @@ env         = "dev"
 mode        = "write"
 description = "The notes database"
 
-# A production server, read only, with its password read from a password manager.
+# A production server, read-only. The password comes from a password manager.
 [profile.shop-prod]
 engine               = "postgres"
 host                 = "db.example.com"
@@ -47,8 +47,8 @@ sslmode              = "verify-full"
 statement_timeout_ms = 30000
 mcp                  = "read-only"
 
-# A server behind a jump host. The command runs before the connection opens, the client
-# waits for the port, and the command is stopped with the connection.
+# A server behind a jump host. The command runs before the connection opens. The client
+# waits for the port, and stops the command when the connection closes.
 [profile.shop-tunnel]
 engine          = "postgres"
 host            = "127.0.0.1"
@@ -71,52 +71,50 @@ hide_system_schemas = true
 preset = "default"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Everything else the config file reads. Uncomment a line to set it. The value
-# shown after a setting is the one the client uses when the line is left out.
+# All other settings. Uncomment a line to set it. The value shown is the default
+# used when the line is missing.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# A profile is one connection. The name after `profile.` is what the picker lists.
+# A profile is one connection. The name after `profile.` is the name shown in the picker.
 #
 # [profile.a-name]
 # engine               = "postgres"   # postgres mysql sqlite redis mongodb cockroach
 #                                     # timescale redshift neon supabase mariadb tidb
 #                                     # planetscale aurora-mysql
 # host                 = "127.0.0.1"
-# port                 = 5432         # the port the engine uses where none is written
-# database             = "shop"       # the file, for sqlite; the number, for redis
+# port                 = 5432         # the default port of the engine when not set
+# database             = "shop"       # the file path for sqlite, the database number for redis
 # user                 = "you"
 # auth                 = "password"   # password command prompt
-# password             = "secret"     # written here, which the file has to be yours alone
-# password_env         = "PGPASSWORD" # read from the environment instead
-# password_command     = "pass db/shop"   # read from what this command writes
-# env                  = "dev"        # dev test prod. prod colours the whole title bar
+# password             = "secret"     # stored in the file. Then the file must be readable by you only
+# password_env         = "PGPASSWORD" # read the password from this environment variable
+# password_command     = "pass db/shop"   # read the password from the output of this command
+# env                  = "dev"        # dev test prod. prod colours the title bar red
 # mode                 = "write"      # write read-only
 # confirm_writes       = "off"        # off delete write. unset: off on dev, delete on test, write on prod
 # sslmode              = "prefer"     # disable allow prefer require verify-ca verify-full
-# statement_timeout_ms = 0            # 0 leaves the timeout to the server
-# keepalive_s          = 30           # seconds between two checks. 0 sends no keepalive
-# page_size            = 200          # the rows one page of the grid reads
+# statement_timeout_ms = 0            # time limit per statement. 0 uses the server default
+# keepalive_s          = 30           # seconds between connection checks. 0 disables the keepalive
+# page_size            = 200          # rows the grid loads per page
 # command              = "ssh -N -L 5432:db:5432 jump"   # run before the connection opens
-# command_timeout      = 10           # seconds the command has to open its port
+# command_timeout      = 10           # seconds to wait for the command to open its port
 # wait_for_port        = 5432         # the port the command must open
-# autocommit           = true         # false holds a transaction open by hand
-# mcp                  = "read-only"  # off read-only read-write full. What an agent may do
-#                                     # on this profile, never more than `[mcp] access`
-# description          = "what this connection is"
+# autocommit           = true         # false keeps a transaction open until you commit
+# mcp                  = "read-only"  # off read-only read-write full. What an agent can do
+#                                     # on this profile. Never more than `[mcp] access`
+# description          = "one line about this connection"
 # ai_instructions      = "what the model should know about this database"
 
 # [ui]
-# icons               = "plain"   # plain ascii. A glyph below written as nothing turns
-#                                 # that one kind off
-# theme               = "system"  # system, or a theme the client ships, or one of your own
-#                                 # in ~/.config/masume/themes
-# hide_system_schemas = true      # false lists pg_catalog and the rest in the tree
+# icons               = "plain"   # plain ascii
+# theme               = "system"  # system, a built-in theme, or a custom theme
+#                                 # from ~/.config/masume/themes
+# hide_system_schemas = true      # false lists pg_catalog and other system schemas in the tree
 
-# Every glyph the client draws for a kind of thing. A glyph written as nothing
-# turns that one kind off.
+# The glyph shown for each kind of item. An empty string disables that glyph.
 #
 # [ui.icon_glyphs]
-# # what a row of the tree is
+# # kinds of rows in the tree
 # schema            = ""
 # table             = ""
 # view              = ""
@@ -132,21 +130,21 @@ preset = "default"
 # role              = ""
 # roles             = ""
 #
-# # what the client keeps for you
+# # saved items
 # favourites = ""
 # recent     = ""
 # query      = "≡"
 # folder     = "▸"
 #
-# # what a view of the result is
+# # views of a result
 # plan = "⊳"
 #
-# # what the client says
+# # message kinds
 # note    = ""
 # problem = "✗"
 # ai      = "✦"
 #
-# # the marks of a control
+# # control glyphs
 # fold-closed = "▸"
 # fold-open   = "▾"
 # field       = "▸"
@@ -160,8 +158,8 @@ preset = "default"
 # banner      = "⚑"
 # new-tab     = "+"
 
-# Colours laid over the theme, without writing a theme file. Every name the themes
-# use is allowed here.
+# Colour overrides for the active theme, without a theme file. Every colour name
+# from the themes is allowed here.
 #
 # [ui.colors]
 # background   = "#16161e"
@@ -187,15 +185,15 @@ preset = "default"
 # env_test     = "#e0af68"
 # env_prod     = "#f7768e"
 
-# The keys. Every action the client has is named below, under the scope that
-# answers it, with the chords the default preset binds. A line you uncomment
-# replaces what the preset bound; a line left out keeps it. An action with no
-# chord after it is bound to none until you write one.
+# Key bindings. Every action is listed below under the scope that handles it, with
+# the keys of the default preset. A line you uncomment replaces the preset binding.
+# Actions you do not list keep the preset binding. An action with an empty list has
+# no key binding.
 #
 # [keys]
 # preset = "default"
 #
-# [keys.global]   # every pane answers these
+# [keys.global]   # handled in every pane
 # activate-tab         = ["meta+digit"]
 # ai-fix-error         = ["ctrl+h"]
 # begin-transaction    = ["ctrl+b"]
@@ -284,7 +282,7 @@ preset = "default"
 # undo-change        = ["ctrl+z"]
 # view-cell          = ["v"]
 #
-# [keys.document]   # the tree that opens the rows as documents
+# [keys.document]   # the document tree
 # copy-path        = ["shift+y"]
 # copy-value       = ["y"]
 # count-rows       = ["t"]
@@ -352,7 +350,7 @@ preset = "default"
 # select-all           = ["ctrl+a"]
 # undo-edit            = ["ctrl+z"]
 #
-# [keys.list]   # any list with a cursor of its own
+# [keys.list]   # any list with its own cursor
 # choose-row       = ["return"]
 # cursor-down      = ["down"]
 # cursor-first-row = ["home"]
@@ -361,7 +359,7 @@ preset = "default"
 # cursor-page-up   = ["pageup"]
 # cursor-up        = ["up"]
 #
-# [keys.dialog]   # the card on top
+# [keys.dialog]   # the active dialog card
 # answer-no         = ["n"]
 # answer-yes        = ["y"]
 # apply-changes     = ["ctrl+y"]
@@ -380,7 +378,7 @@ preset = "default"
 # open-in-new-tab   = ["meta+return"]
 # prettify-json     = ["ctrl+f"]
 # previous-turn     = ["ctrl+p"]
-# replace-in-statement = ["ctrl+r"]   # in the find field, replace instead of marking
+# replace-in-statement = ["ctrl+r"]   # in the find field, replace the matches instead of marking them
 # run-with-values   = ["ctrl+r"]
 # save-cell         = ["ctrl+s"]
 # save-form         = ["ctrl+s"]
@@ -395,19 +393,19 @@ preset = "default"
 # toggle-value      = ["space"]
 # write-export      = ["ctrl+s"]
 
-# The model the chat asks. A key written here is read from the environment by
-# default, which keeps it out of the file.
+# AI chat settings. By default the API key is read from an environment variable,
+# so it is not stored in this file.
 #
 # [ai]
-# enabled              = true          # false removes every AI feature: the chat cannot be
-#                                      # opened, no AI action is bound, and nothing about AI
-#                                      # is drawn or offered anywhere
+# enabled              = true          # false disables every AI feature: the chat cannot open,
+#                                      # no AI action has a key binding, and nothing about AI
+#                                      # is shown anywhere
 # default_provider     = "anthropic"   # anthropic openai
-# statement_timeout_ms = 30000         # how long a statement the model runs may take
+# statement_timeout_ms = 30000         # time limit for a statement that the model runs
 #
 # [ai.providers.anthropic]
 # model        = "claude-opus-5"
-# api_key      = "sk-..."              # written here, or read from the environment below
+# api_key      = "sk-..."              # the key itself, or use the environment variable below
 # api_key_env  = "ANTHROPIC_API_KEY"
 # base_url     = "https://api.anthropic.com"
 # base_url_env = "ANTHROPIC_BASE_URL"
@@ -417,11 +415,11 @@ preset = "default"
 # api_key_env  = "OPENAI_API_KEY"
 # base_url_env = "OPENAI_BASE_URL"
 
-# What an agent reaches through the MCP server. A profile may lower its own level
-# with `mcp` above; none may raise it past this one.
+# MCP server settings. A profile can lower its own access level with `mcp` above.
+# No profile can exceed the level set here.
 #
 # [mcp]
-# profiles   = ["a-name"]    # the profiles the server opens. Empty means none are served
+# profiles   = ["a-name"]    # the profiles the server opens. Empty means none is served
 # access     = "read-only"   # off read-only read-write full
-# row_limit  = 500           # the rows one read answers
-# timeout_ms = 30000         # how long one read may take
+# row_limit  = 500           # maximum rows one read returns
+# timeout_ms = 30000         # time limit for one read

@@ -12,9 +12,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// Every tool a model may call is described to it as JSON Schema, and the model sends whatever
-// it likes back. A tool with no name or no schema cannot be called at all, and one that reads
-// its input without checking would take anything.
+// Every tool is described to the model as JSON Schema, and the model can send any input. A
+// tool without a name or without a schema cannot be called, and a tool that reads its input
+// without validation accepts any value.
 func TestEveryDefinitionIsCallableAndDescribed(t *testing.T) {
 	held := agent.Definitions()
 	if len(held) == 0 {
@@ -44,15 +44,15 @@ func TestEveryDefinitionIsCallableAndDescribed(t *testing.T) {
 		if held := tool.InputSchema["type"]; held != "object" {
 			t.Errorf("%q describes its input as %v, wanted an object", tool.Name, held)
 		}
-		// A caller must not be able to send a field the tool never reads.
+		// A caller must not be able to send a field the tool does not read.
 		if allowed, there := tool.InputSchema["additionalProperties"]; !there || allowed != false {
 			t.Errorf("%q takes fields it does not describe", tool.Name)
 		}
 	}
 }
 
-// A tool that reaches the server has to refuse an input it cannot read, rather than run with
-// half of it. Nothing here opens a connection, because the refusal comes first.
+// A tool that uses the server must reject an invalid input and must not run with a part of
+// it. No test here opens a connection, because the validation runs first.
 func TestEveryDefinitionRefusesAnInputItCannotRead(t *testing.T) {
 	for _, tool := range agent.Definitions() {
 		t.Run(tool.Name, func(t *testing.T) {
@@ -68,8 +68,8 @@ func TestEveryDefinitionRefusesAnInputItCannotRead(t *testing.T) {
 	}
 }
 
-// The row limit a model asks for has to be a number above zero. A limit of zero or below would
-// read one row or every row, and neither is what was asked.
+// The row limit from a model must be a number above zero. A limit of zero or less would read
+// one row or every row, and neither is the request.
 func TestRunQueryRefusesALimitBelowOne(t *testing.T) {
 	tool := findTool(t, "run_query")
 
@@ -85,8 +85,8 @@ func TestRunQueryRefusesALimitBelowOne(t *testing.T) {
 	}
 }
 
-// A number with a fraction is not a count of rows, and cutting it would give the model a
-// different limit from the one it asked for.
+// A number with a fraction is not a row count, and a truncation would give the model a
+// different limit from the one it sent.
 func TestRunQueryRefusesALimitWithAFraction(t *testing.T) {
 	tool := findTool(t, "run_query")
 	answered := tool.Call(context.Background(), agent.ToolDeps{},
@@ -96,8 +96,8 @@ func TestRunQueryRefusesALimitWithAFraction(t *testing.T) {
 	}
 }
 
-// The statement is what the tool works on, so a call without it is refused rather than run
-// as an empty one.
+// The statement is the input of the tool, so a call without one gives an error and does not
+// run as an empty statement.
 func TestRunQueryWantsAStatement(t *testing.T) {
 	tool := findTool(t, "run_query")
 	answered := tool.Call(context.Background(), agent.ToolDeps{}, map[string]any{})
@@ -109,8 +109,9 @@ func TestRunQueryWantsAStatement(t *testing.T) {
 	}
 }
 
-// A statement the model asks to run is weighed before anything reaches the server, and the
-// answer of the user decides. A refusal has to stop the run rather than be reported beside it.
+// A statement from the model is checked before anything reaches the server, and the answer
+// of the user decides. A refusal must stop the run and must not be reported next to a
+// result.
 func TestRunQueryStopsWhereTheUserSaysNo(t *testing.T) {
 	tool := findTool(t, "run_query")
 	ran := false
@@ -135,8 +136,8 @@ func TestRunQueryStopsWhereTheUserSaysNo(t *testing.T) {
 	}
 }
 
-// The risk the user is asked about is the risk of the statement, so a delete is never
-// presented as a read.
+// The question to the user names the real risk of the statement, so a delete is never shown
+// as a read.
 func TestRunQueryWeighsTheStatementItAsksAbout(t *testing.T) {
 	tool := findTool(t, "run_query")
 	question := askedQuestion{}
@@ -148,8 +149,8 @@ func TestRunQueryWeighsTheStatementItAsksAbout(t *testing.T) {
 	}
 }
 
-// A plan of a write still sends the statement, so the same gate that stops a run stops
-// a plan. A refusal has to stop the plan rather than be reported beside an estimate.
+// A plan of a write still sends the statement, so the check that stops a run also stops a
+// plan. A refusal must stop the plan and must not be reported next to an estimate.
 func TestExplainQueryStopsWhereTheUserSaysNo(t *testing.T) {
 	tool := findTool(t, "explain_query")
 	question := askedQuestion{}
@@ -169,8 +170,9 @@ func TestExplainQueryStopsWhereTheUserSaysNo(t *testing.T) {
 	}
 }
 
-// A batch that opens with a read still writes, so it is weighed as the write and never
-// sent. The planner would otherwise prefix only the first statement and run the rest.
+// A batch that starts with a read still writes, so it is checked as a write and is not sent.
+// Otherwise the planner would add the EXPLAIN prefix to the first statement only and run the
+// rest.
 func TestExplainQueryWeighsABatchAsAWrite(t *testing.T) {
 	tool := findTool(t, "explain_query")
 	question := askedQuestion{}
@@ -187,7 +189,7 @@ func TestExplainQueryWeighsABatchAsAWrite(t *testing.T) {
 	}
 }
 
-// A read is only estimated, so the user is not asked, and the plan still reaches the
+// A read is only estimated, so the user is not asked and the plan still reaches the
 // server.
 func TestExplainQueryPlansAReadWithoutAsking(t *testing.T) {
 	tool := findTool(t, "explain_query")
@@ -204,8 +206,8 @@ func TestExplainQueryPlansAReadWithoutAsking(t *testing.T) {
 	}
 }
 
-// A write that is allowed to be planned is still only estimated, so the statement does
-// not run even when the model asked to measure it.
+// A write that the user allows to plan is still only estimated, so the statement does not run
+// even if the model asked for a measured plan.
 func TestExplainQueryEstimatesAWriteAfterItIsAllowed(t *testing.T) {
 	tool := findTool(t, "explain_query")
 	question := askedQuestion{}
@@ -230,8 +232,8 @@ func TestExplainQueryEstimatesAWriteAfterItIsAllowed(t *testing.T) {
 	}
 }
 
-// A server that plans nothing is answered before the question, because the user would be
-// asked about a statement that is never sent anywhere.
+// A server without plan support gives an error before the question, because the user would
+// be asked about a statement that is never sent.
 func TestExplainQueryAnswersAServerThatPlansNothingWithoutAsking(t *testing.T) {
 	tool := findTool(t, "explain_query")
 	question := askedQuestion{}
@@ -252,14 +254,14 @@ func TestExplainQueryAnswersAServerThatPlansNothingWithoutAsking(t *testing.T) {
 	}
 }
 
-// askedQuestion is what a case saw of the question the user was asked before a statement ran.
+// askedQuestion holds the question the user got before a statement ran.
 type askedQuestion struct {
 	asked   bool
 	weighed statement.WriteRisk
 }
 
-// buildRefusingDeps builds the tools of this session with a user who says no to every
-// statement the runner asks about.
+// buildRefusingDeps builds the tools of this session with a user who refuses every statement
+// the runner asks about.
 func buildRefusingDeps(session db.Session, question *askedQuestion) agent.ToolDeps {
 	return buildAskingDeps(session, question, "the user did not allow this statement to run")
 }
@@ -270,8 +272,8 @@ func buildAllowingDeps(session db.Session, question *askedQuestion) agent.ToolDe
 	return buildAskingDeps(session, question, "")
 }
 
-// buildAskingDeps builds the tools of this session, with a runner that records the question
-// and answers it with this refusal. Nothing runs unless a case adds RunStatement itself.
+// buildAskingDeps builds the tools of this session with a runner that records the question
+// and answers it with this refusal. Nothing runs unless the test adds RunStatement itself.
 func buildAskingDeps(
 	session db.Session, question *askedQuestion, refusal string,
 ) agent.ToolDeps {
@@ -287,7 +289,7 @@ func buildAskingDeps(
 	}
 }
 
-// findTool answers the definition of that name.
+// findTool returns the definition with that name.
 func findTool(t *testing.T, name string) agent.ToolDefinition {
 	t.Helper()
 	for _, tool := range agent.Definitions() {
@@ -299,7 +301,7 @@ func findTool(t *testing.T, name string) agent.ToolDefinition {
 	return agent.ToolDefinition{}
 }
 
-// describeAnswer writes what a tool answered, so a case can look for a word in it.
+// describeAnswer returns the answer of a tool as text, so a test can search it for a word.
 func describeAnswer(answered any) string {
 	if held, is := answered.(map[string]any); is {
 		written := []string{}
@@ -313,7 +315,7 @@ func describeAnswer(answered any) string {
 	return ""
 }
 
-// recordingSession answers only the parts a tool asks for before it reaches the server.
+// recordingSession implements only the calls a tool makes before it reaches the server.
 type recordingSession struct {
 	db.Session
 	explained  []string

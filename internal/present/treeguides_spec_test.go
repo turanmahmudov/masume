@@ -7,8 +7,8 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// buildGuidedRows answers rows of every depth the tree draws, with folds that end at each
-// depth, so a guide has siblings below it, siblings above it, and neither.
+// buildGuidedRows returns rows at every depth of the tree, with branches that end at each
+// depth, so a guide has siblings below it, siblings above it, and no siblings.
 func buildGuidedRows() []present.TreeRow {
 	depths := []int{0, 1, 2, 2, 1, 2, 2, 2, 0, 1, 1, 2, 0}
 	rows := make([]present.TreeRow, 0, len(depths))
@@ -18,9 +18,9 @@ func buildGuidedRows() []present.TreeRow {
 	return rows
 }
 
-// The pane draws forty rows of a catalog that holds thousands, so the guides are written for
-// the rows on screen only. A guide is read from the rows under it, so a window has to answer
-// what the whole would have answered at those places.
+// The pane draws forty rows of a catalog with thousands of rows, so the guides are built for
+// the visible rows only. A guide depends on the rows below it, so a window must give the same
+// result as a build of every row.
 func TestBuildTreeGuidesWithinAgreesWithTheWhole(t *testing.T) {
 	rows := buildGuidedRows()
 	whole := present.BuildTreeGuidesWithin(rows, 0, len(rows))
@@ -42,7 +42,8 @@ func TestBuildTreeGuidesWithinAgreesWithTheWhole(t *testing.T) {
 	}
 }
 
-// A window outside the rows draws nothing, and one that runs past the last row stops there.
+// A window outside the rows returns nothing, and a window after the last row stops at that
+// row.
 func TestBuildTreeGuidesWithinHoldsToTheRows(t *testing.T) {
 	rows := buildGuidedRows()
 	whole := present.BuildTreeGuidesWithin(rows, 0, len(rows))
@@ -69,8 +70,8 @@ func TestBuildTreeGuidesWithinHoldsToTheRows(t *testing.T) {
 	}
 }
 
-// The guides of a real catalog are drawn from its rows, so the window is proved on the tree
-// the pane draws and not on depths alone.
+// The guides of a real catalog come from its rows, so this tests the window on the tree the
+// pane draws and not on depth values alone.
 func TestBuildTreeGuidesWithinDrawsTheOpenCatalog(t *testing.T) {
 	input := buildTreeInput()
 	input.Expanded = map[string]bool{

@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-// Engine names one server the client knows.
+// Engine is the name of one database server the client supports.
 type Engine string
 
-// The servers the client knows. Each one has an entry in the registry below.
+// The supported servers. Each one has an entry in the registry below.
 const (
 	EnginePostgres    Engine = "postgres"
 	EngineMysql       Engine = "mysql"
@@ -26,7 +26,7 @@ const (
 	EngineMongo       Engine = "mongodb"
 )
 
-// Engines lists every engine, in the order the docs name them.
+// Engines lists every engine, in the order used by the docs.
 var Engines = []Engine{
 	EnginePostgres, EngineMysql, EngineSqlite, EngineRedis,
 	EngineCockroach, EngineTimescale, EngineRedshift, EngineNeon, EngineSupabase,
@@ -34,14 +34,14 @@ var Engines = []Engine{
 	EngineMongo,
 }
 
-// DefaultEngine is the engine used where a profile names none.
+// DefaultEngine is the engine used when a profile does not name one.
 const DefaultEngine = EnginePostgres
 
-// Family is the protocol a server speaks, which decides the adapter that opens
-// it and the SQL written for it.
+// Family is the protocol of a server. It selects the adapter that connects to the
+// server and the SQL dialect used for it.
 type Family string
 
-// The five protocols behind the fourteen engines.
+// The five protocols used by the fourteen engines.
 const (
 	FamilyPostgres Family = "postgres"
 	FamilyMysql    Family = "mysql"
@@ -50,31 +50,32 @@ const (
 	FamilyMongo    Family = "mongo"
 )
 
-// Capabilities names what a server either returns for or does not.
+// Capabilities lists the operations a server supports.
 type Capabilities struct {
 	PlansStatement bool
 	MeasuresPlan   bool
-	// Most servers report a syntax error when asked for the plan of a DROP.
+	// Most servers report a syntax error if you ask for the plan of a DROP.
 	PlansEveryStatement bool
 	HasServerSessions   bool
-	// Cancelling needs a second connection to the same server.
+	// A cancel needs a second connection to the same server.
 	CancelsRunningQuery bool
 	HasTransactions     bool
 	// A key store returns a scan in its own key order only.
 	SortsRead      bool
 	TruncatesTable bool
 	WritesDDL      bool
-	// True where a connection can be opened read-only. TiDB is the one that cannot: it
-	// takes the statement and does nothing under it.
+	// True if a connection can be opened read-only. TiDB cannot: it accepts the
+	// statement but does not apply it.
 	TakesReadOnlyMode bool
-	// True where the staged work of the grid lands whole or not at all. This is not the
-	// same as HasTransactions: Redis holds no transaction the user drives and still runs
-	// a staged set inside a MULTI, and a standalone MongoDB holds neither.
+	// True if the staged changes of the grid are applied all together or not at all.
+	// This is not the same as HasTransactions: Redis has no transaction the user
+	// controls but still applies a staged set inside a MULTI, and a standalone MongoDB
+	// has neither.
 	AppliesChangesTogether bool
 }
 
-// EngineInfo holds the facts about a server that are known before any connection
-// exists. The dialect and the language are joined to it in the query tier.
+// EngineInfo holds the properties of a server that are known before a connection
+// exists. The query tier adds the dialect and the language.
 type EngineInfo struct {
 	Engine        Engine
 	Family        Family
@@ -83,26 +84,26 @@ type EngineInfo struct {
 	OpensFile     bool
 	NeedsUser     bool
 	NeedsPassword bool
-	// True where a password belongs to the server rather than to a named user, so a
-	// profile that names no user can still have one. Redis is the one: `requirepass`
-	// names nobody. Every other server checks a password against a user, so a profile
-	// that names none has nothing to give a password to.
+	// True if the password belongs to the server and not to a named user, so a profile
+	// without a user can still have a password. Redis is the only one: `requirepass`
+	// has no user. Every other server checks the password against a user, so a profile
+	// without a user cannot use a password.
 	PasswordWithoutUser bool
 	URLSchemes          []string
 	DefaultSSLMode      SSLMode
-	// The schemas this server keeps for itself, named in full.
+	// The full names of the schemas this server reserves for itself.
 	SystemSchemas []string
-	// The prefixes of the schemas this server creates for itself.
+	// The name prefixes of the schemas this server creates for itself.
 	SystemSchemaPrefixes []string
 }
 
-// The catalog schemas every PostgreSQL-protocol server has.
+// The catalog schemas of every PostgreSQL-protocol server.
 var postgresCatalogSchemas = []string{"pg_catalog", "information_schema"}
 
-// The prefixes of the schemas a PostgreSQL server creates for itself.
+// The name prefixes of the schemas a PostgreSQL server creates for itself.
 var postgresOwnPrefixes = []string{"pg_toast", "pg_temp"}
 
-// The databases every MySQL-protocol server keeps for itself.
+// The databases every MySQL-protocol server reserves for itself.
 var mysqlSystemSchemas = []string{"mysql", "information_schema", "performance_schema", "sys"}
 
 var postgresCapabilities = Capabilities{
@@ -132,9 +133,9 @@ var engineRegistry = map[Engine]EngineInfo{
 	EngineCockroach: {
 		Engine: EngineCockroach, Family: FamilyPostgres,
 		Capabilities: withPostgres(func(capabilities *Capabilities) {
-			// The server plans a schema change too: `explain drop table` returns a plan.
+			// The server also plans a schema change: `explain drop table` returns a plan.
 			capabilities.PlansEveryStatement = true
-			// The server names a session with its own string, not the number in
+			// The server identifies a session with its own string, not the number in
 			// `pg_stat_activity`, and it has no `pg_cancel_backend`.
 			capabilities.HasServerSessions = false
 			capabilities.CancelsRunningQuery = false
@@ -152,11 +153,11 @@ var engineRegistry = map[Engine]EngineInfo{
 	},
 	EngineRedshift: {
 		Engine: EngineRedshift, Family: FamilyPostgres,
-		// EXPLAIN only estimates. There is no ANALYZE that runs and measures.
+		// EXPLAIN only estimates. There is no ANALYZE that runs and measures the query.
 		Capabilities: withPostgres(func(capabilities *Capabilities) { capabilities.MeasuresPlan = false }),
 		DefaultPort:  5439, NeedsUser: true, NeedsPassword: true,
 		URLSchemes: []string{"redshift"},
-		// The cluster returns over TLS only.
+		// The cluster accepts a TLS connection only.
 		DefaultSSLMode:       SSLRequire,
 		SystemSchemas:        append(append([]string{}, postgresCatalogSchemas...), "pg_internal", "catalog_history"),
 		SystemSchemaPrefixes: postgresOwnPrefixes,
@@ -186,7 +187,7 @@ var engineRegistry = map[Engine]EngineInfo{
 	},
 	EngineTidb: {
 		Engine: EngineTidb, Family: FamilyMysql,
-		// The server takes `set session transaction read only` and does nothing under it.
+		// The server accepts `set session transaction read only` but does not apply it.
 		Capabilities: withMysql(func(capabilities *Capabilities) {
 			capabilities.TakesReadOnlyMode = false
 		}),
@@ -210,57 +211,57 @@ var engineRegistry = map[Engine]EngineInfo{
 	EngineSqlite: {
 		Engine: EngineSqlite, Family: FamilySqlite,
 		Capabilities: Capabilities{
-			// SQLite plans a statement, but measures nothing.
+			// SQLite plans a statement, but it does not measure the run.
 			PlansStatement: true,
 			MeasuresPlan:   false,
 			// A file has only the session that opened it, and the driver reads it in
-			// the thread that draws.
+			// the thread that draws the screen.
 			HasServerSessions:   false,
 			CancelsRunningQuery: false,
 			HasTransactions:     true,
 			SortsRead:           true,
-			// SQLite empties a table by deleting every row.
+			// SQLite empties a table with a delete of every row.
 			TruncatesTable:         false,
 			WritesDDL:              true,
 			TakesReadOnlyMode:      true,
 			AppliesChangesTogether: true,
 		},
-		// A file is opened, not reached, so there is no port and no URL scheme.
+		// A file is opened locally, so there is no port and no URL scheme.
 		DefaultPort: 0, OpensFile: true,
 	},
 	EngineMongo: {
 		Engine: EngineMongo, Family: FamilyMongo,
 		Capabilities: Capabilities{
-			// The server explains a find and an aggregate, and measures either one.
+			// The server explains a find and an aggregate, and it can measure both.
 			PlansStatement: true,
 			MeasuresPlan:   true,
-			// A write command is not one the server explains.
+			// The server does not explain a write command.
 			PlansEveryStatement: false,
-			// currentOp lists every running operation, and killOp ends one.
+			// currentOp lists every running operation, and killOp stops one.
 			HasServerSessions: true,
-			// The driver cancels through the context, and no second connection finds
-			// the operation id of the call it would kill.
+			// The driver cancels through the context. A second connection cannot find
+			// the operation id of the call it would stop.
 			CancelsRunningQuery: false,
-			// A replica set and a sharded cluster both hold a transaction. A standalone
-			// server holds none, and the session reports what the deployment it reached
-			// actually answered.
+			// A replica set and a sharded cluster support a transaction. A standalone
+			// server does not, and the session reports what the connected deployment
+			// supports.
 			HasTransactions: true,
-			// A find takes a sort, so the server orders the page.
+			// A find accepts a sort, so the server sorts the page.
 			SortsRead: true,
-			// A collection is emptied by a delete of every document, not by a command
-			// of its own.
+			// A collection is emptied with a delete of every document. There is no
+			// separate command.
 			TruncatesTable: false,
-			// Every statement is a command, so the object menu has no SQL to write.
+			// Every statement is a command, so the object menu has no SQL to generate.
 			WritesDDL: false,
-			// The server holds no read-only session, so this client refuses the write.
+			// The server has no read-only session, so this client blocks the write.
 			TakesReadOnlyMode: true,
 			// A replica set applies a staged set inside a transaction. A standalone
-			// server holds none, and the session says so once it knows what it reached.
+			// server cannot, and the session reports this after it connects.
 			AppliesChangesTogether: true,
 		},
-		// A user is what turns authentication on: a server that has it turned off
-		// refuses a connection that carries one, so the profile may name none. A
-		// profile that does name one is asked for its password like any other server.
+		// A user name enables authentication. A server with authentication off refuses
+		// a connection that sends one, so the profile can omit the user. A profile that
+		// does name a user asks for a password like any other server.
 		NeedsPassword: true,
 		DefaultPort:   27017,
 		URLSchemes:    []string{"mongodb"},
@@ -269,24 +270,24 @@ var engineRegistry = map[Engine]EngineInfo{
 	EngineRedis: {
 		Engine: EngineRedis, Family: FamilyRedis,
 		Capabilities: Capabilities{
-			// A command says what it does, so the server plans nothing.
+			// A command states the operation, so the server makes no plan.
 			PlansStatement: false,
 			MeasuresPlan:   false,
-			// CLIENT LIST lists every connection, and CLIENT KILL ends one.
+			// CLIENT LIST lists every connection, and CLIENT KILL stops one.
 			HasServerSessions: true,
-			// Redis runs one command at a time and returns before the next.
+			// Redis runs one command at a time and completes it before the next one.
 			CancelsRunningQuery: false,
-			// MULTI queues the commands and returns nothing until EXEC.
+			// MULTI queues the commands and returns no result before EXEC.
 			HasTransactions: false,
-			// A SCAN returns the keys in the order of the server.
+			// A SCAN returns the keys in the order of the server only.
 			SortsRead: false,
-			// A prefix is only a name pattern, so no command empties it.
+			// A prefix is only a name pattern, so no command deletes it.
 			TruncatesTable: false,
 			WritesDDL:      false,
-			// The server holds no read-only session, so this client refuses the write.
+			// The server has no read-only session, so this client blocks the write.
 			TakesReadOnlyMode: true,
-			// MULTI holds no transaction the user drives, and it does run a staged set
-			// as one.
+			// MULTI is not a transaction the user controls, but it does apply a staged
+			// set as one unit.
 			AppliesChangesTogether: true,
 		},
 		DefaultPort: 6379, URLSchemes: []string{"redis", "rediss"},
@@ -306,9 +307,9 @@ func withMysql(change func(*Capabilities)) Capabilities {
 	return capabilities
 }
 
-// ResolveEngineInfo returns the facts of that engine, and the facts of the default engine
-// for a name nothing knows, so a caller never reads a port of zero. A name is checked where
-// a profile is built, which is where a bad one is reported.
+// ResolveEngineInfo returns the properties of that engine. An unknown name gives the
+// properties of the default engine, so a caller never reads a port of zero. The name is
+// validated when the profile is built, and an error is reported there.
 func ResolveEngineInfo(engine Engine) EngineInfo {
 	info, known := engineRegistry[engine]
 	if !known {
@@ -317,7 +318,7 @@ func ResolveEngineInfo(engine Engine) EngineInfo {
 	return info
 }
 
-// ListEngineInfo returns the facts of every engine, in the order they are named.
+// ListEngineInfo returns the properties of every engine, in the order of Engines.
 func ListEngineInfo() []EngineInfo {
 	listed := make([]EngineInfo, 0, len(Engines))
 	for _, engine := range Engines {
@@ -326,12 +327,12 @@ func ListEngineInfo() []EngineInfo {
 	return listed
 }
 
-// FindEngine reads this text as an engine name.
+// FindEngine parses the text as an engine name.
 func FindEngine(written string) (Engine, bool) {
 	return FindAllowed(Engines, strings.ToLower(strings.TrimSpace(written)))
 }
 
-// HoldsSystemSchema is true where the server keeps that schema for itself.
+// HoldsSystemSchema is true if the server reserves that schema for itself.
 func (info EngineInfo) HoldsSystemSchema(schema string) bool {
 	name := strings.ToLower(schema)
 	if slices.Contains(info.SystemSchemas, name) {
@@ -345,7 +346,7 @@ func (info EngineInfo) HoldsSystemSchema(schema string) bool {
 	return false
 }
 
-// OpensFile is true for an engine that opens a file, which has no host, port or user.
+// OpensFile is true for an engine that opens a local file. It has no host, port or user.
 func OpensFile(engine Engine) bool {
 	return ResolveEngineInfo(engine).OpensFile
 }
@@ -355,7 +356,7 @@ func NeedsUser(engine Engine) bool {
 	return ResolveEngineInfo(engine).NeedsUser
 }
 
-// ResolveDefaultPort returns the port the engine listens on.
+// ResolveDefaultPort returns the default port of the engine.
 func ResolveDefaultPort(engine Engine) int {
 	return ResolveEngineInfo(engine).DefaultPort
 }

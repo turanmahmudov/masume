@@ -1,5 +1,5 @@
-// Package cfg reads the config file: the connection profiles, the interface
-// settings, the colour themes and the keys.
+// Package cfg reads the config file: the connection profiles, the interface settings, the
+// colour themes and the keys.
 package cfg
 
 import "strings"
@@ -7,8 +7,8 @@ import "strings"
 // Table is a parsed TOML table.
 type Table map[string]any
 
-// FindTable returns the value as a table, or nothing for a list, a scalar or a
-// missing key.
+// FindTable returns the value as a table, and false for a list, a scalar or a missing
+// key.
 func FindTable(value any) (Table, bool) {
 	switch held := value.(type) {
 	case Table:
@@ -19,7 +19,7 @@ func FindTable(value any) (Table, bool) {
 	return nil, false
 }
 
-// FindSection returns a top-level section such as `[ai]`, from the whole document.
+// FindSection returns a top-level section of the document, for example `[ai]`.
 func FindSection(document Table, name string) (Table, bool) {
 	if document == nil {
 		return nil, false
@@ -27,7 +27,7 @@ func FindSection(document Table, name string) (Table, bool) {
 	return FindTable(document[name])
 }
 
-// FindString returns the text under a key. An empty text counts as missing.
+// FindString returns the text of a key. An empty text is treated as a missing key.
 func FindString(table Table, key string) (string, bool) {
 	written, isText := table[key].(string)
 	if !isText || strings.TrimSpace(written) == "" {
@@ -36,7 +36,7 @@ func FindString(table Table, key string) (string, bool) {
 	return written, true
 }
 
-// FindInteger returns a whole number under a key.
+// FindInteger returns the integer of a key.
 func FindInteger(table Table, key string) (int, bool) {
 	switch held := table[key].(type) {
 	case int64:
@@ -51,7 +51,7 @@ func FindInteger(table Table, key string) (int, bool) {
 	return 0, false
 }
 
-// FindPositiveInteger returns a whole number above zero.
+// FindPositiveInteger returns the integer of a key, and false if it is not above zero.
 func FindPositiveInteger(table Table, key string) (int, bool) {
 	value, isWhole := FindInteger(table, key)
 	if !isWhole || value <= 0 {
@@ -60,13 +60,14 @@ func FindPositiveInteger(table Table, key string) (int, bool) {
 	return value, true
 }
 
-// FindBool returns a true or false under a key.
+// FindBool returns the boolean of a key.
 func FindBool(table Table, key string) (bool, bool) {
 	held, isFlag := table[key].(bool)
 	return held, isFlag
 }
 
-// FindStringList returns the texts of a list, and drops every entry that is not text.
+// FindStringList returns the strings of a list and skips every entry that is not a
+// string.
 func FindStringList(table Table, key string) ([]string, bool) {
 	entries, isList := table[key].([]any)
 	if !isList {

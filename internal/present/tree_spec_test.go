@@ -9,7 +9,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// buildTreeInput answers a small catalog: two schemas of the user and one the server keeps.
+// buildTreeInput returns a small catalog: two schemas of the user and one system schema.
 func buildTreeInput() present.TreeInput {
 	return present.TreeInput{
 		Engine: core.EnginePostgres,
@@ -26,7 +26,7 @@ func buildTreeInput() present.TreeInput {
 	}
 }
 
-// findRow answers the row whose label reads as that name.
+// findRow returns the row with that label.
 func findRow(rows []present.TreeRow, label string) (present.TreeRow, bool) {
 	for _, row := range rows {
 		if row.Label == label {
@@ -36,15 +36,15 @@ func findRow(rows []present.TreeRow, label string) (present.TreeRow, bool) {
 	return present.TreeRow{}, false
 }
 
-// A tree that is folded shows the schemas and nothing under them, so a server of many
-// relations opens without a wall of rows.
+// A folded tree shows the schemas and nothing below them, so a server with many tables opens
+// without a long list of rows.
 func TestBuildTreeShowsTheSchemasFolded(t *testing.T) {
 	held := present.BuildTree(buildTreeInput())
 
 	if _, there := findRow(held.Rows, "public"); !there {
 		t.Error("the tree does not hold the schema of the user")
 	}
-	// Nothing under a folded schema is drawn.
+	// A folded schema draws no row below itself.
 	if _, there := findRow(held.Rows, "orders"); there {
 		t.Error("a relation is drawn under a folded schema")
 	}
@@ -55,7 +55,7 @@ func TestBuildTreeShowsTheSchemasFolded(t *testing.T) {
 	}
 }
 
-// A schema the user opens shows what it holds, and the rows under it sit deeper.
+// An open schema shows its content, and the rows below it are one level deeper.
 func TestBuildTreeShowsWhatAnOpenSchemaHolds(t *testing.T) {
 	input := buildTreeInput()
 	schema, there := findRow(present.BuildTree(input).Rows, "public")
@@ -73,14 +73,14 @@ func TestBuildTreeShowsWhatAnOpenSchemaHolds(t *testing.T) {
 		t.Errorf("the relation sits at depth %d, not deeper than the schema at %d",
 			orders.Depth, schema.Depth)
 	}
-	// A view is drawn too, and told apart from a table.
+	// A view is also drawn, with its own kind.
 	if _, there := findRow(held.Rows, "paid_orders"); !there {
 		t.Error("the view is not drawn")
 	}
 }
 
-// The schemas a server keeps for itself are folded away by default, because a reader opens
-// the tree for their own data.
+// The system schemas are hidden by default, because the user opens the tree for their own
+// data.
 func TestBuildTreeHidesTheSchemasTheServerKeeps(t *testing.T) {
 	input := buildTreeInput()
 	input.HideSystemSchemas = true
@@ -89,15 +89,15 @@ func TestBuildTreeHidesTheSchemasTheServerKeeps(t *testing.T) {
 		t.Error("a schema the server keeps is drawn although they are hidden")
 	}
 
-	// Asked for, they are drawn.
+	// With the setting on, they are drawn.
 	input.HideSystemSchemas = false
 	if _, there := findRow(present.BuildTree(input).Rows, "pg_catalog"); !there {
 		t.Error("a schema the server keeps is not drawn although they are shown")
 	}
 }
 
-// A filter searches the whole tree and shows what matches, so a reader finds a relation
-// without opening every schema.
+// A filter searches the whole tree and shows the matches, so the user finds a table without
+// opening every schema.
 func TestBuildTreeFiltersTheWholeTree(t *testing.T) {
 	input := buildTreeInput()
 	input.Filter = "customers"
@@ -106,14 +106,14 @@ func TestBuildTreeFiltersTheWholeTree(t *testing.T) {
 	if _, there := findRow(held.Rows, "customers"); !there {
 		t.Error("the relation searched for is not drawn")
 	}
-	// A relation that does not match is left out.
+	// A table without a match is not drawn.
 	if _, there := findRow(held.Rows, "paid_orders"); there {
 		t.Error("a relation that does not match the filter is drawn")
 	}
 }
 
-// A filter opened inside a schema searches that schema alone, because a reader who opened it
-// there is looking there.
+// A filter opened inside a schema searches that schema only, because the user opened it
+// there.
 func TestBuildTreeHoldsAFilterToItsSchema(t *testing.T) {
 	input := buildTreeInput()
 	schema, there := findRow(present.BuildTree(input).Rows, "archive")
@@ -128,13 +128,13 @@ func TestBuildTreeHoldsAFilterToItsSchema(t *testing.T) {
 	if _, there := findRow(held.Rows, "orders_2024"); !there {
 		t.Error("the relation of the searched schema is not drawn")
 	}
-	// The relation of the other schema matches the text and is out of scope.
+	// The table of the other schema matches the text and is outside the scope.
 	if _, there := findRow(held.Rows, "orders"); there {
 		t.Error("a relation of another schema is drawn although the search is held to one")
 	}
 }
 
-// A filter is matched without regard to case, because a reader types what is quickest.
+// A filter matches without case comparison, because the user types in the fastest form.
 func TestBuildTreeMatchesAFilterWithoutCase(t *testing.T) {
 	input := buildTreeInput()
 	input.Filter = "CUSTOMERS"
@@ -143,8 +143,7 @@ func TestBuildTreeMatchesAFilterWithoutCase(t *testing.T) {
 	}
 }
 
-// A filter that matches nothing draws no relation, and must still answer a tree rather than
-// nothing at all.
+// A filter without a match draws no table and must still return a tree.
 func TestBuildTreeAnswersATreeForAFilterThatMatchesNothing(t *testing.T) {
 	input := buildTreeInput()
 	input.Filter = "nothing_here_at_all"
@@ -157,8 +156,8 @@ func TestBuildTreeAnswersATreeForAFilterThatMatchesNothing(t *testing.T) {
 	}
 }
 
-// A relation the user marked is drawn as marked wherever it appears, so the mark is the same
-// in the folder of favourites and under its schema.
+// A marked table shows its mark at every position, so the mark is the same in the favourites
+// folder and below its schema.
 func TestBuildTreeMarksAFavourite(t *testing.T) {
 	input := buildTreeInput()
 	input.Favourites = []core.Favourite{
@@ -175,18 +174,18 @@ func TestBuildTreeMarksAFavourite(t *testing.T) {
 	if !orders.Marked {
 		t.Error("the relation was marked and is not drawn as marked")
 	}
-	// A relation nobody marked is not marked.
+	// An unmarked table shows no mark.
 	customers, there := findRow(held.Rows, "customers")
 	if there && customers.Marked {
 		t.Error("a relation nobody marked is drawn as marked")
 	}
 }
 
-// Every row the tree draws needs an id, because the folds and the cursor are keyed by it. Two
-// rows sharing one id would fold together.
+// Every tree row needs an id, because the open state and the cursor use it as a key. Two rows
+// with one id would open and close together.
 func TestBuildTreeGivesEveryRowAnIdOfItsOwn(t *testing.T) {
 	input := buildTreeInput()
-	// Open everything, so the deepest rows are drawn too.
+	// Open every node, so the deepest rows are also drawn.
 	first := present.BuildTree(input)
 	for _, row := range first.Rows {
 		if row.Expandable {
@@ -208,8 +207,8 @@ func TestBuildTreeGivesEveryRowAnIdOfItsOwn(t *testing.T) {
 	}
 }
 
-// An empty catalog is what the tree draws before the first read answers, and it must draw
-// something rather than nothing.
+// The tree draws an empty catalog before the first read returns, and it must draw the
+// folders and not an empty pane.
 func TestBuildTreeHoldsAnEmptyCatalog(t *testing.T) {
 	held := present.BuildTree(present.TreeInput{
 		Engine:   core.EnginePostgres,
@@ -224,14 +223,14 @@ func TestBuildTreeHoldsAnEmptyCatalog(t *testing.T) {
 	}
 }
 
-// The summary counts the schemas, and says how many the server keeps that were folded away,
-// so a reader knows the tree is not the whole story.
+// The summary counts the schemas and the hidden system schemas, so the user knows that the
+// tree does not show everything.
 func TestBuildTreeCountsTheSchemasItShowedAndHid(t *testing.T) {
 	input := buildTreeInput()
 	input.HideSystemSchemas = true
 
 	held := present.BuildTree(input)
-	// Two schemas of the user are eligible, and both are drawn because no filter is on.
+	// Two schemas of the user are eligible, and both are drawn, because no filter is on.
 	if held.Summary.TotalSchemas != 2 {
 		t.Errorf("%d schemas are eligible, wanted the 2 of the user",
 			held.Summary.TotalSchemas)
@@ -240,13 +239,13 @@ func TestBuildTreeCountsTheSchemasItShowedAndHid(t *testing.T) {
 		t.Errorf("the tree draws %d of %d schemas although no filter is on",
 			held.Summary.ShownSchemas, held.Summary.TotalSchemas)
 	}
-	// The one the server keeps is counted apart, so the bar can say it was folded away.
+	// The system schema is counted separately, so the status bar can report it as hidden.
 	if held.Summary.HiddenSystemSchemas != 1 {
 		t.Errorf("%d schemas were folded away, wanted the one the server keeps",
 			held.Summary.HiddenSystemSchemas)
 	}
 
-	// Shown, none are hidden and the counts agree.
+	// With the system schemas shown, nothing is hidden and the counts match.
 	input.HideSystemSchemas = false
 	shown := present.BuildTree(input)
 	if shown.Summary.HiddenSystemSchemas != 0 {
@@ -259,8 +258,8 @@ func TestBuildTreeCountsTheSchemasItShowedAndHid(t *testing.T) {
 	}
 }
 
-// A filter draws fewer schemas than are eligible, which is what tells the bar to say the tree
-// is filtered rather than empty.
+// A filter draws fewer schemas than are eligible, which tells the status bar to report the
+// tree as filtered and not as empty.
 func TestBuildTreeCountsFewerShownThanEligibleUnderAFilter(t *testing.T) {
 	input := buildTreeInput()
 	input.HideSystemSchemas = true

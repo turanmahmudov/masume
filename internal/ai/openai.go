@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// The Responses protocol of OpenAI. It caches a repeated prefix by itself, with no mark and no
-// extra cost. It takes a key instead, which says which requests share a prefix. The key is
-// held here, and not in the request, because no other protocol reads one.
+// The Responses protocol of OpenAI. It caches a repeated prefix automatically, without a mark
+// and without extra cost. It uses a key that groups the requests with a common prefix. The
+// key is stored here and not in the request, because no other protocol uses one.
 
 const openaiBaseURL = "https://api.openai.com/v1"
 
@@ -31,8 +31,8 @@ func (held *openaiModel) Describe() string {
 	return "openai/" + held.model
 }
 
-// The items of the input, as this protocol writes them. A turn is a role with parts, and a
-// call and its answer are items of their own.
+// The items of the input, in the form of this protocol. A turn is a role with parts. A call
+// and its result are separate items.
 type openaiPart struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
@@ -41,9 +41,10 @@ type openaiPart struct {
 type openaiItem struct {
 	Type string `json:"type,omitempty"`
 	Role string `json:"role,omitempty"`
-	// Content is the parts of a turn, and the plain text of the one that opens the request.
+	// Content is the list of parts of a turn, or the plain text of the first turn of the
+	// request.
 	Content any `json:"content,omitempty"`
-	// A call the model asked for, and the answer of that call.
+	// A call the model requested, and the result of that call.
 	CallID    string `json:"call_id,omitempty"`
 	Name      string `json:"name,omitempty"`
 	Arguments string `json:"arguments,omitempty"`
@@ -72,13 +73,13 @@ const (
 	openaiOutputText = "output_text"
 )
 
-// buildOpenaiInput writes the turns as this protocol carries them. The system prompt is a turn
-// of its own, which this protocol calls the developer.
+// buildOpenaiInput converts the turns into the form of this protocol. The system prompt is a
+// separate turn, which this protocol calls the developer turn.
 func buildOpenaiInput(request Request) []openaiItem {
 	items := []openaiItem{}
 	if request.System != "" {
-		// The turn that opens the request carries its text plainly, where every turn after it
-		// carries parts.
+		// The first turn of the request holds plain text. Every turn after it holds
+		// parts.
 		items = append(items, openaiItem{Role: "developer", Content: request.System})
 	}
 
@@ -129,7 +130,7 @@ func (held *openaiModel) buildRequest(request Request) openaiRequest {
 	return built
 }
 
-// The events of the stream, as this protocol writes them.
+// The events of the stream, in the form of this protocol.
 type openaiStreamEvent struct {
 	Type  string `json:"type"`
 	Delta string `json:"delta"`
@@ -175,7 +176,7 @@ func (held *openaiModel) Stream(
 
 	answer := Answer{FinishReason: FinishUnknown}
 	text := strings.Builder{}
-	// The arguments of each call arrive a piece at a time, keyed by the call.
+	// The arguments of each call arrive in parts, keyed by the call.
 	building := map[string]*openBlock{}
 	order := []string{}
 
@@ -212,7 +213,8 @@ func (held *openaiModel) Stream(
 			if event.Item == nil || event.Item.Type != "function_call" {
 				return nil
 			}
-			// The whole arguments come with this event, so what was built is only a fallback.
+			// This event holds the complete arguments, so the collected parts are only a
+			// fallback.
 			arguments := event.Item.Arguments
 			if arguments == "" {
 				if open, held := building[event.Item.ID]; held {
@@ -243,7 +245,7 @@ func (held *openaiModel) Stream(
 		return answer, err
 	}
 
-	// A call whose closing event never came is still a call the model asked for.
+	// A call without a closing event is still a call the model requested.
 	for _, id := range order {
 		if open, waiting := building[id]; waiting {
 			answer.Calls = append(answer.Calls,
@@ -254,8 +256,8 @@ func (held *openaiModel) Stream(
 	return answer, nil
 }
 
-// findOpenCall returns the call these arguments belong to. The event names the item it is part
-// of, and a stream with one call at a time names none.
+// findOpenCall returns the call these arguments belong to. The event names its item. A stream
+// with one call at a time names no item.
 func findOpenCall(building map[string]*openBlock, event openaiStreamEvent) *openBlock {
 	if event.Item != nil {
 		if open, held := building[event.Item.ID]; held {
@@ -271,7 +273,7 @@ func findOpenCall(building map[string]*openBlock, event openaiStreamEvent) *open
 	return nil
 }
 
-// readOpenaiUsage keeps what the request spent.
+// readOpenaiUsage returns the token counts of the request.
 func readOpenaiUsage(event openaiStreamEvent, kept Usage) Usage {
 	if event.Response == nil || event.Response.Usage == nil {
 		return kept
@@ -285,8 +287,8 @@ func readOpenaiUsage(event openaiStreamEvent, kept Usage) Usage {
 	return kept
 }
 
-// readOpenaiStopReason names the reason this model stopped as the panel names it. This protocol
-// reports no reason for a call, so a call that was asked for is the reason.
+// readOpenaiStopReason converts the stop reason of this model into the form used by the
+// panel. This protocol reports no reason for a call, so a requested call is the reason.
 func readOpenaiStopReason(event openaiStreamEvent, asked bool) string {
 	if event.Response == nil {
 		return FinishUnknown

@@ -9,22 +9,22 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// KeySettings holds everything under `[keys]`: the preset, and the chords written
-// over it.
+// KeySettings holds everything under `[keys]`: the preset, and the chords that replace
+// entries of it.
 type KeySettings struct {
 	// The key set the app uses, before the chords of this file are applied.
 	Preset  PresetID
 	Choices ChordChoices
-	// The faults in the file, which are reported and not applied.
+	// The errors in the file. They are reported and not applied.
 	Problems []string
 }
 
-// DefaultKeySettings holds the keys the app opens with.
+// DefaultKeySettings holds the keys the app starts with.
 func DefaultKeySettings() KeySettings {
 	return KeySettings{Preset: PresetDefault, Choices: ChordChoices{}}
 }
 
-// presetSetting is the entry of `[keys]` that names the preset, not a scope.
+// presetSetting is the entry of `[keys]` that sets the preset and is not a scope.
 const presetSetting = "preset"
 
 func listPresetNames() string {
@@ -43,7 +43,7 @@ func listScopeNames() string {
 	return strings.Join(names, ", ")
 }
 
-// readPreset returns the preset the file asks for. An unknown name keeps the default.
+// readPreset returns the preset of the file. An unknown name keeps the default.
 func readPreset(keys Table, problems *[]string) PresetID {
 	value, present := keys[presetSetting]
 	if !present {
@@ -87,8 +87,8 @@ func readChords(written any) ([]string, bool) {
 	return nil, false
 }
 
-// readActionSequences returns the sequences one action is bound to. A line nobody
-// can read is reported and left out, and the action keeps its default key.
+// readActionSequences returns the sequences one action is bound to. A line that cannot be
+// parsed is reported and skipped, and the action keeps its default key.
 func readActionSequences(written string, entry any, problems *[]string) ([]ChordSequence, bool) {
 	texts, readable := readChords(entry)
 	if !readable {
@@ -106,8 +106,8 @@ func readActionSequences(written string, entry any, problems *[]string) ([]Chord
 		sequences = append(sequences, sequence)
 	}
 
-	// A line with no readable chord still meant to bind something, so the action
-	// keeps its default key.
+	// A line without a valid chord was still an attempt to bind the action, so the
+	// action keeps its default key.
 	if len(texts) > 0 && len(sequences) == 0 {
 		return nil, false
 	}
@@ -122,8 +122,8 @@ func readActionSequences(written string, entry any, problems *[]string) ([]Chord
 	return sequences, true
 }
 
-// readScopeChoices returns the chords every action of one scope is bound to, keyed
-// as the registry names them.
+// readScopeChoices returns the chords of every action of one scope, keyed by the action key
+// of the registry.
 func readScopeChoices(scope KeyScope, table any, problems *[]string) ChordChoices {
 	actions, isTable := FindTable(table)
 	if !isTable {
@@ -146,7 +146,7 @@ func findKeyScope(written string) (KeyScope, bool) {
 	return core.FindAllowed(KeyScopes, written)
 }
 
-// ParseKeySettings reads `[keys]`. A wrong line is reported and left out.
+// ParseKeySettings reads `[keys]`. An invalid line is reported and skipped.
 func ParseKeySettings(document Table) KeySettings {
 	keys, present := FindSection(document, "keys")
 	if !present {
@@ -164,7 +164,7 @@ func ParseKeySettings(document Table) KeySettings {
 	slices.Sort(names)
 
 	for _, name := range names {
-		// The preset is the only entry of this section that names no scope.
+		// The preset is the only entry of this section that is not a scope.
 		if name == presetSetting {
 			continue
 		}

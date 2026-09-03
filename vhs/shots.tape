@@ -1,9 +1,9 @@
-# Still frames of the client, for a README, a post or a store page.
-# Rebuild them with `mise run shots`. They land in vhs/shots/.
+# Screenshots of the client, for the README, a blog post or a store page.
+# Rebuild them with `mise run shots`. They are written to vhs/shots/.
 #
 # This tape renders larger than vhs/demo.tape and holds each frame only long enough to
-# capture it, so it is a screenshot run rather than a recording. The mp4 it has to write
-# goes to .demo, which is not tracked.
+# capture it. So it is a screenshot run, not a recording. The mp4 that vhs must write
+# goes to .demo, which git does not track.
 
 Output .demo/shots.mp4
 
@@ -28,7 +28,7 @@ Enter
 Sleep 4s
 Show
 
-# The tree, unfolded onto a table.
+# The tree, unfolded down to a table.
 Down Sleep 200ms
 Down Sleep 200ms
 Down Sleep 200ms
@@ -51,7 +51,7 @@ Screenshot vhs/shots/04-indexes.png
 Type "5" Sleep 2s
 Screenshot vhs/shots/05-ddl.png
 
-# The object menu, and the diagram behind its first entry.
+# The object menu, and the diagram that its first entry opens.
 Type "m" Sleep 2s
 Screenshot vhs/shots/06-object-menu.png
 
@@ -59,7 +59,7 @@ Enter Sleep 3s
 Screenshot vhs/shots/07-er-diagram.png
 Escape Sleep 800ms
 
-# A statement, part typed, with the completion menu open.
+# A partly typed statement with the completion menu open.
 Alt+n
 Sleep 1500ms
 Type "select c.country," Enter
@@ -81,7 +81,7 @@ Ctrl+r
 Sleep 3s
 Screenshot vhs/shots/09-result.png
 
-# The plan, with the times the server measured.
+# The plan, with the times that the server measured.
 Ctrl+y
 Sleep 4s
 Screenshot vhs/shots/10-plan.png

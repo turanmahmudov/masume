@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// openTestStore answers a history file of its own for one test.
+// openTestStore returns a separate history file for one test.
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
 	store, err := Open(filepath.Join(t.TempDir(), "history.sqlite"))
@@ -97,7 +97,7 @@ func TestAConversationKeepsTheNewestTurns(t *testing.T) {
 	}
 
 	read, _ := store.ListChatTurns(id)
-	// The oldest are dropped, and a reply left without its question goes with them.
+	// The oldest turns are removed, and an answer without its question is removed too.
 	if len(read) > maxKeptChatTurns {
 		t.Errorf("the conversation holds %d turns, wanted at most %d",
 			len(read), maxKeptChatTurns)

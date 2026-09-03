@@ -14,19 +14,19 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// LoadedConfig is everything one read of the config file gives.
+// LoadedConfig is the result of one read of the config file.
 type LoadedConfig struct {
 	ParsedProfiles
 	Settings UISettings
 	Keys     KeySettings
 	Ai       AiConfig
 	Mcp      McpConfig
-	// The themes the user wrote, which replace the shipped ones of the same name.
+	// The themes of the user. They replace an included theme with the same name.
 	Themes        []ThemeDocument
 	ThemeProblems []string
 }
 
-// ResolveConfigPath returns where the config file is.
+// ResolveConfigPath returns the path of the config file.
 func ResolveConfigPath() string {
 	configHome := os.Getenv("XDG_CONFIG_HOME")
 	if configHome == "" {
@@ -35,8 +35,8 @@ func ResolveConfigPath() string {
 	return filepath.Join(configHome, "masume", "config.toml")
 }
 
-// ResolveThemesPath returns where the themes of the user are, one file per theme,
-// beside the config.
+// ResolveThemesPath returns the directory of the themes of the user, one file per theme,
+// next to the config file.
 func ResolveThemesPath(configPath string) string {
 	return filepath.Join(filepath.Dir(configPath), "themes")
 }
@@ -50,7 +50,7 @@ func ReadDocument(path string) (Table, error) {
 	return DecodeDocument(string(text))
 }
 
-// DecodeDocument reads TOML text into a table.
+// DecodeDocument parses TOML text into a table.
 func DecodeDocument(text string) (Table, error) {
 	document := map[string]any{}
 	if _, err := toml.Decode(text, &document); err != nil {
@@ -59,9 +59,8 @@ func DecodeDocument(text string) (Table, error) {
 	return Table(document), nil
 }
 
-// ReadThemeDocuments reads the themes of the user, and everything in their files
-// that could not be read. It is empty if the directory does not exist, which is
-// the usual case.
+// ReadThemeDocuments reads the themes of the user and the errors in their files. The
+// result is empty if the directory does not exist, which is the usual case.
 func ReadThemeDocuments(themesPath string) ([]ThemeDocument, []string) {
 	documents := []ThemeDocument{}
 	problems := []string{}
@@ -95,8 +94,8 @@ func ReadThemeDocuments(themesPath string) ([]ThemeDocument, []string) {
 	return documents, problems
 }
 
-// buildDefaultConfig returns every default, with the reason the file gave nothing.
-// The themes still stand.
+// buildDefaultConfig returns the defaults, with the reason the file could not be used. The
+// themes of the user are kept.
 func buildDefaultConfig(path, reason string, themes []ThemeDocument, themeProblems []string) LoadedConfig {
 	return LoadedConfig{
 		Problems:      []ProfileProblem{{Name: path, Reason: reason}},
@@ -109,24 +108,25 @@ func buildDefaultConfig(path, reason string, themes []ThemeDocument, themeProble
 	}
 }
 
-// describeConfigFault says why the config file gave nothing. A file that is not there is the
-// first run of the client. A file that is there and cannot be read loses every profile, and
-// so does one that is not TOML, and the user has to be told which of the three it is.
+// describeConfigFault returns the reason the config file could not be used. A missing file
+// is the first run of the client. A file that exists but cannot be read loses every profile,
+// and so does a file that is not TOML. The user needs to know which of the three it is.
 func describeConfigFault(err error) string {
 	if errors.Is(err, fs.ErrNotExist) {
 		return "config file not found"
 	}
-	// The read returns a path error, and the decode returns a fault in the text.
+	// The read returns a path error, and the parser returns an error in the text.
 	if _, ok := errors.AsType[*fs.PathError](err); ok {
 		return fmt.Sprintf("config file cannot be read: %v", err)
 	}
 	return fmt.Sprintf("invalid TOML: %v", err)
 }
 
-// LoadConfig reads the file once, because the profiles and the settings share it.
+// LoadConfig reads the file one time, because the profiles and the settings are in the
+// same file.
 func LoadConfig(path string) LoadedConfig {
-	// The themes are read whatever the config file says, because the palette can
-	// choose a theme the config never named.
+	// The themes are read whatever the config file contains, because the palette can
+	// select a theme the config file does not name.
 	themes, themeProblems := ReadThemeDocuments(ResolveThemesPath(path))
 
 	document, err := ReadDocument(path)

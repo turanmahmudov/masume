@@ -9,50 +9,50 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/language"
 )
 
-// EditorBuffer is the statement being written, and the caret in it. The offsets count bytes,
-// because every reader of the buffer counts them the same way.
+// EditorBuffer is the statement under edit and the caret in it. The offsets are byte
+// offsets, because every reader of the buffer uses byte offsets.
 type EditorBuffer struct {
 	Text  string
 	Caret int
-	// The other end of a selection. A selection is empty while it equals the caret.
+	// The other end of a selection. The selection is empty while it equals the caret.
 	Anchor int
 	// The column the caret keeps while it moves up and down over short lines.
 	wantedColumn int
 	hasWanted    bool
-	// The steps an undo goes back to, and the ones a redo comes forward to.
+	// The steps of the undo stack and the steps of the redo stack.
 	undone []editorStep
 	redone []editorStep
-	// The kind of the last edit, so a run of typing is taken back in one press.
+	// The kind of the last edit, so one undo removes a group of typed characters.
 	lastEdit editKind
-	// The group the last character typed was in, so a word is taken back on its own.
+	// The class of the last typed character, so one undo removes one word.
 	lastGroup int
 }
 
-// editorStep is the buffer as it stood before one edit.
+// editorStep is the state of the buffer before one edit.
 type editorStep struct {
 	Text   string
 	Caret  int
 	Anchor int
 }
 
-// editKind groups the edits that join into one step of the undo.
+// editKind groups the edits that form one step of the undo.
 type editKind int
 
 const (
-	// editNone is the state after a move, which ends the run of edits before it.
+	// editNone is the state after a move, which ends the group of edits before it.
 	editNone editKind = iota
-	// editTyping is one character written at the caret.
+	// editTyping is one character inserted at the caret.
 	editTyping
-	// editDeleting is one character taken at the caret.
+	// editDeleting is one character deleted at the caret.
 	editDeleting
-	// editWhole is an edit that stands on its own, such as a paste or a format.
+	// editWhole is a separate edit, for example a paste or a format.
 	editWhole
 )
 
-// undoDepth is how many steps back the editor can go.
+// undoDepth is the number of steps the undo stack holds.
 const undoDepth = 500
 
-// NewEditorBuffer starts a buffer on the text and the caret a restored tab held.
+// NewEditorBuffer returns a buffer with the text and the caret of a restored tab.
 func NewEditorBuffer(text string, caret int) *EditorBuffer {
 	held := core.ClampWithin(caret, len(text))
 	return &EditorBuffer{Text: text, Caret: held, Anchor: held}
@@ -73,18 +73,18 @@ func (buffer *EditorBuffer) SelectionRange() (int, int) {
 	return core.ClampWithin(start, len(buffer.Text)), core.ClampWithin(end, len(buffer.Text))
 }
 
-// HasSelection is true while the caret and the anchor stand apart.
+// HasSelection is true while the caret and the anchor are at different offsets.
 func (buffer *EditorBuffer) HasSelection() bool {
 	start, end := buffer.SelectionRange()
 	return end > start
 }
 
-// ClearSelection lets the selection go, which every ordinary edit does.
+// ClearSelection removes the selection. Every normal edit calls it.
 func (buffer *EditorBuffer) ClearSelection() {
 	buffer.Anchor = buffer.Caret
 }
 
-// SelectAll takes the whole buffer, which is what the editor binds Ctrl+A to.
+// SelectAll selects the whole buffer. The editor binds Ctrl+A to it.
 func (buffer *EditorBuffer) SelectAll() {
 	buffer.Anchor = 0
 	buffer.Caret = len(buffer.Text)
@@ -96,9 +96,8 @@ func (buffer *EditorBuffer) SetText(text string) {
 	buffer.SetTextWithCaret(text, len(text))
 }
 
-// SetTextWithCaret replaces the buffer and puts the caret where it is named. The caret and
-// the anchor are set together, so the buffer never comes back holding a selection nobody
-// asked for.
+// SetTextWithCaret replaces the buffer and puts the caret at that offset. It sets the caret
+// and the anchor together, so the buffer never returns with an unwanted selection.
 func (buffer *EditorBuffer) SetTextWithCaret(text string, caret int) {
 	buffer.rememberBefore(editWhole)
 	buffer.Text = text
@@ -107,7 +106,7 @@ func (buffer *EditorBuffer) SetTextWithCaret(text string, caret int) {
 	buffer.hasWanted = false
 }
 
-// Insert writes the text at the caret, over the selection where there is one.
+// Insert writes the text at the caret, and replaces the selection if there is one.
 func (buffer *EditorBuffer) Insert(written string) {
 	kind := editTyping
 	switch {
@@ -115,8 +114,8 @@ func (buffer *EditorBuffer) Insert(written string) {
 		strings.ContainsAny(written, "\n\t"):
 		kind = editWhole
 	default:
-		// A blank after a word ends the run, so an undo takes back one word and not the
-		// whole of what was typed.
+		// A blank after a word ends the group, so one undo removes one word and not
+		// every typed character.
 		group := classifyRune(readRuneAt(written, 0))
 		if buffer.lastEdit == editTyping && group == blankRune &&
 			buffer.lastGroup != blankRune {
@@ -198,20 +197,20 @@ func (buffer *EditorBuffer) DeleteWordForward() {
 	buffer.hasWanted = false
 }
 
-// SelectedLineRange returns the offsets of the whole lines the selection touches, and the
-// caret's own line where there is no selection.
+// SelectedLineRange returns the offsets of the whole lines of the selection, or of the line
+// of the caret if there is no selection.
 func (buffer *EditorBuffer) SelectedLineRange() (int, int) {
 	start, end := buffer.SelectionRange()
-	// A selection that ends on the first cell of a line stops at the line above it, so
-	// picking down to the start of a line does not take the line under it as well.
+	// A selection that ends at the start of a line stops at the line above it, so a
+	// selection down to the start of a line does not include that line.
 	if end > start && end == buffer.LineStart(end) {
 		end--
 	}
 	return buffer.LineStart(start), buffer.LineEnd(end)
 }
 
-// CommentLines writes the mark in front of every line the selection touches, and takes it
-// away again where every one of them already carries it. It reports whether anything changed.
+// CommentLines adds the comment mark to every line of the selection, and removes it if every
+// line already has it. It reports whether it changed the buffer.
 func (buffer *EditorBuffer) CommentLines(mark string) bool {
 	if mark == "" {
 		return false
@@ -219,8 +218,8 @@ func (buffer *EditorBuffer) CommentLines(mark string) bool {
 	start, end := buffer.SelectedLineRange()
 	lines := strings.Split(buffer.Text[start:end], "\n")
 
-	// Every line that holds anything has to carry the mark for the press to take it away,
-	// so a block half of which is commented is commented whole first.
+	// Every line with content must have the mark before the key press removes it, so a
+	// block that is commented in part is commented completely first.
 	commented, written := true, 0
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
@@ -235,7 +234,8 @@ func (buffer *EditorBuffer) CommentLines(mark string) bool {
 		return false
 	}
 
-	// The mark stands at the indent the shallowest line has, so a block keeps its shape.
+	// The mark goes at the indent of the line with the smallest indent, so the block keeps
+	// its shape.
 	column := -1
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
@@ -262,7 +262,7 @@ func (buffer *EditorBuffer) CommentLines(mark string) bool {
 	return true
 }
 
-// dropCommentMark takes the mark, and the one blank after it, off the front of the line.
+// dropCommentMark removes the mark and one blank after it from the start of the line.
 func dropCommentMark(line, mark string) string {
 	indent := len(line) - len(strings.TrimLeft(line, " \t"))
 	rest := strings.TrimPrefix(line[indent:], mark)
@@ -270,7 +270,7 @@ func dropCommentMark(line, mark string) string {
 	return line[:indent] + rest
 }
 
-// IndentLines moves every line the selection touches one step to the right.
+// IndentLines moves every line of the selection one step to the right.
 func (buffer *EditorBuffer) IndentLines(width int) bool {
 	if width < 1 {
 		return false
@@ -289,8 +289,8 @@ func (buffer *EditorBuffer) IndentLines(width int) bool {
 	return true
 }
 
-// OutdentLines moves every line the selection touches one step to the left, as far as each
-// one can go. It reports whether any of them moved.
+// OutdentLines moves every line of the selection one step to the left, as far as each line
+// allows. It reports whether it moved a line.
 func (buffer *EditorBuffer) OutdentLines(width int) bool {
 	if width < 1 {
 		return false
@@ -318,7 +318,7 @@ func (buffer *EditorBuffer) OutdentLines(width int) bool {
 }
 
 // replaceLines writes the block of lines again and keeps the selection over it, so a second
-// press works on the same lines.
+// key press works on the same lines.
 func (buffer *EditorBuffer) replaceLines(start, end int, written string) {
 	buffer.rememberBefore(editWhole)
 	buffer.Text = buffer.Text[:start] + written + buffer.Text[end:]
@@ -327,9 +327,9 @@ func (buffer *EditorBuffer) replaceLines(start, end int, written string) {
 	buffer.lastEdit = editWhole
 }
 
-// MoveCaret moves the caret one character, and grows the selection while `selecting`. A move
-// that is not selecting and stands on a selection goes to the end of it instead, which is
-// what a caret does in every other editor.
+// MoveCaret moves the caret one character, and extends the selection if `selecting` is true.
+// A move without selection over an existing selection goes to the end of that selection,
+// which is the behaviour of every other editor.
 func (buffer *EditorBuffer) MoveCaret(step int, selecting bool) {
 	if !selecting && buffer.HasSelection() {
 		start, end := buffer.SelectionRange()
@@ -353,7 +353,7 @@ func (buffer *EditorBuffer) MoveCaret(step int, selecting bool) {
 	buffer.hasWanted = false
 }
 
-// MoveWord moves the caret over one word, and grows the selection while `selecting`.
+// MoveWord moves the caret over one word, and extends the selection if `selecting` is true.
 func (buffer *EditorBuffer) MoveWord(step int, selecting bool) {
 	if step < 0 {
 		buffer.Caret = buffer.FindWordStart(buffer.Caret)
@@ -364,13 +364,13 @@ func (buffer *EditorBuffer) MoveWord(step int, selecting bool) {
 	buffer.hasWanted = false
 }
 
-// LineStart returns where the line holding that offset begins.
+// LineStart returns the start of the line that contains that offset.
 func (buffer *EditorBuffer) LineStart(offset int) int {
 	broke := strings.LastIndexByte(buffer.Text[:core.ClampWithin(offset, len(buffer.Text))], '\n')
 	return broke + 1
 }
 
-// LineEnd returns where the line holding that offset ends.
+// LineEnd returns the end of the line that contains that offset.
 func (buffer *EditorBuffer) LineEnd(offset int) int {
 	held := core.ClampWithin(offset, len(buffer.Text))
 	broke := strings.IndexByte(buffer.Text[held:], '\n')
@@ -394,8 +394,8 @@ func (buffer *EditorBuffer) MoveToEnd(selecting bool) {
 	buffer.hasWanted = false
 }
 
-// MoveToLineStart puts the caret before the first word of the line, and before the indent of
-// the line on a second press.
+// MoveToLineStart puts the caret before the first word of the line, and at the start of the
+// line on a second key press.
 func (buffer *EditorBuffer) MoveToLineStart(selecting bool) {
 	start := buffer.LineStart(buffer.Caret)
 	end := buffer.LineEnd(buffer.Caret)
@@ -419,8 +419,7 @@ func (buffer *EditorBuffer) MoveToLineEnd(selecting bool) {
 	buffer.hasWanted = false
 }
 
-// MoveLine moves the caret a line up or down, and keeps the column it was in over a short
-// line.
+// MoveLine moves the caret one line up or down and keeps its column over a short line.
 func (buffer *EditorBuffer) MoveLine(step int, selecting bool) {
 	lineStart := buffer.LineStart(buffer.Caret)
 	if !buffer.hasWanted {
@@ -451,7 +450,7 @@ func (buffer *EditorBuffer) MoveLine(step int, selecting bool) {
 	buffer.settle(selecting)
 }
 
-// MovePage moves the caret as many lines as the pane shows, and keeps the column it was in.
+// MovePage moves the caret by the number of lines of the pane and keeps its column.
 func (buffer *EditorBuffer) MovePage(step, rows int, selecting bool) {
 	if rows < 1 {
 		rows = 1
@@ -461,19 +460,19 @@ func (buffer *EditorBuffer) MovePage(step, rows int, selecting bool) {
 	}
 }
 
-// PlaceCaret puts the caret at that offset, which a press of the pointer does.
+// PlaceCaret puts the caret at that offset. A mouse click calls it.
 func (buffer *EditorBuffer) PlaceCaret(offset int, selecting bool) {
 	buffer.Caret = buffer.snapToRune(core.ClampWithin(offset, len(buffer.Text)))
 	buffer.settle(selecting)
 	buffer.hasWanted = false
 }
 
-// SelectWordAt takes the word that offset stands in, which two presses of the pointer do.
+// SelectWordAt selects the word at that offset. A double click calls it.
 func (buffer *EditorBuffer) SelectWordAt(offset int) {
 	text := buffer.Text
 	at := buffer.snapToRune(core.ClampWithin(offset, len(text)))
-	// Nothing under the pointer takes the word that ends there, so a press past the last
-	// word of a line still takes one.
+	// With no character at the offset, the word that ends there is selected, so a click
+	// after the last word of a line still selects a word.
 	if at >= len(text) || classifyRune(readRuneAt(text, at)) == blankRune {
 		if at > 0 {
 			character, width := utf8.DecodeLastRuneInString(text[:at])
@@ -507,7 +506,7 @@ func (buffer *EditorBuffer) SelectWordAt(offset int) {
 	buffer.hasWanted = false
 }
 
-// SelectLineAt takes the whole line that offset stands in, with the break that ends it.
+// SelectLineAt selects the whole line at that offset, with its line break.
 func (buffer *EditorBuffer) SelectLineAt(offset int) {
 	start := buffer.LineStart(offset)
 	end := buffer.LineEnd(offset)
@@ -518,8 +517,8 @@ func (buffer *EditorBuffer) SelectLineAt(offset int) {
 	buffer.hasWanted = false
 }
 
-// FindOffsetAt returns the offset of a line and a column, which a press of the pointer names.
-// A column past the end of the line returns its end.
+// FindOffsetAt returns the offset of a line and a column, which a mouse click gives. A
+// column after the end of the line returns the end of the line.
 func (buffer *EditorBuffer) FindOffsetAt(line, column int) int {
 	start := 0
 	for range line {
@@ -539,7 +538,7 @@ func (buffer *EditorBuffer) FindOffsetAt(line, column int) int {
 	return buffer.snapToRune(start + column)
 }
 
-// FindWordStart returns where the word before that offset begins.
+// FindWordStart returns the start of the word before that offset.
 func (buffer *EditorBuffer) FindWordStart(offset int) int {
 	text := buffer.Text
 	at := core.ClampWithin(offset, len(text))
@@ -565,7 +564,7 @@ func (buffer *EditorBuffer) FindWordStart(offset int) int {
 	return at
 }
 
-// FindWordEnd returns where the word after that offset ends.
+// FindWordEnd returns the end of the word after that offset.
 func (buffer *EditorBuffer) FindWordEnd(offset int) int {
 	text := buffer.Text
 	at := core.ClampWithin(offset, len(text))
@@ -590,14 +589,15 @@ func (buffer *EditorBuffer) FindWordEnd(offset int) int {
 	return at
 }
 
-// FindMatches returns where the buffer holds this text, read without regard to case.
+// FindMatches returns the offsets of this text in the buffer, without case comparison.
 func (buffer *EditorBuffer) FindMatches(term string) []int {
 	if term == "" {
 		return nil
 	}
 	text, wanted := strings.ToLower(buffer.Text), strings.ToLower(term)
-	// Lowering a character can change how many bytes it takes, and an offset has to stand
-	// for the text as it is, so a text that changes length is searched as it was written.
+	// A change to lower case can change the number of bytes of a character, and an
+	// offset must refer to the original text, so a text that changes length is searched
+	// unchanged.
 	if len(text) != len(buffer.Text) || len(wanted) != len(term) {
 		text, wanted = buffer.Text, term
 	}
@@ -614,7 +614,7 @@ func (buffer *EditorBuffer) FindMatches(term string) []int {
 	return found
 }
 
-// SelectRange takes the text between two offsets, which a match of a search does.
+// SelectRange selects the text between two offsets. A search match calls it.
 func (buffer *EditorBuffer) SelectRange(start, end int) {
 	buffer.Anchor = core.ClampWithin(start, len(buffer.Text))
 	buffer.Caret = core.ClampWithin(end, len(buffer.Text))
@@ -622,8 +622,8 @@ func (buffer *EditorBuffer) SelectRange(start, end int) {
 	buffer.lastEdit = editNone
 }
 
-// ReplaceMatches writes the text in place of every match of the term, and returns how many
-// it wrote. The whole replace is one step of the undo.
+// ReplaceMatches replaces every match of the term and returns the number of replacements.
+// The whole replace is one step of the undo.
 func (buffer *EditorBuffer) ReplaceMatches(term, written string) int {
 	found := buffer.FindMatches(term)
 	if len(found) == 0 {
@@ -648,8 +648,8 @@ func (buffer *EditorBuffer) ReplaceMatches(term, written string) int {
 	return len(found)
 }
 
-// Undo brings the buffer back to how it stood before the last edit, and reports whether
-// there was an edit to take back.
+// Undo restores the state of the buffer before the last edit and reports whether there was
+// an edit to undo.
 func (buffer *EditorBuffer) Undo() bool {
 	if len(buffer.undone) == 0 {
 		return false
@@ -661,7 +661,7 @@ func (buffer *EditorBuffer) Undo() bool {
 	return true
 }
 
-// Redo writes back what the last undo took away, and reports whether there was one.
+// Redo restores what the last undo removed and reports whether there was an undo.
 func (buffer *EditorBuffer) Redo() bool {
 	if len(buffer.redone) == 0 {
 		return false
@@ -673,9 +673,9 @@ func (buffer *EditorBuffer) Redo() bool {
 	return true
 }
 
-// rememberBefore keeps the buffer as it stands, so the edit that follows can be taken back.
-// An edit of the same kind as the one before it joins that step, so a run of typing is one
-// press of the undo and not one press for every letter.
+// rememberBefore stores the current buffer, so the next edit can be undone. An edit of the
+// same kind as the one before it joins that step, so one undo removes a group of typed
+// characters and not one character.
 func (buffer *EditorBuffer) rememberBefore(kind editKind) {
 	buffer.redone = nil
 	if kind != editWhole && kind == buffer.lastEdit && len(buffer.undone) > 0 {
@@ -700,7 +700,7 @@ func (buffer *EditorBuffer) applyStep(step editorStep) {
 	buffer.lastEdit = editNone
 }
 
-// snapToRune returns the offset moved back to the first byte of the character it stands in.
+// snapToRune moves the offset back to the first byte of its character.
 func (buffer *EditorBuffer) snapToRune(offset int) int {
 	for offset > 0 && offset < len(buffer.Text) && !utf8.RuneStart(buffer.Text[offset]) {
 		offset--
@@ -708,7 +708,7 @@ func (buffer *EditorBuffer) snapToRune(offset int) int {
 	return offset
 }
 
-// placeInLine returns where the wanted column falls in a line, or its end.
+// placeInLine returns the offset of that column in the line, or the end of the line.
 func (buffer *EditorBuffer) placeInLine(start, end int) int {
 	wanted := start + buffer.wantedColumn
 	if wanted > end {
@@ -722,30 +722,30 @@ func (buffer *EditorBuffer) settle(selecting bool) {
 	if !selecting {
 		buffer.ClearSelection()
 	}
-	// A move ends the run of edits before it, so what is typed after it is taken back on
-	// its own.
+	// A move ends the group of edits before it, so the characters typed after it form
+	// their own undo step.
 	buffer.lastEdit = editNone
 }
 
-// Lines returns the buffer split into its lines, which is what the editor draws.
+// Lines returns the buffer split into lines, which is what the editor draws.
 func (buffer *EditorBuffer) Lines() []string {
 	return strings.Split(buffer.Text, "\n")
 }
 
-// CaretPosition returns the line and the column the caret is in, counted from zero.
+// CaretPosition returns the line and the column of the caret, counted from zero.
 func (buffer *EditorBuffer) CaretPosition() (int, int) {
 	before := buffer.Text[:core.ClampWithin(buffer.Caret, len(buffer.Text))]
 	line := strings.Count(before, "\n")
 	return line, buffer.Caret - buffer.LineStart(buffer.Caret)
 }
 
-// ReadStatementAtCaret returns the statement the caret stands in.
+// ReadStatementAtCaret returns the statement at the caret.
 func (buffer *EditorBuffer) ReadStatementAtCaret(language language.Language) string {
 	return language.ReadStatementAtOffset(buffer.Text, buffer.Caret)
 }
 
-// IndentAtCaret returns the blank the line under the caret opens with, so a line opened
-// after it starts under the same word.
+// IndentAtCaret returns the leading blank of the line of the caret, so a new line after it
+// starts at the same indent.
 func (buffer *EditorBuffer) IndentAtCaret() string {
 	line := buffer.Text[buffer.LineStart(buffer.Caret):buffer.Caret]
 	indent := 0
@@ -755,15 +755,15 @@ func (buffer *EditorBuffer) IndentAtCaret() string {
 	return line[:indent]
 }
 
-// The three groups a character falls in for a move over words: a blank, a character a name
-// is made of, and everything else.
+// The three character classes of a move over words: a blank, a character of a name, and
+// every other character.
 const (
 	blankRune = iota
 	nameRune
 	symbolRune
 )
 
-// classifyRune returns which of the three groups a character is in.
+// classifyRune returns the class of a character.
 func classifyRune(character rune) int {
 	switch {
 	case unicode.IsSpace(character):

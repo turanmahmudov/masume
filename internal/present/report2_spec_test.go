@@ -9,8 +9,8 @@ import (
 )
 
 func TestFormatResultSizeNeverClaimsMoreThanTheClientKnows(t *testing.T) {
-	// A read that stopped early is marked, so a count is never read as the whole
-	// relation until the user asks for the total.
+	// A partial read is marked, so a count is never read as the whole table before the
+	// user requests the total.
 	for _, held := range []struct {
 		name      string
 		shown     int
@@ -90,8 +90,8 @@ func TestFormatForViewerIndentsADocumentAndLeavesTheRestAlone(t *testing.T) {
 }
 
 func TestAlignCardHeightLeavesAnEvenNumberOfRowsAboveAndBelow(t *testing.T) {
-	// A card is centred, so an odd gap cannot be shared. The half row would round the
-	// last row of the card off the screen, and the card takes that row instead.
+	// A card is centred, so an odd gap cannot be split. The extra half row would move
+	// the last row of the card off the screen, so the card takes that row.
 	for _, held := range []struct {
 		name      string
 		height    int
@@ -142,8 +142,8 @@ func TestResolveLineSpanPointsAtTheLineAndColumnOfAFault(t *testing.T) {
 }
 
 func TestResolveLineSpanAlwaysCoversAtLeastOneCell(t *testing.T) {
-	// The span is a column range on its line. A fault of no width still has to be seen,
-	// so it covers the cell it stands on.
+	// The span is a column range on its line. An error of zero width must still be
+	// visible, so it covers the cell at its position.
 	const text = "select a"
 	for _, held := range []struct {
 		name  string
@@ -193,7 +193,7 @@ func TestPlanDetailColumnsFitsTheColumnsToThePane(t *testing.T) {
 }
 
 func TestPlanDetailColumnsTakesTheExtraWidthFromTheWidestColumn(t *testing.T) {
-	// A name column keeps its names and a definition column gives way.
+	// A name column keeps its names and a definition column shrinks.
 	headers := []string{"name", "definition"}
 	rows := [][]string{{"id", strings.Repeat("x", 200)}}
 	widths := present.PlanDetailColumns(headers, rows, 40, 1)

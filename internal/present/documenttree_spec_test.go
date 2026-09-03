@@ -10,7 +10,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// buildOrderColumns answers the columns a collection of orders reads as.
+// buildOrderColumns returns the columns of a collection of orders.
 func buildOrderColumns() []db.ResultColumn {
 	return []db.ResultColumn{
 		{Name: "_id", DataType: core.DocumentTypeObjectID},
@@ -20,8 +20,8 @@ func buildOrderColumns() []db.ResultColumn {
 	}
 }
 
-// buildOrderRows answers rows the shape a document collection has, with the nested values
-// written the way every type survives them.
+// buildOrderRows returns rows in the form of a document collection, with the nested values
+// written so that every type is kept.
 func buildOrderRows(count int) [][]any {
 	rows := make([][]any, 0, count)
 	for at := range count {
@@ -53,8 +53,8 @@ func buildDocumentTreeInput(rows [][]any, opened map[string]bool) present.Docume
 	}
 }
 
-// A document that is folded is one row of the tree, whatever it holds. A reader who opened
-// nothing sees one row per document and can scroll them as the grid scrolls its rows.
+// A folded document is one row of the tree, whatever it contains. Without an open node the
+// user sees one row per document and scrolls them in the same way as the grid rows.
 func TestAFoldedDocumentIsOneRow(t *testing.T) {
 	tree := present.BuildDocumentTree(buildDocumentTreeInput(buildOrderRows(500), nil))
 
@@ -76,7 +76,7 @@ func TestAFoldedDocumentIsOneRow(t *testing.T) {
 	}
 }
 
-// Opening a document shows the fields it holds, at one level in.
+// An open document shows its fields, one level deeper.
 func TestOpeningADocumentShowsItsFields(t *testing.T) {
 	opened := map[string]bool{present.BuildRowPath(0): true}
 	tree := present.BuildDocumentTree(buildDocumentTreeInput(buildOrderRows(10), opened))
@@ -108,8 +108,8 @@ func TestOpeningADocumentShowsItsFields(t *testing.T) {
 	}
 }
 
-// The type of a nested value is the type the server stores, not the type JSON has room for.
-// This is the reason the tree is worth drawing at all.
+// The type of a nested value is the type on the server and not the type JSON can express.
+// This is the purpose of the tree.
 func TestANestedValueKeepsTheTypeTheServerStores(t *testing.T) {
 	opened := map[string]bool{
 		present.BuildRowPath(0):                       true,
@@ -147,7 +147,7 @@ func TestANestedValueKeepsTheTypeTheServerStores(t *testing.T) {
 	}
 }
 
-// An array is opened by the place of each element, because an element has no name.
+// An array is opened by the index of each element, because an element has no name.
 func TestAnArrayIsOpenedByThePlaceOfItsElements(t *testing.T) {
 	opened := map[string]bool{
 		present.BuildRowPath(0):                    true,
@@ -169,12 +169,11 @@ func TestAnArrayIsOpenedByThePlaceOfItsElements(t *testing.T) {
 	}
 }
 
-// The window is what the pane draws, and it has to be the same rows whether they are reached
-// by reading the whole tree or by going straight to them. This is what lets the tree skip the
-// rows above the window instead of walking them.
+// The window is the part the pane draws. It must contain the same rows through a read of the
+// whole tree and through a direct read. This lets the tree skip the rows above the window.
 func TestAWindowHoldsTheSameRowsAsAWalkFromTheTop(t *testing.T) {
 	opened := map[string]bool{}
-	// A reader opens a few documents, spread through the result, and a nested value in one.
+	// The user opens a few documents at different positions, and one nested value.
 	for _, at := range []int{0, 3, 77, 512, 4998} {
 		opened[present.BuildRowPath(at)] = true
 	}
@@ -204,7 +203,7 @@ func TestAWindowHoldsTheSameRowsAsAWalkFromTheTop(t *testing.T) {
 	}
 }
 
-// A row past the end of the tree draws nothing, rather than the last row again.
+// A row after the end of the tree returns nothing and not the last row again.
 func TestAWindowPastTheEndDrawsNothing(t *testing.T) {
 	tree := present.BuildDocumentTree(buildDocumentTreeInput(buildOrderRows(4), nil))
 	if held := tree.ReadWindow(4, 10); len(held) != 0 {
@@ -215,8 +214,8 @@ func TestAWindowPastTheEndDrawsNothing(t *testing.T) {
 	}
 }
 
-// The line down the left says which branch carries on below a row. The last field of a
-// document closes its branch; the ones above it keep it open.
+// The guide line on the left shows which branch continues below a row. The last field of a
+// document ends its branch, and the fields above it keep it open.
 func TestTheLastFieldClosesItsBranch(t *testing.T) {
 	opened := map[string]bool{present.BuildRowPath(0): true}
 	tree := present.BuildDocumentTree(buildDocumentTreeInput(buildOrderRows(2), opened))
@@ -232,8 +231,8 @@ func TestTheLastFieldClosesItsBranch(t *testing.T) {
 	}
 }
 
-// A tree is offered where a value opens. A result of plain columns has none, and one with a
-// column of JSON text has one even where the server named no document type.
+// The tree is available if a value can be opened. A result of plain columns has none, and a
+// result with a column of JSON text has one, also if the server gave no document type.
 func TestATreeIsOfferedWhereAValueOpens(t *testing.T) {
 	plain := []db.ResultColumn{{Name: "id", DataType: "integer"}, {Name: "name", DataType: "text"}}
 	if present.HasDocumentColumn(plain, [][]any{{int64(1), "ada"}}) {
@@ -252,8 +251,8 @@ func TestATreeIsOfferedWhereAValueOpens(t *testing.T) {
 	}
 }
 
-// A document that holds itself would open for ever. The tree stops, rather than running out
-// of memory drawing one row.
+// A document that contains itself would open without an end. The tree stops at the depth
+// limit instead of using all memory for one row.
 func TestTheTreeStopsAtADepthItWillNotPass(t *testing.T) {
 	deep := "1"
 	for range 80 {
@@ -282,7 +281,8 @@ func TestTheTreeStopsAtADepthItWillNotPass(t *testing.T) {
 	}
 }
 
-// The path of a node names the field it stands on, so a reader can be told where they are.
+// The path of a node identifies its field, so the client can show the position of the
+// cursor.
 func TestThePathNamesTheFieldItStandsOn(t *testing.T) {
 	path := present.BuildRowPath(4) + "\x1f" + "customer" + "\x1f" + "address"
 	keys := present.ReadDocumentPathKeys(path)
@@ -294,9 +294,9 @@ func TestThePathNamesTheFieldItStandsOn(t *testing.T) {
 	}
 }
 
-// Reading a window far into a large result must not cost what reading the rows before it
-// would. The tree is built from the rows the reader opened, so a folded result of a million
-// rows costs nothing to skip through.
+// A read of a window deep inside a large result must not cost the same as a read of every
+// row before it. The tree is built from the open rows, so a folded result of a million rows
+// is fast to scroll.
 func BenchmarkReadADocumentWindow(b *testing.B) {
 	for _, rows := range []int{1000, 100000, 1000000} {
 		b.Run(strconv.Itoa(rows), func(b *testing.B) {

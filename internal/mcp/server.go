@@ -14,11 +14,11 @@ import (
 )
 
 // The protocol itself: JSON-RPC 2.0, one message per line, over standard input and standard
-// output. Nothing else may write to standard output while this runs.
+// output. No other code can write to standard output while this runs.
 
 const jsonRPCVersion = "2.0"
 
-// The codes JSON-RPC gives a failure.
+// The JSON-RPC error codes.
 const (
 	parseError     = -32700
 	invalidRequest = -32600
@@ -27,23 +27,23 @@ const (
 	internalError  = -32603
 )
 
-// knownProtocolVersions holds the versions of the protocol this server speaks, newest first.
+// knownProtocolVersions holds the protocol versions this server supports, newest first.
 var knownProtocolVersions = []string{"2025-06-18", "2025-03-26", "2024-11-05"}
 
-// ServerInfo is the name and version the server reports to a client.
+// ServerInfo is the name and the version the server reports to a client.
 type ServerInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 }
 
-// resultMessage is the answer to a call that worked.
+// resultMessage is the answer to a call that succeeded.
 type resultMessage struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      any    `json:"id"`
 	Result  any    `json:"result"`
 }
 
-// errorMessage is the answer to a call that did not work.
+// errorMessage is the answer to a call that failed.
 type errorMessage struct {
 	JSONRPC string       `json:"jsonrpc"`
 	ID      any          `json:"id"`
@@ -55,8 +55,8 @@ type errorContent struct {
 	Message string `json:"message"`
 }
 
-// requestMessage is a request the server sends the other way, which is only the question it
-// asks its client.
+// requestMessage is a request the server sends in the other direction. The only one is the
+// question to the client.
 type requestMessage struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      string `json:"id"`
@@ -64,7 +64,7 @@ type requestMessage struct {
 	Params  any    `json:"params"`
 }
 
-// sessionStart is what the server returns at initialize.
+// sessionStart is the answer of the server to initialize.
 type sessionStart struct {
 	ProtocolVersion string             `json:"protocolVersion"`
 	Capabilities    serverCapabilities `json:"capabilities"`
@@ -79,7 +79,7 @@ type toolCapabilities struct {
 	ListChanged bool `json:"listChanged"`
 }
 
-// toolListing is every tool, as tools/list describes them.
+// toolListing is the list of tools in the form of tools/list.
 type toolListing struct {
 	Tools []describedTool `json:"tools"`
 }
@@ -90,7 +90,7 @@ type describedTool struct {
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
-// toolResult is what a tool answered: text, and whether the call failed.
+// toolResult is the answer of a tool: the text, and whether the call failed.
 type toolResult struct {
 	Content []toolContent `json:"content"`
 	IsError bool          `json:"isError,omitempty"`
@@ -101,21 +101,21 @@ type toolContent struct {
 	Text string `json:"text"`
 }
 
-// ResponderDeps is everything the protocol needs to answer.
+// ResponderDeps holds everything the protocol needs to answer.
 type ResponderDeps struct {
 	Tools []Tool
 	Info  ServerInfo
-	// Asker reads the capabilities at initialize, and asks the user of the client.
+	// Asker reads the capabilities at initialize and asks the user of the client.
 	Asker    *Asker
 	LogEvent func(message string)
 }
 
-// Responder returns one message at a time, and knows nothing of the transport.
+// Responder answers one message at a time. It knows nothing about the transport.
 type Responder struct {
 	deps ResponderDeps
 }
 
-// CreateResponder builds the answering side of the protocol.
+// CreateResponder returns the answering side of the protocol.
 func CreateResponder(deps ResponderDeps) *Responder {
 	return &Responder{deps: deps}
 }
@@ -131,15 +131,15 @@ func buildError(id any, code int, message string) any {
 	}
 }
 
-// buildToolResult writes what a tool answered, and reports whether the call failed.
+// buildToolResult returns the answer of a tool and whether the call failed.
 func buildToolResult(text string, failed bool) toolResult {
 	return toolResult{
 		Content: []toolContent{{Type: "text", Text: text}}, IsError: failed,
 	}
 }
 
-// castToObject reads a value as the named fields of an object, and returns no fields for
-// anything else.
+// castToObject returns the fields of a value that is an object, and no fields for any other
+// value.
 func castToObject(value any) map[string]any {
 	named, is := value.(map[string]any)
 	if !is {
@@ -148,8 +148,8 @@ func castToObject(value any) map[string]any {
 	return named
 }
 
-// encodeJSON writes a value as JSON, with an indent where the reader is a person. A character
-// a browser cares about is left as it was written, because a statement is read by a model.
+// encodeJSON returns a value as JSON, with an indent if a person reads it. An HTML character
+// is not escaped, because a model reads the statement.
 func encodeJSON(value any, indent string) (string, error) {
 	written := &bytes.Buffer{}
 	encoder := json.NewEncoder(written)
@@ -161,8 +161,8 @@ func encodeJSON(value any, indent string) (string, error) {
 	return strings.TrimRight(written.String(), "\n"), nil
 }
 
-// buildJSONLine writes one message as a line. Nothing this server sends can fail to be
-// written, so a failure returns with the protocol error rather than with nothing.
+// buildJSONLine returns one message as a line. No message of this server can fail to encode,
+// so an encode error returns the protocol error and not an empty line.
 func buildJSONLine(message any) string {
 	line, err := encodeJSON(message, "")
 	if err == nil {
@@ -172,7 +172,8 @@ func buildJSONLine(message any) string {
 		`"message":"the answer cannot be written as JSON"}}`
 }
 
-// resolveProtocolVersion returns the version the client asked for, where this server knows it.
+// resolveProtocolVersion returns the version the client requested, if this server supports
+// it.
 func resolveProtocolVersion(asked any) string {
 	written, is := asked.(string)
 	if is {
@@ -183,21 +184,21 @@ func resolveProtocolVersion(asked any) string {
 	return knownProtocolVersions[0]
 }
 
-// The kinds one message can be, once its id and its method are read.
+// The kinds of message, after the id and the method are read.
 const (
-	// messageMalformed is anything that is not a JSON object.
+	// messageMalformed is any message that is not a JSON object.
 	messageMalformed = iota
-	// messageMethodless names no method, which the client sends to answer the server.
+	// messageMethodless has no method. The client sends it to answer the server.
 	messageMethodless
-	// messageCall names a method to answer.
+	// messageCall has a method to answer.
 	messageCall
 )
 
-// incoming is one message, read far enough to know what to do with it.
+// incoming is one message, parsed far enough to select the handler.
 type incoming struct {
 	kind int
 	id   any
-	// wantsAnswer is false for a notification, which is handled and not answered.
+	// wantsAnswer is false for a notification, which is handled without an answer.
 	wantsAnswer bool
 	method      string
 	params      map[string]any
@@ -230,8 +231,8 @@ func readIncomingMessage(message any) incoming {
 	}
 }
 
-// AnswerMessage returns one message, and nothing for a notification or an answer, which need
-// no reply.
+// AnswerMessage returns the answer to one message, and nothing for a notification or an
+// answer, which need no reply.
 func (responder *Responder) AnswerMessage(ctx context.Context, message any) any {
 	held := readIncomingMessage(message)
 	switch held.kind {
@@ -244,7 +245,7 @@ func (responder *Responder) AnswerMessage(ctx context.Context, message any) any 
 }
 
 func (responder *Responder) answerMethodless(held incoming) any {
-	// The client replies to a question the server asked.
+	// The client answers a question of the server.
 	if responder.deps.Asker.ReceiveAnswer(held.named) {
 		return nil
 	}
@@ -342,8 +343,8 @@ func (responder *Responder) callTool(
 			return buildToolResult(written, false), nil
 		}
 	}
-	// A refusal and a failure go into the answer, not into a protocol error, so the agent can
-	// read the reason.
+	// A refusal and an error go into the answer and not into a protocol error, so the
+	// agent can read the reason.
 	message := db.DescribeError(err)
 	responder.deps.LogEvent("! tool " + tool.Name + " " + message)
 	return buildToolResult(message, true), nil

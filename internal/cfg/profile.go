@@ -10,46 +10,45 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// AuthMode says where the password comes from: the profile itself, a command, or
-// the user.
+// AuthMode is the source of the password: the profile itself, a command, or the user.
 type AuthMode string
 
-// The three places a password can come from.
+// The three sources of a password.
 const (
 	AuthPassword AuthMode = "password"
 	AuthCommand  AuthMode = "command"
 	AuthPrompt   AuthMode = "prompt"
 )
 
-// AuthModes lists the modes a profile may name.
+// AuthModes lists the modes a profile can use.
 var AuthModes = []AuthMode{AuthPassword, AuthCommand, AuthPrompt}
 
-// Environment is the environment a connection is in.
+// Environment is the environment of a connection.
 type Environment string
 
-// The three environments a profile may name.
+// The three environments a profile can use.
 const (
 	EnvironmentDev  Environment = "dev"
 	EnvironmentTest Environment = "test"
 	EnvironmentProd Environment = "prod"
 )
 
-// Environments lists the environments a profile may name.
+// Environments lists the environments a profile can use.
 var Environments = []Environment{EnvironmentDev, EnvironmentTest, EnvironmentProd}
 
-// AccessMode says whether the client may write in the server.
+// AccessMode says whether the client can write to the server.
 type AccessMode string
 
-// The two access modes a profile may name.
+// The two access modes a profile can use.
 const (
 	AccessReadOnly AccessMode = "read-only"
 	AccessWrite    AccessMode = "write"
 )
 
-// AccessModes lists the modes a profile may name.
+// AccessModes lists the modes a profile can use.
 var AccessModes = []AccessMode{AccessReadOnly, AccessWrite}
 
-// ConfirmWrites says which statements need a yes before they run.
+// ConfirmWrites says which statements need a confirmation before they run.
 type ConfirmWrites string
 
 // The three levels of confirmation.
@@ -59,40 +58,40 @@ const (
 	ConfirmWrite  ConfirmWrites = "write"
 )
 
-// ConfirmModes lists the levels a profile may name.
+// ConfirmModes lists the levels a profile can use.
 var ConfirmModes = []ConfirmWrites{ConfirmOff, ConfirmDelete, ConfirmWrite}
 
-// McpAccess says what an agent may run on a connection.
+// McpAccess is the set of operations an agent can run on a connection.
 type McpAccess string
 
-// The levels an agent can be given, the lowest first.
+// The levels an agent can get, the lowest first.
 const (
 	McpOff       McpAccess = "off"
 	McpReadOnly  McpAccess = "read-only"
 	McpReadWrite McpAccess = "read-write"
 	McpFull      McpAccess = "full"
-	// McpUnset means the profile named no level, so the `[mcp]` level stands.
+	// McpUnset means the profile sets no level, so the `[mcp]` level applies.
 	McpUnset McpAccess = ""
 )
 
 // McpAccessLevels lists the levels, the lowest first.
 var McpAccessLevels = []McpAccess{McpOff, McpReadOnly, McpReadWrite, McpFull}
 
-// The defaults a profile takes where it names nothing.
+// The defaults a profile uses when it sets no value.
 const (
-	// DefaultCommandTimeout is how long a pre-connect command may take to open its port.
+	// DefaultCommandTimeout is the time a pre-connect command has to open its port.
 	DefaultCommandTimeout = 10 * time.Second
-	// DefaultPageSize is how many rows one read returns.
+	// DefaultPageSize is the number of rows one read returns.
 	DefaultPageSize = 200
-	// DefaultKeepalive is how long between two checks that the server responds.
+	// DefaultKeepalive is the time between two checks that the server responds.
 	DefaultKeepalive = 30 * time.Second
 )
 
-// Profile is one connection as the config file describes it.
+// Profile is one connection as the config file defines it.
 type Profile struct {
 	Name   string
 	Engine core.Engine
-	// Empty for an engine that opens a file instead of a server.
+	// Empty for an engine that opens a file and not a server.
 	Host string
 	Port int
 	// The database on the server, or the path of the SQLite file.
@@ -103,31 +102,31 @@ type Profile struct {
 	AccessMode  AccessMode
 	Password    string
 	PasswordEnv string
-	// A command that prints the password, such as a keyring lookup.
+	// A command that prints the password, for example a keyring lookup.
 	PasswordCommand string
 	SSLMode         core.SSLMode
 	Autocommit      bool
 	ConfirmWrites   ConfirmWrites
-	// A command to run before connecting, such as a tunnel.
+	// A command to run before the connection, for example a tunnel.
 	Command string
-	// The port the command must open before the connection is tried.
+	// The port the command must open before the client connects.
 	WaitForPort    int
 	CommandTimeout time.Duration
-	// Rows per read. This is the step size through a relation, not a limit.
+	// Rows per read. This is the step size through a table, not a maximum.
 	PageSize int
-	// How long between two checks that the server responds. Zero turns it off.
+	// The time between two checks that the server responds. Zero disables the check.
 	Keepalive time.Duration
-	// How long one statement may run before it is cancelled. Zero leaves the limit to
+	// The time one statement can run before it is cancelled. Zero leaves the limit to
 	// the server.
 	StatementTimeout time.Duration
 	Description      string
-	// Instructions for the chat on this connection, such as a naming rule.
+	// Instructions for the chat on this connection, for example a naming rule.
 	AiInstructions string
-	// What an agent may run here over MCP. Unset keeps the `[mcp]` level.
+	// The operations an agent can run here over MCP. Unset keeps the `[mcp]` level.
 	McpAccess McpAccess
 }
 
-// ProfileProblem is a profile the file could not read, and the reason.
+// ProfileProblem is a profile that could not be read, with the reason.
 type ProfileProblem struct {
 	Name   string
 	Reason string
@@ -139,8 +138,8 @@ type ParsedProfiles struct {
 	Problems []ProfileProblem
 }
 
-// resolveDefaultConfirmWrites reads the environment, which is the only measure of
-// the cost of a mistake: production confirms every write and development none.
+// resolveDefaultConfirmWrites uses the environment, which is the only indication of the
+// cost of a mistake. Production confirms every write and development confirms none.
 func resolveDefaultConfirmWrites(environment Environment) ConfirmWrites {
 	switch environment {
 	case EnvironmentProd:
@@ -167,7 +166,7 @@ func readRequiredString(source Table, key string) (string, error) {
 	return written, nil
 }
 
-// readCount reads a whole number of zero or more, where zero turns a feature off.
+// readCount reads an integer of zero or more. Zero disables the feature.
 func readCount(source Table, key string) (int, bool, error) {
 	if _, present := source[key]; !present {
 		return 0, false, nil
@@ -207,7 +206,7 @@ func resolveOneOf[T ~string](source Table, key string, allowed []T, fallback T) 
 	return fallback, failProfile("%q must be one of %s", key, strings.Join(names, ", "))
 }
 
-// readSSLMode returns the mode the profile named, or the default of its engine.
+// readSSLMode returns the mode of the profile, or the default of its engine.
 func readSSLMode(source Table, engine core.Engine) (core.SSLMode, error) {
 	written, present := FindString(source, "sslmode")
 	if !present {
@@ -351,8 +350,8 @@ func buildProfile(name string, source Table) (Profile, error) {
 	}, nil
 }
 
-// ParseProfiles reads the `[profile]` section. A profile the client cannot read is
-// reported and left out, so one wrong entry never stops the app.
+// ParseProfiles reads the `[profile]` section. A profile that cannot be read is reported
+// and skipped, so one bad entry does not stop the app.
 func ParseProfiles(document Table) ParsedProfiles {
 	written, present := FindSection(document, "profile")
 	if !present {
@@ -384,8 +383,8 @@ func ParseProfiles(document Table) ParsedProfiles {
 	return parsed
 }
 
-// DescribeProfileTarget writes the target of the profile in short: a file path, or
-// a server.
+// DescribeProfileTarget returns a short form of the target of the profile: a file path, or
+// a server address.
 func DescribeProfileTarget(profile Profile) string {
 	if core.OpensFile(profile.Engine) {
 		return profile.Database
@@ -393,8 +392,8 @@ func DescribeProfileTarget(profile Profile) string {
 	return fmt.Sprintf("%s@%s:%d/%s", profile.User, profile.Host, profile.Port, profile.Database)
 }
 
-// FindConfiguredValue returns a value written directly, or the environment
-// variable that holds it. The direct value wins.
+// FindConfiguredValue returns the direct value, or the value of the named environment
+// variable. The direct value has priority.
 func FindConfiguredValue(written, variableName string) string {
 	if written != "" {
 		return written
@@ -405,8 +404,8 @@ func FindConfiguredValue(written, variableName string) string {
 	return os.Getenv(variableName)
 }
 
-// FindStoredPassword returns the password the profile already holds, without
-// asking the user.
+// FindStoredPassword returns the password the profile already holds. It does not ask the
+// user.
 func FindStoredPassword(profile Profile) string {
 	if profile.Auth != AuthPassword {
 		return ""
@@ -414,27 +413,26 @@ func FindStoredPassword(profile Profile) string {
 	return FindConfiguredValue(profile.Password, profile.PasswordEnv)
 }
 
-// NeedsPasswordPrompt is true where only the user can give the password.
+// NeedsPasswordPrompt is true if the user is the only source of the password.
 func NeedsPasswordPrompt(profile Profile) bool {
-	// A file has no password, whatever the profile says.
+	// A file has no password, whatever the profile sets.
 	if core.OpensFile(profile.Engine) {
 		return false
 	}
-	// A profile that asks for a prompt gets one, because the server can need a
-	// password the client cannot find another way.
+	// A profile that requests a prompt gets one, because the server can need a password
+	// that the client cannot get in another way.
 	if profile.Auth == AuthPrompt {
 		return true
 	}
-	// A server that connects without a password is not asked. Redis wants one only
-	// if it was configured to, and then the profile holds it.
+	// A server that connects without a password is not asked. Redis needs one only if it
+	// is configured for one, and then the profile holds it.
 	info := core.ResolveEngineInfo(profile.Engine)
 	if !info.NeedsPassword {
 		return false
 	}
-	// A server that checks a password against a named user has nothing to check one
-	// against where the profile names none. MongoDB is where this shows: its user is
-	// optional, because a server with authentication turned off refuses a connection
-	// that carries one.
+	// A server that checks the password against a named user cannot check anything if
+	// the profile has no user. This applies to MongoDB: its user is optional, because a
+	// server with authentication off refuses a connection that sends one.
 	if !info.PasswordWithoutUser && profile.User == "" {
 		return false
 	}

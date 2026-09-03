@@ -11,7 +11,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// writeConfig puts a config file where LoadConfig will read it, and answers its path.
+// writeConfig writes a config file where LoadConfig reads it, and returns its path.
 func writeConfig(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.toml")
@@ -21,7 +21,7 @@ func writeConfig(t *testing.T, body string) string {
 	return path
 }
 
-// findProfile answers the profile of that name out of a load.
+// findProfile returns the profile with that name from a load.
 func findProfile(t *testing.T, loaded cfg.LoadedConfig, name string) cfg.Profile {
 	t.Helper()
 	for _, profile := range loaded.Profiles {
@@ -75,8 +75,8 @@ page_size = 250
 	}
 }
 
-// The statement timeout is written in milliseconds, and a profile that names none leaves
-// the limit to the server.
+// The statement timeout is set in milliseconds. A profile without one leaves the limit to
+// the server.
 func TestLoadConfigReadsTheStatementTimeout(t *testing.T) {
 	path := writeConfig(t, `
 [profile.limited]
@@ -112,8 +112,8 @@ statement_timeout_ms = -1
 	}
 }
 
-// A port the file does not name falls back to the one the engine listens on, so a profile
-// need only name what it differs in.
+// A missing port uses the default port of the engine, so a profile only has to set the
+// values that are different.
 func TestLoadConfigGivesAnEngineItsDefaultPort(t *testing.T) {
 	path := writeConfig(t, `
 [profile.local]
@@ -129,7 +129,7 @@ user = "reader"
 	}
 }
 
-// One profile the file gets wrong must not take the others with it.
+// One bad profile in the file must not stop the other profiles.
 func TestLoadConfigKeepsTheProfilesAroundABadOne(t *testing.T) {
 	path := writeConfig(t, `
 [profile.good]
@@ -151,7 +151,7 @@ database = "shop"
 	}
 }
 
-// A file that is not there is the first run of the client, and every default stands.
+// A missing file is the first run of the client, and every default applies.
 func TestLoadConfigAnswersDefaultsWhereThereIsNoFile(t *testing.T) {
 	loaded := cfg.LoadConfig(filepath.Join(t.TempDir(), "none.toml"))
 	if len(loaded.Profiles) != 0 {
@@ -165,8 +165,8 @@ func TestLoadConfigAnswersDefaultsWhereThereIsNoFile(t *testing.T) {
 	}
 }
 
-// A file that is there and cannot be read is not a first run: every profile is lost, and the
-// reason must say so rather than report a file that is missing.
+// A file that exists but cannot be read is not a first run. Every profile is lost, and the
+// message must say so and not report a missing file.
 func TestLoadConfigTellsAnUnreadableFileFromAMissingOne(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads a file whatever its mode says")

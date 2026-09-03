@@ -8,8 +8,8 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/editor"
 )
 
-// The width limits of a tab label. A long batch shrinks its labels, so they stay inside
-// the pane.
+// The width limits of a tab label. With many tabs the labels shrink, so they stay inside the
+// pane.
 const (
 	minLabelWidth = 8
 	maxLabelWidth = 24
@@ -17,7 +17,7 @@ const (
 	labelChrome = 3
 )
 
-// PlanLabelWidth returns how wide each label of a strip may be drawn.
+// PlanLabelWidth returns the maximum width of each label of a strip.
 func PlanLabelWidth(count, available int) int {
 	if count <= 0 {
 		return 0
@@ -36,10 +36,10 @@ func PlanLabelWidth(count, available int) int {
 const (
 	fieldNameWidth = 24
 	fieldTypeWidth = 16
-	// Below these widths a name and a type say too little.
+	// Below these widths a name and a type are not readable.
 	minFieldNameWidth = 8
 	minFieldTypeWidth = 6
-	// The width kept for the value, so a narrow card still shows one.
+	// The width reserved for the value, so a narrow card still shows one.
 	minFieldValueWidth = 12
 )
 
@@ -49,9 +49,9 @@ type FieldColumnPlan struct {
 	Type int
 }
 
-// PlanFieldColumns returns the widths of a field list. On a narrow card both the name and
-// the type shrink together and the value keeps its width. The widths are planned here,
-// because a column that shrinks on its own puts the rows out of line.
+// PlanFieldColumns returns the widths of a field list. On a narrow card the name and the
+// type shrink together and the value keeps its width. The widths are calculated here, because
+// a column that shrinks alone breaks the alignment of the rows.
 func PlanFieldColumns(available int) FieldColumnPlan {
 	wanted := fieldNameWidth + fieldTypeWidth + minFieldValueWidth
 	if available >= wanted {
@@ -69,17 +69,17 @@ func PlanFieldColumns(available int) FieldColumnPlan {
 	}
 }
 
-// WrapWords breaks a text into the rows it takes at a given width, on the spaces between
-// its words. A word longer than the row is broken over several rows.
+// WrapWords breaks a text into rows of a given width, at the spaces between the words. A
+// word longer than the row is broken over several rows.
 //
-// A word may end on the last cell of a row only where the text ends with it. A word with
-// more text after it needs room for the space that would follow it as well.
+// A word can end on the last cell of a row only if the text ends with it. A word with more
+// text after it also needs the cell of the space that follows it.
 func WrapWords(text string, width int) []string {
 	text = SafeText(text)
 	if width <= 0 {
 		return []string{text}
 	}
-	// The spaces a text opens with belong to it, so an indented line keeps its indent.
+	// The leading spaces belong to the text, so an indented line keeps its indent.
 	indent := text[:len(text)-len(strings.TrimLeft(text, " "))]
 	words := strings.Split(text[len(indent):], " ")
 	rows := []string{}
@@ -101,8 +101,8 @@ func WrapWords(text string, width int) []string {
 		}
 		for MeasureText(line) > width {
 			head, tail := cutAtWidth(line, width)
-			// A character wider than the row is all that is left, and it keeps the row
-			// it was given rather than opening an empty one after it.
+			// Only a character wider than the row is left. It stays on this row and
+			// does not start an empty row after it.
 			if tail == "" {
 				break
 			}
@@ -113,14 +113,14 @@ func WrapWords(text string, width int) []string {
 	return append(rows, line)
 }
 
-// cutAtWidth splits a text at the last character that still fits in the width.
+// cutAtWidth splits a text at the last character that fits in the width.
 func cutAtWidth(text string, width int) (string, string) {
 	used := 0
 	for at, character := range text {
 		cost := MeasureText(string(character))
 		if used+cost > width {
 			// A first character wider than the row would cut nothing, and the caller
-			// would ask again with the same text. It goes on its own row instead.
+			// would call again with the same text. It goes on its own row.
 			if at == 0 {
 				end := len(string(character))
 				return text[:end], text[end:]
@@ -132,23 +132,24 @@ func cutAtWidth(text string, width int) (string, string) {
 	return text, ""
 }
 
-// CountWrappedRows returns the rows a word-wrapped text takes at a given width. It counts
-// what WrapWords writes, because a caller sizes from this and then draws with that.
+// CountWrappedRows returns the number of rows a wrapped text takes at a given width. It
+// counts the output of WrapWords, because a caller uses this for the size and WrapWords for
+// the drawing.
 func CountWrappedRows(text string, width int) int {
 	return len(WrapWords(text, width))
 }
 
-// The widths of the strip of views above the grid.
+// The widths of the view strip above the grid.
 const (
 	// viewChipChrome is the number, the space after it, and the padding on each side.
 	viewChipChrome = 4
-	// viewHintWidth is the `, . prev/next` hint at the far end of the strip.
+	// viewHintWidth is the `, . prev/next` hint at the end of the strip.
 	viewHintWidth = 15
 )
 
-// ViewStripPlan says how much of the view strip a pane has the width for.
+// ViewStripPlan is the part of the view strip that fits in the pane.
 type ViewStripPlan struct {
-	// Named is false if only the numbers fit, and the name of the current view.
+	// Named is false if only the numbers and the name of the current view fit.
 	Named     bool
 	ShowsHint bool
 }
@@ -168,8 +169,8 @@ func measureViewStrip(names []string, named bool, activeIndex int) int {
 	return total
 }
 
-// PlanViewStrip drops the hint first, and the names of the other views second, so every
-// view keeps a number to press in a narrow pane.
+// PlanViewStrip removes the hint first and the names of the other views second, so every
+// view keeps its number in a narrow pane.
 func PlanViewStrip(names []string, activeIndex, available int) ViewStripPlan {
 	named := measureViewStrip(names, true, activeIndex)
 	if named+viewHintWidth <= available {
@@ -182,16 +183,15 @@ func PlanViewStrip(names []string, activeIndex, available int) ViewStripPlan {
 	return ViewStripPlan{ShowsHint: numbered+viewHintWidth <= available}
 }
 
-// minSidebarWidth is the narrowest object tree that still names something.
+// minSidebarWidth is the smallest width at which the object tree is still readable.
 const minSidebarWidth = 16
 
-// minPaneWidth is the width the editor and the result keep beside the tree, where the
-// terminal has it.
+// minPaneWidth is the width the editor and the result keep next to the tree, if the terminal
+// is wide enough.
 const minPaneWidth = 32
 
 // PlanSidebarWidth returns the width of the object tree. It shrinks with the terminal,
-// because a tree of its full width would leave a narrow terminal no room for the panes
-// beside it.
+// because a tree at full width would leave no space for the panes next to it.
 func PlanSidebarWidth(available, preferred int) int {
 	room := max(available-minPaneWidth, minSidebarWidth)
 	width := min(preferred, room, available)
@@ -201,7 +201,7 @@ func PlanSidebarWidth(available, preferred int) int {
 	return width
 }
 
-// ColumnPlanInput holds what deciding the visible columns needs.
+// ColumnPlanInput holds the input of the visible column calculation.
 type ColumnPlanInput struct {
 	Widths []int
 	// The columns that always draw at the left, whatever the window shows.
@@ -211,15 +211,15 @@ type ColumnPlanInput struct {
 	Gap          int
 }
 
-// ColumnPlan is the first column of the window, and how many columns it spans.
+// ColumnPlan is the first column of the window and the number of columns it covers.
 type ColumnPlan struct {
 	WindowStart  int
 	VisibleCount int
 }
 
-// PlanVisibleColumns decides which columns fit beside the frozen ones. Frozen columns
-// always draw, and they take their width from the same total. The window spans over them
-// without drawing them a second time.
+// PlanVisibleColumns returns the columns that fit next to the frozen ones. A frozen column
+// always draws and takes its width from the same total. The window covers them and does not
+// draw them a second time.
 func PlanVisibleColumns(input ColumnPlanInput) ColumnPlan {
 	windowStart := max(input.ColumnOffset, 0)
 
@@ -250,7 +250,7 @@ func PlanVisibleColumns(input ColumnPlanInput) ColumnPlan {
 	return ColumnPlan{WindowStart: windowStart, VisibleCount: visibleCount}
 }
 
-// ColumnHitInput holds what finding the column under a click needs.
+// ColumnHitInput holds the input needed to find the column under a click.
 type ColumnHitInput struct {
 	Offset         int
 	GutterWidth    int
@@ -259,24 +259,24 @@ type ColumnHitInput struct {
 	Gap            int
 }
 
-// IsOnFoldMarker is true where the click landed on the fold mark. Only the mark folds a
-// row: a click on the name selects it.
+// IsOnFoldMarker is true if the click was on the fold mark. Only the mark folds a row. A
+// click on the name selects the row.
 func IsOnFoldMarker(offset, depth, indentPerLevel, markerWidth int) bool {
 	start := depth * indentPerLevel
 	return offset >= start && offset < start+markerWidth
 }
 
-// TabWindow is the tabs that draw, and where they start.
+// TabWindow is the visible tabs and their start index.
 type TabWindow struct {
 	Start int
 	Count int
 }
 
-// tabEdgeWidth is the width kept at each end for the count of the tabs that did not fit.
+// tabEdgeWidth is the width reserved at each end for the number of hidden tabs.
 const tabEdgeWidth = 10
 
-// PlanVisibleTabs keeps the window still while the current tab is inside it, and then
-// scrolls as little as it can.
+// PlanVisibleTabs keeps the window unchanged while the current tab is inside it, and then
+// scrolls by the smallest possible amount.
 func PlanVisibleTabs(widths []int, activeIndex, available, offset int) TabWindow {
 	total := len(widths)
 	if total == 0 {
@@ -324,13 +324,13 @@ func PlanVisibleTabs(widths []int, activeIndex, available, offset int) TabWindow
 	return TabWindow{Start: start, Count: fitted}
 }
 
-// minDetailWidth is the width below which a column of a detail table says too little.
+// minDetailWidth is the width below which a column of a detail table is not readable.
 const minDetailWidth = 4
 
 // PlanDetailColumns measures the columns of a read-only table from their content and then
-// fits them to the pane. A fixed width would cut a definition short on a wide screen, and
-// run past the border on a narrow one. The extra width is taken from the widest column
-// first, so a name column keeps its names and a definition column gives way.
+// fits them into the pane. A fixed width would truncate a definition on a wide screen and
+// exceed the border on a narrow one. The width is taken from the widest column first, so a
+// name column keeps its names and a definition column shrinks.
 func PlanDetailColumns(headers []string, rows [][]string, available, gap int) []int {
 	widths := make([]int, len(headers))
 	for index, header := range headers {
@@ -383,9 +383,9 @@ func CalculateColumnWidths(headers []string, rows [][]string) []int {
 	return WidenColumns(widths, rows)
 }
 
-// WidenColumns widens each column for the cells of rows its widths were not measured
-// from, and answers the widths that hold both. A page read after the first is folded in
-// this way, because the rows before it are as wide as they already were.
+// WidenColumns widens each column for the cells of rows that were not part of the first
+// measurement, and returns the widths that fit both. Every page after the first is added this
+// way, because the earlier rows keep their measured widths.
 func WidenColumns(widths []int, rows [][]string) []int {
 	held := make([]int, len(widths))
 	copy(held, widths)
@@ -410,14 +410,14 @@ func WidenColumns(widths []int, rows [][]string) []int {
 	return held
 }
 
-// CardChrome is the rows the border and the padding of a card take.
+// CardChrome is the number of rows the border and the padding of a card take.
 const CardChrome = 4
 
-// ScreenMargin is the gap a card of a screen leaves to the edge of the terminal.
+// ScreenMargin is the gap between a card and the edge of the terminal.
 const ScreenMargin = 8
 
-// ResolveCardWidth returns the width of a card in cells. The screen width is the limit,
-// because a wider card draws over everything beside it.
+// ResolveCardWidth returns the width of a card in cells. The screen width is the maximum,
+// because a wider card draws over the content next to it.
 func ResolveCardWidth(widest, narrowest, available int) int {
 	width := max(min(widest, available-ScreenMargin), narrowest)
 	if width > available {
@@ -430,8 +430,8 @@ func ResolveCardWidth(widest, narrowest, available int) int {
 }
 
 // AlignCardHeight returns a height that leaves an even number of rows above and below. An
-// odd number cannot be shared evenly, and the half row rounds the last row of the card off
-// the screen, so the card takes that row instead.
+// odd number cannot be split evenly, and the extra half row would move the last row of the
+// card off the screen, so the card takes that row.
 func AlignCardHeight(height, available int) int {
 	if (available-height)%2 == 0 {
 		return height
@@ -448,7 +448,7 @@ type TextPosition struct {
 	Column int
 }
 
-// ResolvePosition returns the line and column of an offset in the text.
+// ResolvePosition returns the line and the column of an offset in the text.
 func ResolvePosition(text string, offset int) TextPosition {
 	capped := core.ClampWithin(offset, len(text))
 	before := text[:capped]
@@ -466,7 +466,7 @@ type LineSpan struct {
 	End   int
 }
 
-// ResolveLineSpan returns the span of a fault on its first line. A span over several lines
+// ResolveLineSpan returns the span of an error on its first line. A span over several lines
 // is marked on the first line only.
 func ResolveLineSpan(text string, diagnostic editor.Diagnostic) LineSpan {
 	at := ResolvePosition(text, diagnostic.Start)

@@ -6,36 +6,35 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// McpConfig holds everything under `[mcp]`: the profiles an agent may reach, and
-// what it may run.
+// McpConfig holds everything under `[mcp]`: the profiles an agent can connect to, and the
+// operations it can run.
 type McpConfig struct {
-	// The profiles an agent may reach. None until the file names one.
+	// The profiles an agent can connect to. It is empty until the file lists one.
 	Profiles []string
 	Access   McpAccess
-	// How many rows one read returns, which is also the most a caller may ask for.
+	// The number of rows one read returns, which is also the maximum a caller can request.
 	RowLimit int
-	// How long a statement may take before it is cancelled.
+	// The time a statement can run before it is cancelled.
 	Timeout time.Duration
 }
 
-// The defaults an agent is held to where the file names nothing.
+// The limits applied to an agent when the file sets none.
 const (
 	DefaultMcpRowLimit = 500
 	DefaultMcpTimeout  = 30 * time.Second
 )
 
-// DefaultMcpConfig holds the level an agent starts at.
+// DefaultMcpConfig holds the access level an agent starts with.
 func DefaultMcpConfig() McpConfig {
 	return McpConfig{Access: McpReadOnly, RowLimit: DefaultMcpRowLimit, Timeout: DefaultMcpTimeout}
 }
 
-// FindMcpAccess reads this text as a level.
+// FindMcpAccess parses the text as an access level.
 func FindMcpAccess(written string) (McpAccess, bool) {
 	return core.FindAllowed(McpAccessLevels, written)
 }
 
-// ResolveLowerAccess returns the lower of two levels, because each setting is an
-// upper limit.
+// ResolveLowerAccess returns the lower of two levels, because each setting is a maximum.
 func ResolveLowerAccess(left, right McpAccess) McpAccess {
 	if indexOfAccess(left) <= indexOfAccess(right) {
 		return left
@@ -52,8 +51,8 @@ func indexOfAccess(level McpAccess) int {
 	return 0
 }
 
-// ParseMcpConfig reads `[mcp]`. A wrong setting falls back to the default, and does
-// not stop the server, which would leave the agent without a client.
+// ParseMcpConfig reads `[mcp]`. An invalid setting uses the default and does not stop the
+// server, because that would leave the agent without a client.
 func ParseMcpConfig(document Table) McpConfig {
 	config := DefaultMcpConfig()
 	mcp, present := FindSection(document, "mcp")

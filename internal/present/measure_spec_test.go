@@ -7,9 +7,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// A document of a collection holds kilobytes in one field, and the column it is drawn in is
-// as wide as the cap either way. A measure that stops at the cap answers the same width for
-// every text below it, so nothing the grid lays out moves.
+// A document can hold kilobytes in one field, and its column is drawn at the maximum width in
+// every case. A measurement that stops at the maximum gives the same width for every shorter
+// text, so the grid layout does not change.
 func TestMeasureTextUpToAnswersTheExactWidthBelowTheLimit(t *testing.T) {
 	for _, held := range []struct {
 		name string
@@ -35,8 +35,8 @@ func TestMeasureTextUpToAnswersTheExactWidthBelowTheLimit(t *testing.T) {
 	}
 }
 
-// A text that passes the limit is measured no further, and never reads as narrower than the
-// limit: a column that reached its cap must stay there.
+// A text above the limit is not measured further and is never reported as narrower than the
+// limit, so a column at its maximum width stays there.
 func TestMeasureTextUpToStopsAtTheLimit(t *testing.T) {
 	for _, held := range []struct {
 		name string
@@ -54,16 +54,16 @@ func TestMeasureTextUpToStopsAtTheLimit(t *testing.T) {
 	}
 }
 
-// A limit of nothing measures nothing, because a column of no width draws no cell.
+// A limit of zero measures nothing, because a column of zero width draws no cell.
 func TestMeasureTextUpToAnswersNothingForNoLimit(t *testing.T) {
 	if answered := present.MeasureTextUpTo("ada", 0); answered != 0 {
 		t.Errorf("a limit of nothing measured %d cells", answered)
 	}
 }
 
-// The rows of a result arrive a page at a time. Folding a page into the widths already
-// measured has to leave the same widths as measuring every row at once, or a column would
-// change width by the order the pages landed in.
+// The rows of a result arrive one page at a time. A page added to the measured widths must
+// give the same widths as one measurement of every row, or a column would change its width
+// with the order of the pages.
 func TestWidenColumnsFoldsAPageIntoTheWidthsItHas(t *testing.T) {
 	headers := []string{"_id", "customer", "note"}
 	first := [][]string{
@@ -89,8 +89,8 @@ func TestWidenColumnsFoldsAPageIntoTheWidthsItHas(t *testing.T) {
 	}
 }
 
-// A cell the headers have no column for is left out, as it is when every row is measured at
-// once: the widths answer for the columns the result names.
+// A cell without a header column is skipped, in the same way as in one measurement of every
+// row: the widths are the widths of the columns of the result.
 func TestWidenColumnsLeavesOutACellNoColumnHolds(t *testing.T) {
 	widths := present.WidenColumns(
 		present.CalculateColumnWidths([]string{"_id"}, nil),

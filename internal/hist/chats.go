@@ -8,16 +8,17 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// The conversations of a profile, one row each, and the turns under one of them. A whole
-// conversation is open, so a whole conversation is written, as the tabs are.
+// The conversations of a profile, one row each, and the turns of one conversation. The
+// client works on a whole conversation, so it writes a whole conversation, in the same way
+// as the tabs.
 
-// The limits a profile is held to. Above them, the oldest are removed.
+// The limits of one profile. Above them, the oldest entries are removed.
 const (
 	maxKeptChatTurns     = 100
 	maxKeptConversations = 50
 )
 
-// maxTitleChars is how much of the first question a row of the list holds.
+// maxTitleChars is the part of the first question a row of the list keeps.
 const maxTitleChars = 90
 
 // The roles a turn can have.
@@ -26,19 +27,19 @@ const (
 	ChatRoleAssistant = "assistant"
 )
 
-// ChatTurn is one turn of a conversation, as the file keeps it.
+// ChatTurn is one turn of a conversation in stored form.
 type ChatTurn struct {
 	Role    string
 	Content string
-	// Context is what the editor held at the time. It was sent with the question and never
-	// drawn.
+	// Context is the content of the editor at that time. It was sent with the question
+	// and is never displayed.
 	Context string
 }
 
 // ChatConversation is one conversation of a profile.
 type ChatConversation struct {
 	ID int64
-	// Title is the question that opened the conversation.
+	// Title is the first question of the conversation.
 	Title     string
 	StartedAt time.Time
 	UpdatedAt time.Time
@@ -96,8 +97,9 @@ func (store *Store) ListConversations(profileName string) ([]ChatConversation, e
 	return kept, rows.Err()
 }
 
-// ListChatTurns returns the turns of one conversation, the oldest first. A conversation opens
-// with a question, so where the limit cut the first question its reply is dropped with it.
+// ListChatTurns returns the turns of one conversation, the oldest first. A conversation
+// starts with a question, so if the limit removed the first question, its answer is removed
+// too.
 func (store *Store) ListChatTurns(conversationID int64) ([]ChatTurn, error) {
 	if store == nil {
 		return nil, nil
@@ -129,7 +131,7 @@ func (store *Store) ListChatTurns(conversationID int64) ([]ChatTurn, error) {
 	return dropTurnsBeforeAQuestion(kept), nil
 }
 
-// dropTurnsBeforeAQuestion returns the turns from the first question on.
+// dropTurnsBeforeAQuestion returns the turns from the first question to the end.
 func dropTurnsBeforeAQuestion(turns []ChatTurn) []ChatTurn {
 	for at, turn := range turns {
 		if turn.Role == ChatRoleUser {
@@ -139,8 +141,8 @@ func dropTurnsBeforeAQuestion(turns []ChatTurn) []ChatTurn {
 	return []ChatTurn{}
 }
 
-// SaveConversation writes the turns of a conversation and returns its id. An id of zero opens
-// a conversation for them.
+// SaveConversation writes the turns of a conversation and returns its id. An id of zero
+// creates a new conversation.
 func (store *Store) SaveConversation(
 	profileName string, conversationID int64, turns []ChatTurn,
 ) (int64, error) {
@@ -185,8 +187,8 @@ func (store *Store) SaveConversation(
 	return id, transaction.Commit()
 }
 
-// resolveConversationID returns the conversation the turns are written to, and opens one where
-// there is none.
+// resolveConversationID returns the id of the conversation the turns belong to, and creates
+// a conversation if there is none.
 func resolveConversationID(
 	transaction *sql.Tx, profileName string, conversationID int64,
 	turns []ChatTurn, savedAt int64,
@@ -205,7 +207,8 @@ func resolveConversationID(
 	return answered.LastInsertId()
 }
 
-// dropOldConversations removes the conversations of a profile above the limit, with their turns.
+// dropOldConversations removes the conversations of a profile above the limit, with their
+// turns.
 func dropOldConversations(transaction *sql.Tx, profileName string) error {
 	if _, err := transaction.Exec(
 		`DELETE FROM chat_conversation
