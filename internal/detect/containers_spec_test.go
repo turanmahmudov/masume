@@ -39,13 +39,6 @@ const inspectedContainers = `[
     }
   },
   {
-    "Name": "/masume-test-redis-1",
-    "Config": {"Image": "redis:8-alpine", "Env": ["REDIS_VERSION=8.10.1"], "Labels": {}},
-    "NetworkSettings": {
-      "Ports": {"6379/tcp": [{"HostIp": "0.0.0.0", "HostPort": "55379"}]}
-    }
-  },
-  {
     "Name": "/masume-test-mongo-auth-1",
     "Config": {
       "Image": "mongo:8",
@@ -95,8 +88,8 @@ func TestBuildProfilesFromInspectionFindsEveryDatabaseContainer(t *testing.T) {
 	for _, profile := range found {
 		names = append(names, profile.Name)
 	}
-	if len(found) != 4 {
-		t.Fatalf("the scan found %v, wanted the four database containers", names)
+	if len(found) != 3 {
+		t.Fatalf("the scan found %v, wanted the three database containers", names)
 	}
 	if _, holds := findProfileNamed(found, "buildkit"); holds {
 		t.Error("a container that runs no database was offered as a connection")
@@ -162,7 +155,6 @@ func TestBuildProfilesFromInspectionReadsTheEnvironmentOfEachFamily(t *testing.T
 		port     int
 	}{
 		{"masume-test-mysql-1", core.EngineMysql, "root", "shop", "secret", 55306},
-		{"masume-test-redis-1", core.EngineRedis, "", "0", "", 55379},
 		{"masume-test-mongo-auth-1", core.EngineMongo, "root", "shop", "secret", 55018},
 	} {
 		profile, holds := findProfileNamed(found, one.name)
@@ -186,22 +178,6 @@ func TestBuildProfilesFromInspectionReadsTheEnvironmentOfEachFamily(t *testing.T
 		if profile.Port != one.port {
 			t.Errorf("%s uses port %d, wanted %d", one.name, profile.Port, one.port)
 		}
-	}
-}
-
-// A port published on every interface is reached on this machine, so the connection must
-// use the address of this machine and not the one the binding names.
-func TestBuildProfilesFromInspectionReadsAPortOnEveryInterface(t *testing.T) {
-	found, err := detect.BuildProfilesFromInspection([]byte(inspectedContainers))
-	if err != nil {
-		t.Fatalf("the answer does not read: %v", err)
-	}
-	profile, holds := findProfileNamed(found, "masume-test-redis-1")
-	if !holds {
-		t.Fatal("the Redis container was not found")
-	}
-	if profile.Host != "127.0.0.1" {
-		t.Errorf("the host reads %q, wanted the address of this machine", profile.Host)
 	}
 }
 
@@ -235,8 +211,6 @@ func TestBuildProfilesFromInspectionReadsTheEngineOfTheImage(t *testing.T) {
 		{"percona/percona-server:8.0", core.EngineMysql},
 		{"mariadb:11", core.EngineMariadb},
 		{"pingcap/tidb:v8.5.0", core.EngineTidb},
-		{"redis:8-alpine", core.EngineRedis},
-		{"valkey/valkey:8", core.EngineRedis},
 		{"mongo:8", core.EngineMongo},
 		{"ghcr.io/org/postgres@sha256:abc", core.EnginePostgres},
 		{"postgres16", core.EnginePostgres},
@@ -284,7 +258,6 @@ func TestBuildProfilesFromInspectionOffersNoToolThatIsNotAServer(t *testing.T) {
 		"mongo-express:1.0",
 		"mysql-workbench:8.0",
 		"prom/mysqld-exporter:v0.15",
-		"oliver006/redis_exporter:v1.62",
 		"dpage/pgadmin4:8",
 	} {
 		written := buildInspectedImage(image, 5432)

@@ -9,7 +9,6 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/engines"
 	"github.com/turanmahmudov/masume/internal/db/mongo"
 	"github.com/turanmahmudov/masume/internal/db/postgres"
-	"github.com/turanmahmudov/masume/internal/db/redis"
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
@@ -148,18 +147,6 @@ func TestComposeStatementReadNumbersTheFilterAfterTheStatement(t *testing.T) {
 	}
 }
 
-func TestComposeRelationReadWritesACommandForAKeyStore(t *testing.T) {
-	read := composerOf(redis.Dialect).ComposeRelationRead(
-		db.TableRef{Schema: "0", Name: "order", Kind: db.RelationTable}, core.ReadRewrite{})
-
-	if strings.Contains(strings.ToLower(read.Text), "select") {
-		t.Errorf("a key store was asked in SQL:\n%s", read.Text)
-	}
-	if read.Text == "" {
-		t.Error("the read of a key store is empty")
-	}
-}
-
 func TestComposeRelationReadWritesAFindForMongo(t *testing.T) {
 	read := composerOf(mongo.Dialect).ComposeRelationRead(
 		db.TableRef{Schema: "shop", Name: "orders", Kind: db.RelationTable},
@@ -170,20 +157,6 @@ func TestComposeRelationReadWritesAFindForMongo(t *testing.T) {
 	}
 	if !strings.Contains(read.Text, "orders.find") {
 		t.Errorf("the read is %q, wanted a find of the collection", read.Text)
-	}
-}
-
-func TestComposeStatementReadLeavesARedisCommandAsItIs(t *testing.T) {
-	written := db.BoundText{Text: "GET order:1"}
-	read := composerOf(redis.Dialect).ComposeStatementRead(written, core.ReadRewrite{
-		Sort: []core.SortState{{Column: "key", Direction: core.SortAscending}},
-	})
-
-	if read.Text != written.Text {
-		t.Errorf("the command was rewritten as %q", read.Text)
-	}
-	if strings.Contains(strings.ToLower(read.Text), "select") {
-		t.Errorf("a command was wrapped as SQL:\n%s", read.Text)
 	}
 }
 
@@ -239,22 +212,6 @@ func TestBuildChangesFollowsTheEngine(t *testing.T) {
 			editAt: 1,
 			want:   "update",
 			forbid: "update ",
-		},
-		{
-			name:    "redis",
-			dialect: redis.Dialect,
-			target: db.ChangeTarget{
-				Table: db.TableRef{Schema: "0", Name: "order", Kind: db.RelationTable},
-				Columns: []db.ResultColumn{
-					{Name: redis.KeyColumnKey}, {Name: redis.KeyColumnType},
-					{Name: redis.KeyColumnTTL}, {Name: redis.KeyColumnValue},
-				},
-				Rows:       [][]any{{"order:1", "string", int64(-1), "ada"}},
-				KeyColumns: []string{redis.KeyColumnKey},
-			},
-			editAt: 3,
-			want:   "order:1",
-			forbid: "update",
 		},
 	} {
 		t.Run(held.name, func(t *testing.T) {
@@ -315,7 +272,6 @@ func TestFindStatementSourceReadsTheRelationOfEveryLanguage(t *testing.T) {
 		{"a mongodb aggregation", mongo.Dialect,
 			`db.orders.aggregate([{$match: {}}])`, ""},
 		// A command names no relation, and the SQL reader answers none for it either.
-		{"a redis command", redis.Dialect, "GET order:1", ""},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			source, found := composerOf(held.dialect).FindStatementSource(held.written)

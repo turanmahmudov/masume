@@ -114,37 +114,6 @@ func TestApplyConnectionUrlFillsTheFieldsItNames(t *testing.T) {
 	}
 }
 
-// A `rediss://` URL requests TLS through its scheme, and a Redis client reads it that way.
-// Treated as a plain `redis://`, it would open an unencrypted connection where the user
-// asked for encryption.
-func TestParseConnectionUrlKeepsTheTlsOfTheScheme(t *testing.T) {
-	held, is := cfg.ParseConnectionURL("rediss://cache.example.com:6380/0")
-	if !is {
-		t.Fatal("the URL was not read")
-	}
-	if held.SSLMode != string(core.SSLVerifyFull) {
-		t.Errorf("the mode reads %q, wanted %q", held.SSLMode, core.SSLVerifyFull)
-	}
-
-	// A mode in the URL has priority.
-	named, is := cfg.ParseConnectionURL("rediss://cache.example.com:6380/0?sslmode=require")
-	if !is {
-		t.Fatal("the URL with a mode was not read")
-	}
-	if named.SSLMode != string(core.SSLRequire) {
-		t.Errorf("the mode reads %q, wanted %q", named.SSLMode, core.SSLRequire)
-	}
-
-	// A plain `redis://` requests no TLS, as a Redis client reads it.
-	plain, is := cfg.ParseConnectionURL("redis://cache.example.com:6379/0")
-	if !is {
-		t.Fatal("the plain URL was not read")
-	}
-	if plain.SSLMode != "" {
-		t.Errorf("the mode reads %q, wanted none", plain.SSLMode)
-	}
-}
-
 // A field the form hides for one engine must not be required: a file has no host and no
 // port, and the user would fill in a value that nothing uses.
 func TestFindShownFieldsLeavesOutWhatAnEngineDoesNotNeed(t *testing.T) {

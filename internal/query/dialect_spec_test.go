@@ -6,7 +6,6 @@ import (
 
 	"github.com/turanmahmudov/masume/internal/db/mysql"
 	"github.com/turanmahmudov/masume/internal/db/postgres"
-	"github.com/turanmahmudov/masume/internal/db/redis"
 	"github.com/turanmahmudov/masume/internal/db/sqlite"
 	"github.com/turanmahmudov/masume/internal/query"
 )
@@ -138,7 +137,7 @@ func TestSplitMessageSegmentsReadsTheFenceOfEveryLanguage(t *testing.T) {
 		found bool
 	}{
 		{"sql", true}, {"js", true}, {"javascript", true},
-		{"mongodb", true}, {"mongosh", true}, {"redis", true}, {"", true},
+		{"mongodb", true}, {"mongosh", true}, {"", true},
 		// A block of anything else is text the user reads, not a statement to run.
 		{"json", false}, {"text", false}, {"bash", false},
 	} {
@@ -214,7 +213,6 @@ func TestBuildDropSchemaWritesWhatEachEngineCallsASchema(t *testing.T) {
 		{"postgres", postgres.Dialect, `drop schema "sch" restrict;`},
 		{"mysql", mysql.Dialect, "drop database `sch`;"},
 		{"sqlite", sqlite.Dialect, `detach database "sch";`},
-		{"redis", redis.Dialect, "FLUSHDB"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			if got := held.dialect.BuildDropSchema("sch"); got != held.want {
@@ -234,7 +232,6 @@ func TestBuildDropTriggerNamesTheTableOnlyWhereTheServerNeedsIt(t *testing.T) {
 			`drop trigger "tr" on "sch"."tbl";`},
 		{"mysql drops it by name", mysql.Dialect, "drop trigger `sch`.`tr`;"},
 		{"sqlite drops it by name", sqlite.Dialect, `drop trigger "sch"."tr";`},
-		{"redis keeps none", redis.Dialect, "# redis keeps no trigger"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			if got := held.dialect.BuildDropTrigger("sch", "tr", "tbl"); got != held.want {
@@ -261,8 +258,6 @@ func TestBuildDropRoutineWritesTheWordTheServerReads(t *testing.T) {
 			"drop procedure `sch`.`fn`;"},
 		{"sqlite keeps none", sqlite.Dialect, "function:sch.fn",
 			"-- sqlite keeps no stored routine"},
-		{"redis keeps none", redis.Dialect, "function:sch.fn",
-			"# redis keeps no stored routine"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			if got := held.dialect.BuildDropRoutine("sch", "fn", held.identity); got != held.want {
@@ -288,7 +283,6 @@ func TestEveryDialectNamesItsEngineItsSyntaxAndItsWords(t *testing.T) {
 			"count(*)", "id bigint auto_increment primary key"},
 		{"sqlite", sqlite.Dialect, "sqlite", "standard", "database",
 			"count(*)", "id integer primary key autoincrement"},
-		{"redis", redis.Dialect, "redis", "standard", "database", "DBSIZE", "key"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			if string(held.dialect.Engine) != held.engine {
@@ -307,28 +301,6 @@ func TestEveryDialectNamesItsEngineItsSyntaxAndItsWords(t *testing.T) {
 			if held.dialect.IdentityColumn != held.identity {
 				t.Errorf("IdentityColumn = %q, want %q",
 					held.dialect.IdentityColumn, held.identity)
-			}
-		})
-	}
-}
-
-func TestQuoteIdentifierIfNeededFollowsTheRuleOfTheServerWhereItHasOne(t *testing.T) {
-	// A key store reads a key back exactly as written, so a name the SQL rule would
-	// quote is left plain there.
-	for _, held := range []struct {
-		name  string
-		given string
-		want  string
-	}{
-		{"a plain key", "user", "user"},
-		{"a key with a colon", "user:1", "user:1"},
-		{"a key with a dot", "a.b", "a.b"},
-		{"a key that is a SQL keyword", "select", "select"},
-		{"a key with a space is still quoted", "two words", `"two words"`},
-	} {
-		t.Run(held.name, func(t *testing.T) {
-			if got := redis.Dialect.QuoteIdentifierIfNeeded(held.given); got != held.want {
-				t.Errorf("got %q, want %q", got, held.want)
 			}
 		})
 	}

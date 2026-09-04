@@ -60,7 +60,7 @@ masume has a built-in AI chat and an MCP server over stdio. The chat uses the cu
 
 ## Features
 
-**Multiple engines:** PostgreSQL, MySQL, SQLite, Redis and MongoDB, plus hosted services based on them
+**Multiple engines:** PostgreSQL, MySQL, SQLite and MongoDB, plus hosted services based on them
 
 **MCP server:** `masume --mcp` exposes selected profiles to an agent over stdio, with an access level per profile and for the whole server
 
@@ -82,7 +82,7 @@ masume has a built-in AI chat and an MCP server over stdio. The chat uses the cu
 
 **Server dashboard:** `Alt+O A` opens an operations view that refreshes every two seconds: the other sessions and what they are running, connections against the limit, transactions and write ahead log per second, the cache hit rate, replication lag, and the sessions waiting for a lock drawn as a tree of who waits for whom. With `pg_stat_statements` installed it also lists the statements the server spends the most time in. `Enter` opens a session's statement in a tab, `x` stops it, `Ctrl+D` ends the session
 
-**Redis and MongoDB:** a query tab accepts Redis commands or MongoDB shell syntax
+**MongoDB:** a query tab accepts MongoDB shell syntax
 
 **Export and copy:** CSV, JSON, Markdown, `INSERT` statements, one row as JSON, or one column as an `IN` clause
 

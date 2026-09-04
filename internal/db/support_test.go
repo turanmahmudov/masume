@@ -356,7 +356,7 @@ func TestReadChangeGuardAndStatementRefuseAForeignPayload(t *testing.T) {
 	if err != nil || !guarded || guard.SQL != "select 1" {
 		t.Errorf("a bound guard answered %+v, %v, %v", guard, guarded, err)
 	}
-	if _, err := ReadChangeStatement(Change{Payload: "redis"}); err == nil {
+	if _, err := ReadChangeStatement(Change{Payload: "not json"}); err == nil {
 		t.Error("a payload built elsewhere was accepted")
 	}
 	held, err := ReadChangeStatement(Change{Payload: BoundStatement{SQL: "update t set x = 1"}})

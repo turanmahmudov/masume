@@ -3,7 +3,6 @@ package language_test
 import (
 	"testing"
 
-	"github.com/turanmahmudov/masume/internal/db/redis"
 	"github.com/turanmahmudov/masume/internal/query/language"
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
@@ -146,37 +145,8 @@ func TestCanExplainRefusesWhatNoServerPlans(t *testing.T) {
 
 // A key store takes commands, not SQL, so its language reads a buffer its own way and must
 // still answer everything the tab asks.
-func TestTheCommandLanguageAnswersTheWholeContract(t *testing.T) {
-	spoke := redis.Support.Language
-	if spoke == nil {
-		t.Fatal("the key store answers no language")
-	}
-
-	const command = "GET order:1"
-	if len(spoke.SplitStatements(command)) != 1 {
-		t.Errorf("one command split into %d", len(spoke.SplitStatements(command)))
-	}
-	if spoke.ResolveWriteRisk(command) != statement.RiskNone {
-		t.Errorf("a read of one key reads as %q", spoke.ResolveWriteRisk(command))
-	}
-	// A command that removes a key is a write, and the confirmation depends on it.
-	if held := spoke.ResolveWriteRisk("DEL order:1"); held == statement.RiskNone {
-		t.Error("a command that removes a key reads as a read")
-	}
-	// No key store plans a command.
-	if spoke.CanExplain(command) {
-		t.Error("a key store reports that it plans a command")
-	}
-}
 
 // Every command of a batch runs, so a batch holding one that writes is a write.
-func TestResolveBatchRiskReadsACommandBatch(t *testing.T) {
-	spoke := redis.Support.Language
-	held := language.ResolveBatchRisk([]string{"GET order:1", "DEL order:2"}, spoke)
-	if held == statement.RiskNone {
-		t.Error("a batch holding a command that removes a key reads as a read")
-	}
-}
 
 // A statement that bounds its own result already holds how many rows it wants, so a reader
 // gives it every row it returns instead of one page of them.

@@ -82,7 +82,6 @@ func TestBuildProfileFromTargetReadsTheEngineOfTheScheme(t *testing.T) {
 		{"mariadb://ada@host/shop", core.EngineMariadb, 3306},
 		{"cockroachdb://ada@host/shop", core.EngineCockroach, 26257},
 		{"redshift://ada@host/shop", core.EngineRedshift, 5439},
-		{"redis://host/3", core.EngineRedis, 6379},
 		{"mongodb://host/shop", core.EngineMongo, 27017},
 	} {
 		built, err := cfg.BuildProfileFromTarget(one.url)
@@ -99,18 +98,6 @@ func TestBuildProfileFromTargetReadsTheEngineOfTheScheme(t *testing.T) {
 	}
 }
 
-// A Redis client reads `rediss://` as a connection that verifies the certificate. A URL
-// without a mode must not open an unencrypted connection instead.
-func TestBuildProfileFromTargetReadsTLSFromTheScheme(t *testing.T) {
-	built, err := cfg.BuildProfileFromTarget("rediss://cache.internal/0")
-	if err != nil {
-		t.Fatalf("the URL does not read: %v", err)
-	}
-	if built.SSLMode != core.SSLVerifyFull {
-		t.Errorf("the ssl mode reads %q, wanted %q", built.SSLMode, core.SSLVerifyFull)
-	}
-}
-
 // A URL that names no database must fall back to what the server itself falls back to,
 // because both forms are what a user pastes.
 func TestBuildProfileFromTargetFillsTheDatabaseTheServerDefaultsTo(t *testing.T) {
@@ -120,7 +107,6 @@ func TestBuildProfileFromTargetFillsTheDatabaseTheServerDefaultsTo(t *testing.T)
 	}{
 		{"postgres://ada@host", "ada"},
 		{"postgres://ada@host/", "ada"},
-		{"redis://cache", "0"},
 		{"mongodb://host", "admin"},
 	} {
 		built, err := cfg.BuildProfileFromTarget(one.url)

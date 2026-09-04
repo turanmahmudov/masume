@@ -19,12 +19,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # [profile.shop]
-# engine               = "postgres"   # postgres mysql sqlite redis mongodb cockroach
+# engine               = "postgres"   # postgres mysql sqlite mongodb cockroach
 #                                     # timescale redshift neon supabase mariadb tidb
 #                                     # planetscale aurora-mysql
 # host                 = "127.0.0.1"
 # port                 = 5432         # the port of the engine where none is written
-# database             = "shop"       # the file, for sqlite; the number, for redis
+# database             = "shop"       # the file, for sqlite
 # user                 = "you"
 # auth                 = "password"   # password command prompt
 # password_env         = "PGPASSWORD" # read the password from the environment

@@ -118,16 +118,14 @@ func resolveDefaultDatabase(engine core.Engine, user string) string {
 	switch core.ResolveEngineInfo(engine).Family {
 	case core.FamilyPostgres:
 		return user
-	case core.FamilyRedis:
-		return "0"
 	case core.FamilyMongo:
 		return "admin"
 	}
 	return ""
 }
 
-// readTargetSSLMode returns the SSL mode of a URL: the one its query names, the one its
-// scheme implies, or the default of its engine.
+// readTargetSSLMode returns the SSL mode of a URL: the one its query names, or the default
+// of its engine.
 func readTargetSSLMode(parsed *url.URL, engine core.Engine) (core.SSLMode, error) {
 	written := ""
 	for _, key := range sslKeys {
@@ -137,9 +135,6 @@ func readTargetSSLMode(parsed *url.URL, engine core.Engine) (core.SSLMode, error
 		}
 	}
 	if written == "" {
-		if implied, asks := tlsSchemes[strings.ToLower(parsed.Scheme)]; asks {
-			return implied, nil
-		}
 		return core.ResolveEngineInfo(engine).DefaultSSLMode, nil
 	}
 	mode, known := core.FindSSLMode(written)

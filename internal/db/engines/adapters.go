@@ -12,7 +12,6 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/mysql"
 	"github.com/turanmahmudov/masume/internal/db/planetscale"
 	"github.com/turanmahmudov/masume/internal/db/postgres"
-	"github.com/turanmahmudov/masume/internal/db/redis"
 	"github.com/turanmahmudov/masume/internal/db/sqlite"
 	"github.com/turanmahmudov/masume/internal/db/tidb"
 )
@@ -28,7 +27,6 @@ func CreateAdapters() Adapters {
 		core.EnginePostgres: postgres.NewAdapter(postgres.Support, postgres.FlavourStandard),
 		core.EngineMysql:    mysql.NewAdapter(mysql.Support, mysql.FlavourStandard),
 		core.EngineSqlite:   sqlite.NewAdapter(sqlite.Support),
-		core.EngineRedis:    redis.NewAdapter(redis.Support),
 		core.EngineMongo:    mongo.NewAdapter(mongo.Support),
 
 		// These use the PostgreSQL protocol.

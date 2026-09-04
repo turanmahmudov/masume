@@ -13,7 +13,6 @@ const (
 	EnginePostgres    Engine = "postgres"
 	EngineMysql       Engine = "mysql"
 	EngineSqlite      Engine = "sqlite"
-	EngineRedis       Engine = "redis"
 	EngineCockroach   Engine = "cockroach"
 	EngineTimescale   Engine = "timescale"
 	EngineRedshift    Engine = "redshift"
@@ -28,7 +27,7 @@ const (
 
 // Engines lists every engine, in the order used by the docs.
 var Engines = []Engine{
-	EnginePostgres, EngineMysql, EngineSqlite, EngineRedis,
+	EnginePostgres, EngineMysql, EngineSqlite,
 	EngineCockroach, EngineTimescale, EngineRedshift, EngineNeon, EngineSupabase,
 	EngineMariadb, EngineTidb, EnginePlanetscale, EngineAuroraMysql,
 	EngineMongo,
@@ -46,7 +45,6 @@ const (
 	FamilyPostgres Family = "postgres"
 	FamilyMysql    Family = "mysql"
 	FamilySqlite   Family = "sqlite"
-	FamilyRedis    Family = "redis"
 	FamilyMongo    Family = "mongo"
 )
 
@@ -78,29 +76,23 @@ type Capabilities struct {
 	// statement but does not apply it.
 	TakesReadOnlyMode bool
 	// True if the staged changes of the grid are applied all together or not at all.
-	// This is not the same as HasTransactions: Redis has no transaction the user
-	// controls but still applies a staged set inside a MULTI, and a standalone MongoDB
-	// has neither.
+	// This is not the same as HasTransactions: a standalone MongoDB controls no
+	// transaction and applies no staged set as one unit.
 	AppliesChangesTogether bool
 }
 
 // EngineInfo holds the properties of a server that are known before a connection
 // exists. The query tier adds the dialect and the language.
 type EngineInfo struct {
-	Engine        Engine
-	Family        Family
-	Capabilities  Capabilities
-	DefaultPort   int
-	OpensFile     bool
-	NeedsUser     bool
-	NeedsPassword bool
-	// True if the password belongs to the server and not to a named user, so a profile
-	// without a user can still have a password. Redis is the only one: `requirepass`
-	// has no user. Every other server checks the password against a user, so a profile
-	// without a user cannot use a password.
-	PasswordWithoutUser bool
-	URLSchemes          []string
-	DefaultSSLMode      SSLMode
+	Engine         Engine
+	Family         Family
+	Capabilities   Capabilities
+	DefaultPort    int
+	OpensFile      bool
+	NeedsUser      bool
+	NeedsPassword  bool
+	URLSchemes     []string
+	DefaultSSLMode SSLMode
 	// The full names of the schemas this server reserves for itself.
 	SystemSchemas []string
 	// The name prefixes of the schemas this server creates for itself.
@@ -295,32 +287,6 @@ var engineRegistry = map[Engine]EngineInfo{
 		DefaultPort:   27017,
 		URLSchemes:    []string{"mongodb"},
 		SystemSchemas: []string{"admin", "config", "local"},
-	},
-	EngineRedis: {
-		Engine: EngineRedis, Family: FamilyRedis,
-		Capabilities: Capabilities{
-			// A command states the operation, so the server makes no plan.
-			PlansStatement: false,
-			MeasuresPlan:   false,
-			// CLIENT LIST lists every connection, and CLIENT KILL stops one.
-			HasServerSessions: true,
-			// Redis runs one command at a time and completes it before the next one.
-			CancelsRunningQuery: false,
-			// MULTI queues the commands and returns no result before EXEC.
-			HasTransactions: false,
-			// A SCAN returns the keys in the order of the server only.
-			SortsRead: false,
-			// A prefix is only a name pattern, so no command deletes it.
-			TruncatesTable: false,
-			WritesDDL:      false,
-			// The server has no read-only session, so this client blocks the write.
-			TakesReadOnlyMode: true,
-			// MULTI is not a transaction the user controls, but it does apply a staged
-			// set as one unit.
-			AppliesChangesTogether: true,
-		},
-		DefaultPort: 6379, URLSchemes: []string{"redis", "rediss"},
-		PasswordWithoutUser: true,
 	},
 }
 

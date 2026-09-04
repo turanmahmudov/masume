@@ -1,5 +1,5 @@
-// Command masume is a database client for the terminal. It opens PostgreSQL, MySQL, SQLite,
-// Redis and MongoDB, and the servers that speak their protocols.
+// Command masume is a database client for the terminal. It opens PostgreSQL, MySQL, SQLite
+// and MongoDB, and the servers that speak their protocols.
 //
 // This is the only entry point, and the only place that chooses between the two clients: the
 // screen for a user, or the protocol for an agent. Neither one starts before it is chosen.

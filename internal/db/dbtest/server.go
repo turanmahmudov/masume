@@ -6,7 +6,6 @@
 //
 //	MASUME_TEST_POSTGRES=postgres://postgres:secret@127.0.0.1:55432/shop
 //	MASUME_TEST_MYSQL=mysql://root:secret@127.0.0.1:55306/shop
-//	MASUME_TEST_REDIS=redis://127.0.0.1:55379/0
 //	MASUME_TEST_MONGO=mongodb://127.0.0.1:55017/shop
 //	MASUME_TEST_MONGO_AUTH=mongodb://root:secret@127.0.0.1:55018/shop
 //	MASUME_TEST_MONGO_RS=mongodb://127.0.0.1:55020/shop
@@ -59,7 +58,6 @@ type Target struct {
 var (
 	Postgres = Target{Variable: "MASUME_TEST_POSTGRES", Engine: core.EnginePostgres, DefaultPort: 5432}
 	MySQL    = Target{Variable: "MASUME_TEST_MYSQL", Engine: core.EngineMysql, DefaultPort: 3306}
-	Redis    = Target{Variable: "MASUME_TEST_REDIS", Engine: core.EngineRedis, DefaultPort: 6379}
 	Mongo    = Target{Variable: "MASUME_TEST_MONGO", Engine: core.EngineMongo, DefaultPort: 27017}
 	// MongoAuth is the same engine on a server that authenticates every command.
 	MongoAuth = Target{

@@ -562,16 +562,14 @@ func NeedsPasswordPrompt(profile Profile) bool {
 	if profile.Auth == AuthPrompt {
 		return true
 	}
-	// A server that connects without a password is not asked. Redis needs one only if it
-	// is configured for one, and then the profile holds it.
-	info := core.ResolveEngineInfo(profile.Engine)
-	if !info.NeedsPassword {
+	// A server that connects without a password is not asked.
+	if !core.ResolveEngineInfo(profile.Engine).NeedsPassword {
 		return false
 	}
-	// A server that checks the password against a named user cannot check anything if
+	// A server checks the password against a named user, and cannot check anything if
 	// the profile has no user. This applies to MongoDB: its user is optional, because a
 	// server with authentication off refuses a connection that sends one.
-	if !info.PasswordWithoutUser && profile.User == "" {
+	if profile.User == "" {
 		return false
 	}
 	// A command and a store both answer without the user.

@@ -89,12 +89,12 @@ preset = "default"
 # A profile is one connection. The name after `profile.` is the name shown in the picker.
 #
 # [profile.a-name]
-# engine               = "postgres"   # postgres mysql sqlite redis mongodb cockroach
+# engine               = "postgres"   # postgres mysql sqlite mongodb cockroach
 #                                     # timescale redshift neon supabase mariadb tidb
 #                                     # planetscale aurora-mysql
 # host                 = "127.0.0.1"
 # port                 = 5432         # the default port of the engine when not set
-# database             = "shop"       # the file path for sqlite, the database number for redis
+# database             = "shop"       # the file path for sqlite
 # user                 = "you"
 # auth                 = "password"   # password command prompt keyring secret
 #                                     # `password` here means password_env. A `password`

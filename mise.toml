@@ -55,7 +55,7 @@ run = "docker compose down -v"
 # Run separately, never as part of `check`, because these tests need a server.
 [tasks.test-integration]
 description = "Run the integration tests. Start the servers first with servers-up."
-env = { MASUME_TEST_POSTGRES = "postgres://postgres:secret@127.0.0.1:55432/shop", MASUME_TEST_MYSQL = "mysql://root:secret@127.0.0.1:55306/shop", MASUME_TEST_REDIS = "redis://127.0.0.1:55379/0", MASUME_TEST_MONGO = "mongodb://127.0.0.1:55017/shop", MASUME_TEST_MONGO_AUTH = "mongodb://root:secret@127.0.0.1:55018/shop", MASUME_TEST_MONGO_RS = "mongodb://127.0.0.1:55020/shop", MASUME_TEST_REQUIRE = "1" }
+env = { MASUME_TEST_POSTGRES = "postgres://postgres:secret@127.0.0.1:55432/shop", MASUME_TEST_MYSQL = "mysql://root:secret@127.0.0.1:55306/shop", MASUME_TEST_MONGO = "mongodb://127.0.0.1:55017/shop", MASUME_TEST_MONGO_AUTH = "mongodb://root:secret@127.0.0.1:55018/shop", MASUME_TEST_MONGO_RS = "mongodb://127.0.0.1:55020/shop", MASUME_TEST_REQUIRE = "1" }
 run = "go test -tags=integration -count=1 ./..."
 
 [tasks.test-integration-full]

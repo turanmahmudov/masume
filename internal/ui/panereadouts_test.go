@@ -7,7 +7,6 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/db/mongo"
 	"github.com/turanmahmudov/masume/internal/db/postgres"
-	"github.com/turanmahmudov/masume/internal/db/redis"
 	"github.com/turanmahmudov/masume/internal/present"
 	"github.com/turanmahmudov/masume/internal/query"
 )
@@ -226,7 +225,6 @@ func TestAnEmptyEditorSaysWhatThisServerTakes(t *testing.T) {
 	}{
 		{"postgres", postgres.Dialect, "select … from …"},
 		{"mongodb", mongo.Dialect, "db.collection.find({…})"},
-		{"redis", redis.Dialect, "GET key"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			model, connection, tab := buildEditingModel(t, "", 0)

@@ -45,8 +45,6 @@ var imageEngines = []struct {
 	{"mariadb", core.EngineMariadb},
 	{"tidb", core.EngineTidb},
 	{"percona", core.EngineMysql},
-	{"valkey", core.EngineRedis},
-	{"redis", core.EngineRedis},
 	{"mongodb", core.EngineMongo},
 	{"mongo", core.EngineMongo},
 	{"mysql", core.EngineMysql},
@@ -284,13 +282,6 @@ func applyMongoEnvironment(profile *cfg.Profile, environment map[string]string) 
 	}
 }
 
-// applyRedisEnvironment fills a Redis image. The server has no user, and a password belongs
-// to the server itself.
-func applyRedisEnvironment(profile *cfg.Profile, environment map[string]string) {
-	profile.Password = findFirstValue(environment, "REDIS_PASSWORD")
-	profile.Database = "0"
-}
-
 // resolveContainerSSLMode returns the SSL mode of a container, which listens without TLS
 // where the hosted service of the same engine does not.
 func resolveContainerSSLMode(engine core.Engine) core.SSLMode {
@@ -350,8 +341,6 @@ func buildContainerProfile(held container) (cfg.Profile, bool) {
 		applyMysqlEnvironment(&profile, environment)
 	case core.FamilyMongo:
 		applyMongoEnvironment(&profile, environment)
-	case core.FamilyRedis:
-		applyRedisEnvironment(&profile, environment)
 	}
 	return profile, true
 }

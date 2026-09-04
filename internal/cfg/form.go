@@ -282,11 +282,6 @@ var urlSchemes = func() map[string]core.Engine {
 // sslKeys are the query keys a URL can use for the SSL setting.
 var sslKeys = []string{"sslmode", "ssl-mode", "sslMode"}
 
-// tlsSchemes are the schemes that request TLS by their name, with the mode of each one. A
-// Redis client reads `rediss://` as a TLS connection that verifies the certificate, so a
-// URL without a mode must not fall back to an unencrypted connection.
-var tlsSchemes = map[string]core.SSLMode{"rediss": core.SSLVerifyFull}
-
 // ParseConnectionURL reads a pasted connection string. It returns false unless the scheme,
 // the host and the database are all present, because an incomplete URL means the user is
 // still typing. A password in the URL is removed.
@@ -328,12 +323,6 @@ func ParseConnectionURL(text string) (ConnectionURL, bool) {
 			break
 		}
 	}
-	if sslMode == "" {
-		if implied, asks := tlsSchemes[parsed.Scheme]; asks {
-			sslMode = string(implied)
-		}
-	}
-
 	user := ""
 	if parsed.User != nil {
 		user = parsed.User.Username()

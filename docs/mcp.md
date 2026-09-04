@@ -125,7 +125,6 @@ The level is checked against the effect of the statement, not against its first 
 - **A write without `WHERE` is treated as the highest risk.** `update orders set paid = true` affects every row, so it needs `full`. An `UPDATE` with a `WHERE` needs only `read-write`.
 - **A statement that creates a routine is a write,** regardless of what the routine body does later.
 - **A MongoDB `runCommand` is checked by the command in the document,** not by the call. So `db.runCommand({dropDatabase: 1})` needs `full`.
-- **A Redis script is treated as the highest risk.** `EVAL` can call any command, so it needs `full`. `EVAL_RO`, `EVALSHA_RO` and `FCALL_RO` are reads, because the server restricts them to reads.
 - **A `SET` or `RESET` of a setting that masume does not recognize is a write.** `set search_path`, `set time zone` and the timeouts are reads. `set default_transaction_read_only = off` is a write, because a read after it could write. `begin read write` is a write for the same reason.
 - **An executable comment is checked as the statement inside it.** MySQL executes `/*! … */` and MariaDB also executes `/*M! … */`, so a DELETE inside one is checked as a DELETE.
 

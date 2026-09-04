@@ -12,7 +12,6 @@ Not all engines have the same test coverage. The support tiers below describe th
 | MySQL | 8.0 and 8.4 |
 | MariaDB | 11 |
 | MongoDB | 8, as a standalone server, with authentication, and as a replica set |
-| Redis | 8 |
 | SQLite | Against a temporary file, so no server is involved |
 
 **Tier 2** engines use the protocol of a tier 1 engine. masume adapts the catalog queries, the capabilities and the plan parser to each service. None of them is tested against a real server, so problems are found only through user reports. The tier 2 engines are CockroachDB, TimescaleDB, Redshift, Neon, Supabase, TiDB, PlanetScale and Aurora MySQL.
@@ -28,7 +27,6 @@ Engines that share a protocol behave the same way. This is why a hosted service 
 | PostgreSQL | PostgreSQL, CockroachDB, TimescaleDB, Redshift, Neon, Supabase |
 | MySQL | MySQL, MariaDB, TiDB, PlanetScale, Aurora MySQL |
 | SQLite | SQLite |
-| RESP | Redis |
 | MongoDB wire | MongoDB |
 
 ## Capabilities by engine
@@ -45,7 +43,6 @@ masume queries the capabilities of the server and hides unsupported actions. An 
 | neon | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | planetscale | yes | yes | yes | no | no | no | no | yes | yes | yes |
 | postgres | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| redis | no | no | no | no | yes | no | no | no | no | no |
 | redshift | yes | no | yes | yes | yes | no | no | yes | yes | yes |
 | sqlite | yes | no | yes | no | no | no | no | yes | no | yes |
 | supabase | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
@@ -83,7 +80,6 @@ TiDB accepts `SET SESSION TRANSACTION READ ONLY` but does not enforce it. On a p
 | neon | 5432 | `require` |
 | planetscale | 3306 | `require` |
 | postgres | 5432 | `prefer` |
-| redis | 6379 | `prefer` |
 | redshift | 5439 | `require` |
 | sqlite | none | none |
 | supabase | 5432 | `require` |
@@ -92,18 +88,6 @@ TiDB accepts `SET SESSION TRANSACTION READ ONLY` but does not enforce it. On a p
 
 `prefer` tries TLS first and falls back to an unencrypted connection if the server does not support TLS. `require` always uses TLS and never falls back. See [configuration.md](configuration.md) for `verify-ca` and `verify-full`.
 
-## Redis
-
-Redis has no SQL. A query tab accepts Redis commands, one per line:
-
-```
-SET user:1 "a name"
-GET user:1
-```
-
-The tree is built by scanning the key space, so it shows the state at the time of the last scan. A key written after that scan appears after the next scan. masume knows the Redis command set and marks unknown commands.
-
-A Redis profile can have a password without a user. Its server setting is `requirepass`, which has no user name.
 
 ## MongoDB
 

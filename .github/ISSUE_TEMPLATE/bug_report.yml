@@ -49,7 +49,6 @@ body:
         - PostgreSQL
         - MySQL
         - SQLite
-        - Redis
         - MongoDB
         - CockroachDB
         - TimescaleDB

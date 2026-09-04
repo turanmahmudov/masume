@@ -49,8 +49,8 @@ mode     = "write"
 | `engine` | `postgres` | See [engines.md](engines.md) for the list |
 | `host` | required | The form defaults to `127.0.0.1`. Ignored for SQLite |
 | `port` | per engine | The default port of the engine |
-| `database` | required | The file path for SQLite. The database number for Redis. A leading `~` is expanded |
-| `user` | required if the engine needs one | Ignored for SQLite. Optional for Redis and MongoDB |
+| `database` | required | The file path for SQLite. A leading `~` is expanded |
+| `user` | required if the engine needs one | Ignored for SQLite. Optional for MongoDB |
 | `auth` | `password`, or `command` if `password_command` is set, or `secret` if `secret` is set | The password source: `prompt`, `keyring`, `command`, `secret` or `password`. See [Passwords](#passwords) |
 | `password` | | **Ignored.** No file masume reads carries a password. The key is reported and the profile asks for its password instead |
 | `password_env` | | The environment variable that holds the password. Read when `auth` is `password` |
@@ -88,13 +88,13 @@ masume ./notes.db
 
 | Form | Read as |
 | --- | --- |
-| A URL | The scheme selects the engine: `postgres`, `postgresql`, `mysql`, `mariadb`, `cockroachdb`, `redshift`, `redis`, `rediss`, `mongodb` |
+| A URL | The scheme selects the engine: `postgres`, `postgresql`, `mysql`, `mariadb`, `cockroachdb`, `redshift`, `mongodb` |
 | A connection string | `key=value` pairs: `host`, `hostaddr`, `port`, `dbname`, `database`, `user`, `password`, `sslmode`. A value can be quoted with `'`. The engine is `postgres` |
 | A file path | A SQLite file. The path needs an extension of `.db`, `.db3`, `.sqlite` or `.sqlite3`, or the file must be there already. `:memory:` opens a database that is never written |
 
-A URL that names no database connects to the database the server itself defaults to: the name of the user on a PostgreSQL server, database `0` on Redis, and `admin` on MongoDB. A MySQL server has no such default, so its URL must name a database.
+A URL that names no database connects to the database the server itself defaults to: the name of the user on a PostgreSQL server, and `admin` on MongoDB. A MySQL server has no such default, so its URL must name a database.
 
-`rediss://` connects with TLS and verifies the certificate. Every other setting the target does not carry takes the default of a new connection: `env = "dev"`, `mode = "write"`, `page_size = 200`.
+Every setting the target does not carry takes the default of a new connection: `env = "dev"`, `mode = "write"`, `page_size = 200`.
 
 masume asks for the password if the target carries none. The profile it builds is not written to the config file, and the picker lists it under the name of its database or its file. A name a profile of the config file already holds gets a number after it.
 
@@ -112,10 +112,10 @@ masume --detect
 
 A container is offered when both are true:
 
-- Its image names a database masume supports. `postgres`, `postgis`, `pgvector`, `timescale`, `supabase`, `cockroach`, `mysql`, `percona`, `mariadb`, `tidb`, `redis`, `valkey` and `mongo` are read from the image name, whatever the registry and the tag are. An image built on another one is read as itself, so `supabase/postgres` is Supabase and not PostgreSQL.
+- Its image names a database masume supports. `postgres`, `postgis`, `pgvector`, `timescale`, `supabase`, `cockroach`, `mysql`, `percona`, `mariadb`, `tidb` and `mongo` are read from the image name, whatever the registry and the tag are. An image built on another one is read as itself, so `supabase/postgres` is Supabase and not PostgreSQL.
 - It publishes the port that database listens on. A container that publishes no port is left out.
 
-The user, the database and the password come from the environment of the container: `POSTGRES_USER`, `POSTGRES_DB` and `POSTGRES_PASSWORD`; `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` and `MYSQL_ROOT_PASSWORD`, and the same names with a `MARIADB_` prefix; `MONGO_INITDB_ROOT_USERNAME`, `MONGO_INITDB_ROOT_PASSWORD` and `MONGO_INITDB_DATABASE`; `REDIS_PASSWORD`; `COCKROACH_USER`, `COCKROACH_PASSWORD` and `COCKROACH_DATABASE`. What the image itself defaults to is used where a variable is not set, so a `postgres` container with only `POSTGRES_DB` set still connects as the `postgres` user.
+The user, the database and the password come from the environment of the container: `POSTGRES_USER`, `POSTGRES_DB` and `POSTGRES_PASSWORD`; `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` and `MYSQL_ROOT_PASSWORD`, and the same names with a `MARIADB_` prefix; `MONGO_INITDB_ROOT_USERNAME`, `MONGO_INITDB_ROOT_PASSWORD` and `MONGO_INITDB_DATABASE`; `COCKROACH_USER`, `COCKROACH_PASSWORD` and `COCKROACH_DATABASE`. What the image itself defaults to is used where a variable is not set, so a `postgres` container with only `POSTGRES_DB` set still connects as the `postgres` user.
 
 Each connection gets `env = "dev"` and `mode = "write"`. A container of a hosted service such as `supabase/postgres` gets `sslmode = "prefer"`, not the `require` of its engine. A container on this machine listens without TLS.
 
@@ -279,7 +279,7 @@ The dry run reads the whole file and reaches no server. Its answer is the same w
 
 The rows are written in batches of 1000 inside one transaction, so an import that fails part way leaves the table as it was, and the reason stays on the card.
 
-Not yet: an upsert on a key, Parquet, and an encoding other than UTF-8.
+An import does not yet read a Parquet file, upsert on a key, or read an encoding other than UTF-8.
 
 ## Measuring a write
 
@@ -424,7 +424,7 @@ A profile that names a store the config file does not declare is skipped, with t
 
 Every `[secret]` store belongs to the config file of the user. A project file can neither declare a store nor name one.
 
-Redis takes a password without a user. Its server setting is `requirepass`, which has no user. MongoDB takes a user only when authentication is enabled. A server without authentication refuses a connection that sends credentials.
+MongoDB takes a user only when authentication is enabled. A server without authentication refuses a connection that sends credentials.
 
 ## A command before the connection
 

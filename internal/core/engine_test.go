@@ -103,9 +103,6 @@ func TestCapabilitiesFollowTheFamily(t *testing.T) {
 		{EngineMysql, "has transactions", ResolveEngineInfo(EngineMysql).Capabilities.HasTransactions, true},
 
 		// A key store uses its own order and has no transaction the client can control.
-		{EngineRedis, "sorts a read", ResolveEngineInfo(EngineRedis).Capabilities.SortsRead, false},
-		{EngineRedis, "has transactions", ResolveEngineInfo(EngineRedis).Capabilities.HasTransactions, false},
-		{EngineRedis, "plans a statement", ResolveEngineInfo(EngineRedis).Capabilities.PlansStatement, false},
 
 		// A file has no server sessions to list or to cancel.
 		{EngineSqlite, "has server sessions", ResolveEngineInfo(EngineSqlite).Capabilities.HasServerSessions, false},
@@ -187,19 +184,6 @@ func TestAnEngineWithAnOptionalUserCanStillGiveAPassword(t *testing.T) {
 	}
 	if !held.NeedsPassword {
 		t.Error("mongodb gives no password, so a hosted deployment cannot be opened")
-	}
-}
-
-// On every server except one, a password belongs to a named user. Redis checks a password
-// without a user, so a profile without a user can still have a password, and the client
-// must still ask for it.
-func TestOnlyRedisTakesAPasswordThatNamesNobody(t *testing.T) {
-	for _, info := range ListEngineInfo() {
-		wanted := info.Engine == EngineRedis
-		if info.PasswordWithoutUser != wanted {
-			t.Errorf("%q takes a password that names nobody: %v, wanted %v",
-				info.Engine, info.PasswordWithoutUser, wanted)
-		}
 	}
 }
 

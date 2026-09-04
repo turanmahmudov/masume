@@ -11,7 +11,7 @@ import (
 // statementFences name the languages a fenced block of a proposed statement is opened
 // with. Only the languages this client speaks are read as a statement, so a block of
 // anything else stays text the user reads rather than a statement offered to run.
-const statementFences = "sql|js|javascript|mongodb|mongosh|redis"
+const statementFences = "sql|js|javascript|mongodb|mongosh"
 
 // fencedBlock matches one fenced block, with or without the language named.
 var fencedBlock = regexp.MustCompile(
