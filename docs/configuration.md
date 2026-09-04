@@ -42,6 +42,34 @@ mode     = "write"
 
 A profile that misses a required key is skipped and reported. The other profiles still load.
 
+## A connection on the command line
+
+A connection given as the first argument needs no profile. masume reads three forms.
+
+```sh
+masume postgres://reader@db.internal:5432/shop?sslmode=verify-full
+masume "host=db.internal port=5432 dbname=shop user=reader sslmode=require"
+masume ./notes.db
+```
+
+| Form | Read as |
+| --- | --- |
+| A URL | The scheme selects the engine: `postgres`, `postgresql`, `mysql`, `mariadb`, `cockroachdb`, `redshift`, `redis`, `rediss`, `mongodb` |
+| A connection string | `key=value` pairs: `host`, `hostaddr`, `port`, `dbname`, `database`, `user`, `password`, `sslmode`. A value can be quoted with `'`. The engine is `postgres` |
+| A file path | A SQLite file. The path needs an extension of `.db`, `.db3`, `.sqlite` or `.sqlite3`, or the file must be there already. `:memory:` opens a database that is never written |
+
+A URL that names no database connects to the database the server itself defaults to: the name of the user on a PostgreSQL server, database `0` on Redis, and `admin` on MongoDB. A MySQL server has no such default, so its URL must name a database.
+
+`rediss://` connects with TLS and verifies the certificate. Every other setting the target does not carry takes the default of a new connection: `env = "dev"`, `mode = "write"`, `page_size = 200`.
+
+masume asks for the password if the target carries none. The profile it builds is not written to the config file, and the picker lists it under the name of its database or its file. To keep it, press `Ctrl+N` for the picker, then `e` to open the connection form and `Ctrl+S` to save it. A name a profile of the config file already holds gets a number after it, so the two rows can be told apart.
+
+```sh
+masume --profile shop-prod       # open one profile of the config file
+```
+
+With no argument at all, masume opens `$DATABASE_URL` if the shell exports it. An argument on the command line is opened instead of the variable.
+
 ## Passwords
 
 Keep the password out of the file.

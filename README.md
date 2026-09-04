@@ -117,11 +117,26 @@ mise run install
 
 ```
 masume                        open the client
+masume URL                    open one connection, for example postgres://you@host/shop
+masume FILE                   open one SQLite file, for example ./notes.db
+masume DSN                    open one connection string, for example "host=db dbname=shop"
+masume --profile NAME         open one profile of the config file
 masume --mcp                  run the MCP server for the configured profiles
 masume --mcp --profile=NAME   run the MCP server for one profile
 masume --mcp --check          connect to every configured profile once, print a report, and exit
 masume --version              print the version and exit
 ```
+
+A connection given on the command line needs no profile in the config file. With no argument, masume opens `$DATABASE_URL` if the shell exports it.
+
+```sh
+masume postgres://reader@db.internal:5432/shop?sslmode=verify-full
+masume "host=db.internal dbname=shop user=reader"
+masume ./notes.db
+masume --profile shop-prod
+```
+
+masume asks for the password if the connection carries none. The connection is not written to the config file. To keep it, press `Ctrl+N` for the picker, then `e` and `Ctrl+S` to save it as a profile.
 
 The config file is `$XDG_CONFIG_HOME/masume/config.toml`. The history file is `$XDG_STATE_HOME/masume/history.sqlite`. See [docs/mcp.md](docs/mcp.md) for the MCP server.
 
@@ -133,7 +148,13 @@ The tier 1 engines are tested against a real server in CI on every push. The oth
 
 ## First connection
 
-On the first run, masume creates a starter config file if there is none. Run `masume`, press `Ctrl+N` to open the connection picker, then press `n` to add a connection. Or write the profile by hand:
+The quickest first connection is a URL on the command line:
+
+```sh
+masume postgres://ada@127.0.0.1:5432/shop
+```
+
+For a connection you open again, write a profile. On the first run, masume creates a starter config file if there is none. Run `masume`, press `Ctrl+N` to open the connection picker, then press `n` to add a connection. Or write the profile by hand:
 
 ```toml
 [profile.shop]

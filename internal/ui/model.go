@@ -53,6 +53,9 @@ type Model struct {
 	profiles []cfg.Profile
 	// What the config and the theme files got wrong, which the palette lists.
 	problems []string
+	// The profile the command line named, which is opened as the client starts instead
+	// of drawing the picker.
+	startProfile *cfg.Profile
 
 	screen ScreenKind
 	picker pickerState
@@ -142,10 +145,20 @@ func NewModel(
 	}
 }
 
+// OpenAtStart names the profile the client connects to as it opens.
+func (model *Model) OpenAtStart(profile cfg.Profile) {
+	model.startProfile = &profile
+	for index, held := range model.profiles {
+		if held.Name == profile.Name {
+			model.picker.focus(index, len(model.profiles))
+		}
+	}
+}
+
 // Init asks the terminal for its own colours, so a theme that follows the terminal is drawn
 // in them at once.
 func (model *Model) Init() tea.Cmd {
-	return tea.Batch(
+	commands := []tea.Cmd{
 		// A terminal that reports a change of its own theme is asked to do so, which
 		// costs one sequence and returns the moment the user switches light and dark.
 		tea.Raw(ansi.SetMode(ansi.ModeLightDark)),
@@ -154,7 +167,13 @@ func (model *Model) Init() tea.Cmd {
 		RequestTerminalPalette(),
 		waitForTerminalColors(),
 		tick(spinnerFrameWait),
-	)
+	}
+	if model.startProfile != nil {
+		if _, opening := model.chooseProfile(*model.startProfile); opening != nil {
+			commands = append(commands, opening)
+		}
+	}
+	return tea.Batch(commands...)
 }
 
 // resolveTickWait returns how long until the next wake. A wheel that turns needs a frame ten

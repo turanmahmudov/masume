@@ -1,6 +1,6 @@
 # Architecture
 
-masume is one binary with two front ends. `cmd/masume` decides which one to start. `internal/ui` is the terminal user interface. `internal/mcp` is the MCP server for AI agents.
+masume is one binary with two front ends. `cmd/masume` reads the arguments, decides which front end to start, and builds the profile of a connection given on the command line. `internal/ui` is the terminal user interface. `internal/mcp` is the MCP server for AI agents.
 
 Neither front end owns a connection. Both access a server through `internal/db`, and both write to the same history through `internal/hist`. This is why a statement run by an agent appears in the history under `Ctrl+T`.
 
@@ -9,7 +9,7 @@ Neither front end owns a connection. Both access a server through `internal/db`,
 | Package | Contains |
 | --- | --- |
 | `internal/core` | Shared basics: the text form of a value, the engine list, JSON that keeps field order |
-| `internal/cfg` | The config file: profiles, interface settings, key presets, themes, the pre-connect command |
+| `internal/cfg` | The config file: profiles, interface settings, key presets, themes, the pre-connect command. Also the URL, connection string and file path read from the command line |
 | `internal/db` | The connection interface: what one open connection provides |
 | `internal/db/<engine>` | One driver per protocol, and one variant per hosted service |
 | `internal/db/engines` | The one place that maps an engine to its driver and its capabilities |
