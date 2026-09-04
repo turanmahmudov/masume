@@ -90,9 +90,13 @@ masume has a built-in AI chat and an MCP server over stdio. The chat uses the cu
 
 **Query history and saved queries.** Open tabs are restored after a restart
 
-**Write plans:** before a write runs, masume counts the rows it lands on, names the columns it assigns, the relations it reaches through a trigger, and the ones a foreign key refuses it for. It also reads the rows the write changes, inside the transaction of that write, so `Alt+U` undoes it afterwards. The chat and an agent over MCP are measured the same way, and an agent is handed the undo with its result
+**Project connections and shared queries:** a `.masume.toml` committed next to the code provides the connections and the queries of a project, found from the working directory upward. Clone the repository, run `masume`, and the development database is in the picker. Your own config file overrides it
+
+**Write plans:** before a write runs, masume counts the rows it lands on, and lists the columns it assigns, the relations it reaches through a trigger, and the foreign keys that refuse it. It also reads the rows the write changes, inside the transaction of that write, and `Alt+U` undoes it afterwards. The chat and an agent over MCP are measured the same way, and an agent is handed the undo with its result
 
 **Manual transactions:** disable autocommit, then begin, commit or roll back
+
+**Passwords never reach the config file:** a `password` key in any file masume reads is ignored and reported. `auth = "keyring"` keeps the password in the keyring of the machine, and masume offers to put a typed password there once the server accepts it. `auth = "secret"` reads one reference out of a store you declare, so 1Password, Bitwarden, Vault, SOPS, `pass` or a script of your own all work through the same two lines
 
 **Read-only profiles:** the session is set read-only on the server, so writes are impossible
 
@@ -159,7 +163,28 @@ masume run ./notes.db -f csv 'select * from notes limit 100000' > notes.csv
 echo 'select 1' | masume run -p shop -e -
 ```
 
-Formats are `table` (the default), `csv`, `json` and `markdown`. A statement without a limit of its own returns one page, `page_size` on the profile, the same as the client; the run says on stderr that the result is longer. A statement that bounds itself, with a `LIMIT`, returns every row it asks for, read a batch at a time so a result larger than memory still reaches the stream. `--limit ROWS` bounds a run whose statement names no limit. The exit code says what happened: `0` every statement ran, `1` the server refused one, `2` the connection could not be opened, `3` the profile is read-only and the statement writes. See `masume run --help` and [docs/headless.md](docs/headless.md).
+Formats are `table` (the default), `csv`, `json` and `markdown`. A statement without a limit of its own returns one page, `page_size` on the profile, the same as the client; the run reports on stderr that the result is longer. A statement that bounds itself, with a `LIMIT`, returns every row it asks for, read a batch at a time, and a result larger than memory still reaches the stream. `--limit ROWS` bounds a run whose statement carries no limit. The exit codes are: `0` every statement ran, `1` the server refused one, `2` the connection could not be opened, `3` the profile is read-only and the statement writes. See `masume run --help` and [docs/headless.md](docs/headless.md).
+
+### For a team
+
+A repository can hold a `.masume.toml` next to its code, with the connections of the project and the queries the team keeps:
+
+```toml
+[profile.dev]
+engine   = "postgres"
+host     = "127.0.0.1"
+database = "shop"
+user     = "shop"
+env      = "dev"
+
+[query.recent-orders]
+sql         = "select * from orders order by created_at desc limit 50"
+description = "the newest 50 orders"
+```
+
+masume reads the first such file it finds, starting in the working directory and walking up. The connections appear in the picker marked `project`, and the queries appear under `Ctrl+Q`. A profile of your own config file replaces a project profile of the same name.
+
+A project file holds the server address. It holds no way to reach a secret: `password`, `password_command`, `password_env`, `command`, `secret` and `secret_ref` are all refused there. `auth = "prompt"` and `auth = "keyring"` both work. A project file also cannot set your theme, your keys, your icons, or the profiles an agent reaches. See [docs/configuration.md](docs/configuration.md).
 
 The config file is `$XDG_CONFIG_HOME/masume/config.toml`. The history file is `$XDG_STATE_HOME/masume/history.sqlite`. See [docs/mcp.md](docs/mcp.md) for the MCP server.
 
@@ -197,7 +222,7 @@ mode     = "write"
 
 | Page | About |
 | --- | --- |
-| [Configuration](docs/configuration.md) | Profiles, passwords, interface, limits |
+| [Configuration](docs/configuration.md) | Every config key, its type, its default and what it does |
 | [Engines](docs/engines.md) | Support tiers and capabilities |
 | [Keys](docs/keys.md) | Every action and its key binding |
 | [Themes](docs/themes.md) | Built-in themes, and how to write a custom one |

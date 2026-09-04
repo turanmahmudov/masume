@@ -8,20 +8,29 @@ import (
 	"time"
 
 	"github.com/turanmahmudov/masume/internal/core"
+	"github.com/turanmahmudov/masume/internal/secret"
 )
 
-// AuthMode is the source of the password: the profile itself, a command, or the user.
+// AuthMode is the source of the password: the profile itself, a command, a store, the
+// keyring of the operating system, or the user.
 type AuthMode string
 
-// The three sources of a password.
+// The sources of a password.
 const (
 	AuthPassword AuthMode = "password"
 	AuthCommand  AuthMode = "command"
 	AuthPrompt   AuthMode = "prompt"
+	// AuthKeyring reads the password masume itself stored in the keyring of the operating
+	// system. A keyring that holds none for the profile leaves the user as the source.
+	AuthKeyring AuthMode = "keyring"
+	// AuthSecret reads one reference out of a store the user declared under `[secret]`.
+	AuthSecret AuthMode = "secret"
 )
 
 // AuthModes lists the modes a profile can use.
-var AuthModes = []AuthMode{AuthPassword, AuthCommand, AuthPrompt}
+var AuthModes = []AuthMode{
+	AuthPassword, AuthCommand, AuthPrompt, AuthKeyring, AuthSecret,
+}
 
 // Environment is the environment of a connection.
 type Environment string
@@ -108,6 +117,13 @@ const (
 	DefaultUndoRows = 1000
 )
 
+// passwordInFileReason is what the client says about a `password` in a file. No file masume
+// reads carries a password: a config file is a plain file that backups, editors and dotfile
+// repositories all copy, and a project file is committed. The key is ignored rather than
+// refused, so the connection still opens and asks for its password.
+const passwordInFileReason = "a password in a file is ignored; type it once and tick " +
+	"\"remember in the keyring\", or set password_env, password_command or a [secret] store"
+
 // Profile is one connection as the config file defines it.
 type Profile struct {
 	Name   string
@@ -121,14 +137,22 @@ type Profile struct {
 	Auth        AuthMode
 	Environment Environment
 	AccessMode  AccessMode
+	// The password of a connection the command line gave, or one found in a container. It
+	// is never read from a file and never written to one.
 	Password    string
 	PasswordEnv string
-	// A command that prints the password, for example a keyring lookup.
+	// A command that prints the password, for example a lookup in a secret store.
 	PasswordCommand string
-	SSLMode         core.SSLMode
-	Autocommit      bool
-	ConfirmWrites   ConfirmWrites
-	WritePlan       WritePlan
+	// The `[secret]` store that holds the password, and the reference inside it.
+	Secret    string
+	SecretRef string
+	// The command the named store runs for this reference, built when the file is read.
+	// The profile itself never holds one.
+	SecretCommand string
+	SSLMode       core.SSLMode
+	Autocommit    bool
+	ConfirmWrites ConfirmWrites
+	WritePlan     WritePlan
 	// How many rows a plan reads to build an undo.
 	UndoRows int
 	// A command to run before the connection, for example a tunnel.
@@ -151,18 +175,50 @@ type Profile struct {
 	// True for a profile the config file holds. One built from the command line or found
 	// in a container is false.
 	InConfigFile bool
+	// The path of the project file that provides this profile. Empty for every other
+	// profile.
+	ProjectFile string
 }
 
-// ProfileProblem is a profile that could not be read, with the reason.
+// IsInAFile is true for a profile that a file already holds, so the client does not offer to
+// write it on the way out.
+func (profile Profile) IsInAFile() bool {
+	return profile.InConfigFile || profile.ProjectFile != ""
+}
+
+// ProfileProblem is a profile, or a `[secret]` store, that could not be read, with the
+// reason.
 type ProfileProblem struct {
 	Name   string
 	Reason string
+}
+
+// secretProblemPrefix marks a problem of a `[secret]` store rather than of a profile.
+const secretProblemPrefix = "secret."
+
+// Describe returns the problem as one line, naming what it is about. A store and a profile
+// read the same way and are reported the same way, so the line says which of the two it is.
+func (problem ProfileProblem) Describe() string {
+	if name, isStore := strings.CutPrefix(problem.Name, secretProblemPrefix); isStore {
+		return fmt.Sprintf("skipped secret store %q: %s", name, problem.Reason)
+	}
+	return fmt.Sprintf("skipped profile %q: %s", problem.Name, problem.Reason)
+}
+
+// DescribeWarning returns a warning as one line. The profile it names was read and is used.
+func (problem ProfileProblem) DescribeWarning() string {
+	return fmt.Sprintf("profile %q: %s", problem.Name, problem.Reason)
 }
 
 // ParsedProfiles holds the profiles read from the file and the ones that failed.
 type ParsedProfiles struct {
 	Profiles []Profile
 	Problems []ProfileProblem
+	// Warnings are the profiles that were read and used, with a key that was ignored. A
+	// profile with a warning still opens; one in Problems was skipped.
+	Warnings []ProfileProblem
+	// The secret stores the user declared under `[secret]`.
+	Secrets []SecretSource
 }
 
 // resolveDefaultConfirmWrites uses the environment, which is the only indication of the
@@ -276,6 +332,9 @@ func buildProfile(name string, source Table) (Profile, error) {
 	if passwordCommand != "" {
 		defaultAuth = AuthCommand
 	}
+	if _, namesStore := FindString(source, "secret"); namesStore {
+		defaultAuth = AuthSecret
+	}
 	auth, err := resolveOneOf(source, "auth", AuthModes, defaultAuth)
 	if err != nil {
 		return Profile{}, err
@@ -382,8 +441,9 @@ func buildProfile(name string, source Table) (Profile, error) {
 		autocommit = written
 	}
 
-	password, _ := FindString(source, "password")
 	passwordEnv, _ := FindString(source, "password_env")
+	secretName, _ := FindString(source, "secret")
+	secretRef, _ := FindString(source, "secret_ref")
 	command, _ := FindString(source, "command")
 	description, _ := FindString(source, "description")
 	aiInstructions, _ := FindString(source, "ai_instructions")
@@ -391,7 +451,8 @@ func buildProfile(name string, source Table) (Profile, error) {
 	return Profile{
 		Name: name, Engine: engine, Host: host, Port: port, Database: database, User: user,
 		Auth: auth, Environment: environment, AccessMode: accessMode,
-		Password: password, PasswordEnv: passwordEnv, PasswordCommand: passwordCommand,
+		PasswordEnv: passwordEnv, PasswordCommand: passwordCommand,
+		Secret: secretName, SecretRef: secretRef,
 		SSLMode: sslMode, Autocommit: autocommit, ConfirmWrites: confirmWrites,
 		WritePlan: writePlan, UndoRows: undoRows,
 		Command: command, WaitForPort: waitForPort, CommandTimeout: commandTimeout,
@@ -401,15 +462,17 @@ func buildProfile(name string, source Table) (Profile, error) {
 	}, nil
 }
 
-// ParseProfiles reads the `[profile]` section. A profile that cannot be read is reported
-// and skipped, so one bad entry does not stop the app.
+// ParseProfiles reads the `[profile]` and the `[secret]` sections. The two are read together
+// because a profile that names a store cannot be finished without it. A profile that cannot
+// be read is reported and skipped, so one bad entry does not stop the app.
 func ParseProfiles(document Table) ParsedProfiles {
+	sources, sourceProblems := ParseSecretSources(document)
 	written, present := FindSection(document, "profile")
 	if !present {
-		return ParsedProfiles{}
+		return ParsedProfiles{Secrets: sources, Problems: nameSecretProblems(sourceProblems)}
 	}
 
-	parsed := ParsedProfiles{}
+	parsed := ParsedProfiles{Secrets: sources, Problems: nameSecretProblems(sourceProblems)}
 	names := make([]string, 0, len(written))
 	for name := range written {
 		names = append(names, name)
@@ -429,9 +492,33 @@ func ParseProfiles(document Table) ParsedProfiles {
 				ProfileProblem{Name: name, Reason: err.Error()})
 			continue
 		}
+		if _, holdsPassword := FindString(source, "password"); holdsPassword {
+			parsed.Warnings = append(parsed.Warnings, ProfileProblem{
+				Name: name, Reason: passwordInFileReason})
+		}
+		if profile.Auth == AuthSecret {
+			command, storeErr := resolveSecretCommand(profile, sources)
+			if storeErr != nil {
+				parsed.Problems = append(parsed.Problems,
+					ProfileProblem{Name: name, Reason: storeErr.Error()})
+				continue
+			}
+			profile.SecretCommand = command
+		}
 		parsed.Profiles = append(parsed.Profiles, profile)
 	}
 	return parsed
+}
+
+// nameSecretProblems marks the problems of a store, so a report that lists profiles and
+// stores together says which is which.
+func nameSecretProblems(problems []ProfileProblem) []ProfileProblem {
+	named := make([]ProfileProblem, 0, len(problems))
+	for _, problem := range problems {
+		named = append(named, ProfileProblem{
+			Name: secretProblemPrefix + problem.Name, Reason: problem.Reason})
+	}
+	return named
 }
 
 // DescribeProfileTarget returns a short form of the target of the profile: a file path, or
@@ -487,8 +574,15 @@ func NeedsPasswordPrompt(profile Profile) bool {
 	if !info.PasswordWithoutUser && profile.User == "" {
 		return false
 	}
-	if profile.Auth == AuthCommand {
+	// A command and a store both answer without the user.
+	if profile.Auth == AuthCommand || profile.Auth == AuthSecret {
 		return false
+	}
+	// The keyring is asked here, because a keyring that holds nothing for the profile
+	// leaves the user as the only source and the client must draw the field.
+	if profile.Auth == AuthKeyring {
+		password, found, err := secret.FindPassword(profile.Name)
+		return err != nil || !found || password == ""
 	}
 	return FindStoredPassword(profile) == ""
 }

@@ -43,7 +43,7 @@ text         = "ink"
 accent       = "blue"
 ```
 
-`title` is the name shown in the picker. `appearance` is `dark` or `light`. `extends` copies every colour of a built-in theme first, so the file only has to define what it changes.
+`title` is the name shown in the picker. `appearance` is `dark` or `light`. `extends` copies every colour of a built-in theme first. The file then defines only what it changes.
 
 `[palette]` holds named colours for reuse. A colour can refer to a palette entry or to another colour by name: `border_focus = "blue"` or `border_focus = "accent"`. A palette entry must be a hex value, not a name.
 

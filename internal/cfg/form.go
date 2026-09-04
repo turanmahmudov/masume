@@ -42,19 +42,22 @@ func resolveDatabaseLabel(engine core.Engine) string {
 // serverFields are the fields for the address of a server and the user.
 var serverFields = map[string]bool{
 	"host": true, "port": true, "user": true, "auth": true,
-	"password": true, "passwordEnv": true, "passwordCommand": true, "sslMode": true,
+	"passwordEnv": true, "passwordCommand": true, "sslMode": true,
+	"secret": true, "secretRef": true,
 }
 
-// passwordFields give the field each auth mode reads the password from. The prompt mode
-// reads no field.
+// passwordFields give the field each auth mode reads the password from. The prompt mode and
+// the keyring mode read no field: one asks the user, the other asks the operating system.
 var passwordFields = map[AuthMode]map[string]bool{
-	AuthPassword: {"password": true, "passwordEnv": true},
+	AuthPassword: {"passwordEnv": true},
 	AuthCommand:  {"passwordCommand": true},
 	AuthPrompt:   {},
+	AuthKeyring:  {},
+	AuthSecret:   {"secret": true, "secretRef": true},
 }
 
 var everyPasswordField = map[string]bool{
-	"password": true, "passwordEnv": true, "passwordCommand": true,
+	"passwordEnv": true, "passwordCommand": true, "secret": true, "secretRef": true,
 }
 
 // ReadField returns the value of one field.
@@ -83,8 +86,9 @@ func listModeNames[T ~string](allowed []T) []string {
 	return names
 }
 
-// BuildFormFields returns the fields of the form, filled from the profile under edit.
-func BuildFormFields(profile Profile, editing bool) []FormField {
+// BuildFormFields returns the fields of the form, filled from the profile under edit. The
+// store names are the ones the config file declares, which the secret field offers.
+func BuildFormFields(profile Profile, editing bool, secretStoreNames []string) []FormField {
 	source := profile
 	if !editing {
 		source = buildBlankProfile()
@@ -97,9 +101,13 @@ func BuildFormFields(profile Profile, editing bool) []FormField {
 		{Key: "database", Label: resolveDatabaseLabel(source.Engine), Value: source.Database},
 		{Key: "user", Label: "user", Value: source.User},
 		{Key: "auth", Label: "auth", Value: string(source.Auth), Choices: listModeNames(AuthModes)},
-		{Key: "password", Label: "password", Value: source.Password},
 		{Key: "passwordEnv", Label: "password env", Value: source.PasswordEnv},
 		{Key: "passwordCommand", Label: "password command", Value: source.PasswordCommand},
+		{
+			Key: "secret", Label: "secret store", Value: source.Secret,
+			Choices: secretStoreNames,
+		},
+		{Key: "secretRef", Label: "secret ref", Value: source.SecretRef},
 		{
 			Key: "environment", Label: "env", Value: string(source.Environment),
 			Choices: listModeNames(Environments),
@@ -191,10 +199,12 @@ func BuildProfileFromFields(fields []FormField, source Profile, editing bool) (P
 	built.Environment = findChoice(Environments, read("environment"), EnvironmentDev)
 	built.AccessMode = findChoice(AccessModes, read("accessMode"), AccessWrite)
 	built.ConfirmWrites = findChoice(ConfirmModes, read("confirmWrites"), ConfirmOff)
-	// A space at the start or the end of a password is part of the password.
-	built.Password = ReadField(fields, "password")
+	// The form never writes a password: the file it saves to must hold none. A profile
+	// that carries one in memory, from a URL or from a container, keeps it.
 	built.PasswordEnv = read("passwordEnv")
 	built.PasswordCommand = read("passwordCommand")
+	built.Secret = read("secret")
+	built.SecretRef = read("secretRef")
 	built.Description = read("description")
 	built.AiInstructions = read("aiInstructions")
 
@@ -234,6 +244,11 @@ func BuildProfileFromFields(fields []FormField, source Profile, editing bool) (P
 	}
 	if core.NeedsUser(engine) && built.User == "" {
 		return Profile{}, FormError{Reason: "user cannot be empty"}
+	}
+	if built.Auth == AuthSecret && (built.Secret == "" || built.SecretRef == "") {
+		return Profile{}, FormError{
+			Reason: "the secret store and the reference cannot be empty when auth is secret",
+		}
 	}
 	if built.Auth == AuthCommand && built.PasswordCommand == "" {
 		return Profile{}, FormError{

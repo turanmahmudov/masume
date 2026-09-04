@@ -850,15 +850,39 @@ func (model *Model) renderHistory(overlay app.Overlay, width int) string {
 // savedSQLWidth is how much of a saved statement the row shows, and the filter reads.
 const savedSQLWidth = 70
 
-// renderSaved draws the statements a reader kept by name.
+// The lead column of the saved statements, which marks the ones a project file holds.
+const (
+	savedProjectLead = "project"
+	savedLeadWidth   = 8
+)
+
+// renderSaved draws the statements a reader kept by name, and the ones the project file
+// holds for the whole team.
 func (model *Model) renderSaved(overlay app.Overlay, width int) string {
 	queries := model.filterSaved(overlay)
+	// The lead column stands empty where no statement comes from a project file, so a
+	// user without one loses no room to it.
+	leadWidth := 0
+	if slices.ContainsFunc(overlay.Saved, func(saved app.SavedRow) bool {
+		return saved.IsFromProject()
+	}) {
+		leadWidth = savedLeadWidth
+	}
+
 	rows := make([]string, 0, len(queries))
 	for at, saved := range queries {
+		lead := ""
+		if saved.IsFromProject() {
+			lead = savedProjectLead
+		}
+		detail := core.CollapseWhitespace(saved.SQL)
+		if saved.Description != "" {
+			detail = saved.Description
+		}
 		rows = append(rows, model.renderListRow(ListRowSpec{
+			Lead: lead, LeadWidth: leadWidth,
 			Label: saved.Name, LabelWidth: savedNameWidth,
-			Detail: present.TruncateText(
-				core.CollapseWhitespace(saved.SQL), savedSQLWidth),
+			Detail:   present.TruncateText(detail, savedSQLWidth),
 			Selected: at == overlay.List.Cursor, Width: width,
 		}))
 	}

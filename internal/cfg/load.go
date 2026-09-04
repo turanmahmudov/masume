@@ -24,6 +24,8 @@ type LoadedConfig struct {
 	// The themes of the user. They replace an included theme with the same name.
 	Themes        []ThemeDocument
 	ThemeProblems []string
+	// The project file of the working directory, empty where there is none.
+	Project ProjectConfig
 }
 
 // ResolveConfigPath returns the path of the config file.
@@ -143,4 +145,28 @@ func LoadConfig(path string) LoadedConfig {
 		Themes:         themes,
 		ThemeProblems:  themeProblems,
 	}
+}
+
+// LoadConfigForDirectory reads the config file of the user and the nearest project file of
+// the directory, and returns the two together. A profile of the user replaces a project
+// profile of the same name.
+func LoadConfigForDirectory(path, directory string) LoadedConfig {
+	loaded := LoadConfig(path)
+	projectPath, found := FindProjectFile(directory)
+	if !found {
+		return loaded
+	}
+	loaded.Project = LoadProjectConfig(projectPath)
+	loaded.Profiles = AddProjectProfiles(loaded.Profiles, loaded.Project.Profiles)
+	return loaded
+}
+
+// LoadConfigForWorkingDirectory reads the config file of the user and the project file the
+// shell stands in.
+func LoadConfigForWorkingDirectory(path string) LoadedConfig {
+	directory, err := os.Getwd()
+	if err != nil {
+		return LoadConfig(path)
+	}
+	return LoadConfigForDirectory(path, directory)
 }

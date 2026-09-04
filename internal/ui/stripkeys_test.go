@@ -139,7 +139,7 @@ func TestAPressOnTheTreeBorderOpensTheFilter(t *testing.T) {
 func TestAPressOnAKeyOfTheConnectionFormRunsIt(t *testing.T) {
 	model := buildOfflineModel(t, 120, 40)
 	model.screen = ScreenEditingConnection
-	model.form = NewFormState(cfg.Profile{Name: "alpha", Engine: "postgres"}, true)
+	model.form = NewFormState(cfg.Profile{Name: "alpha", Engine: "postgres"}, true, nil)
 	model.render()
 
 	held, found := findCardButton(model, ActionClose)
@@ -157,7 +157,7 @@ func TestAPressOnAKeyOfTheConnectionFormRunsIt(t *testing.T) {
 func TestAPressOnAChoiceMarkStepsTheField(t *testing.T) {
 	model := buildOfflineModel(t, 120, 40)
 	model.screen = ScreenEditingConnection
-	model.form = NewFormState(cfg.Profile{Name: "alpha", Engine: "postgres"}, true)
+	model.form = NewFormState(cfg.Profile{Name: "alpha", Engine: "postgres"}, true, nil)
 	// The engine is the field that steps through a list.
 	model.form.StepField(1)
 	model.render()

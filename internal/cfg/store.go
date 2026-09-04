@@ -102,13 +102,17 @@ func buildProfileKeys(profile Profile) ([]string, map[string]any, map[string]boo
 	// write a file that cannot be read back. The key stays in the managed set, so the
 	// line of a value the form cleared is removed.
 	for key, value := range map[string]string{
-		"auth":             string(profile.Auth),
-		"env":              string(profile.Environment),
-		"mode":             string(profile.AccessMode),
-		"confirm_writes":   string(profile.ConfirmWrites),
-		"password":         profile.Password,
+		"auth":           string(profile.Auth),
+		"env":            string(profile.Environment),
+		"mode":           string(profile.AccessMode),
+		"confirm_writes": string(profile.ConfirmWrites),
+		// A password is never written. The key stays managed, so saving a profile
+		// removes one that a hand-edited file still holds.
+		"password":         "",
 		"password_env":     profile.PasswordEnv,
 		"password_command": profile.PasswordCommand,
+		"secret":           profile.Secret,
+		"secret_ref":       profile.SecretRef,
 		"sslmode":          string(profile.SSLMode),
 		"description":      profile.Description,
 		"ai_instructions":  profile.AiInstructions,
@@ -122,7 +126,7 @@ func buildProfileKeys(profile Profile) ([]string, map[string]any, map[string]boo
 	// A fixed order that is easy to read, not the order of a map.
 	order := []string{
 		"engine", "host", "port", "database", "user", "auth",
-		"password", "password_env", "password_command",
+		"password", "password_env", "password_command", "secret", "secret_ref",
 		"env", "mode", "sslmode", "confirm_writes", "description", "ai_instructions",
 	}
 	kept := make([]string, 0, len(order))

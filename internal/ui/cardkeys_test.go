@@ -10,7 +10,6 @@ import (
 
 	"github.com/turanmahmudov/masume/internal/app"
 	"github.com/turanmahmudov/masume/internal/db"
-	"github.com/turanmahmudov/masume/internal/hist"
 )
 
 // A card names its keys at its foot. Each one is a button, so the cells it is recorded at
@@ -216,7 +215,7 @@ func TestDeletingASavedQueryReportsAfterTheFileTookIt(t *testing.T) {
 	connection := model.Active()
 	connection.Overlay = app.Overlay{
 		Kind:  app.OverlaySaved,
-		Saved: []hist.SavedQuery{{Name: "nightly", SQL: "select 1"}},
+		Saved: []app.SavedRow{{Name: "nightly", SQL: "select 1"}},
 		Draft: app.NewEditorBuffer("", 0),
 	}
 

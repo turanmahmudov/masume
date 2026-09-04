@@ -88,7 +88,8 @@ func resolveStartProfile(
 			}
 		}
 		return nil, nil, failArgument(
-			"profile " + held.profileName + " is not one the config file has")
+			"profile " + held.profileName +
+				" is not one the config file or the project file has")
 	}
 
 	target := held.target

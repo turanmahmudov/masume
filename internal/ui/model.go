@@ -18,6 +18,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/engines"
 	"github.com/turanmahmudov/masume/internal/hist"
 	"github.com/turanmahmudov/masume/internal/present"
+	"github.com/turanmahmudov/masume/internal/secret"
 )
 
 // ScreenKind names which screen is active. Each one carries its own data, so no screen can
@@ -58,6 +59,12 @@ type Model struct {
 	importPickers map[int]*filepicker.Model
 
 	profiles []cfg.Profile
+	// The project file of the working directory, which provides profiles and statements
+	// the team commits. Empty where the walk found none.
+	project cfg.ProjectConfig
+	// The secret stores the config file declares, which a profile names to read its
+	// password from one of them.
+	secrets []cfg.SecretSource
 	// What the config and the theme files got wrong, which the palette lists.
 	problems []string
 	// The profile the command line named, which is opened as the client starts instead
@@ -146,13 +153,19 @@ func NewModel(
 		icons:    BuildIconSet(loaded.Settings.IconSet, loaded.Settings.IconGlyphs),
 		adapters: adapters, log: log, settings: loaded.Settings,
 		ai: loaded.Ai, aiProvider: loaded.Ai.DefaultProvider,
-		profiles: loaded.Profiles, problems: found,
+		profiles: loaded.Profiles, project: loaded.Project,
+		secrets: loaded.Secrets, problems: found,
 		screen: ScreenPickingProfile,
 		picker: pickerState{password: app.NewEditorBuffer("", 0)},
 		// A theme that follows the terminal has no colours until the terminal returns, so
 		// the first frame waits for it.
 		terminal: newTerminalColorState(styles.FollowsTerminal()),
 	}
+}
+
+// secretStoreNames returns the stores the connection form offers.
+func (model *Model) secretStoreNames() []string {
+	return cfg.ListSecretSourceNames(model.secrets)
 }
 
 // OpenAtStart names the profile the client connects to as it opens.
@@ -669,7 +682,7 @@ func (model *Model) readKey(key tea.Key) (tea.Model, tea.Cmd) {
 // recordUnsavedConnection keeps a connection that is in no config file. One that was opened
 // twice is kept one time.
 func (model *Model) recordUnsavedConnection(profile cfg.Profile) {
-	if profile.InConfigFile {
+	if profile.IsInAFile() {
 		return
 	}
 	if _, held := findProfileIndex(model.unsaved, profile.Name); held {
@@ -690,14 +703,42 @@ func describeSaveOnExit(unsaved []cfg.Profile) string {
 		lines = append(lines, profile.Name+"  "+cfg.DescribeProfileTarget(profile))
 	}
 	if slices.ContainsFunc(unsaved, holdsWrittenPassword) {
-		lines = append(lines, "", "The password is written to the file as well.")
+		if secret.IsAvailable() {
+			lines = append(lines, "", "The password goes into the keyring, not the file.")
+		} else {
+			lines = append(lines, "",
+				"This machine has no keyring, so the password is not kept. "+
+					"The connection will ask for it.")
+		}
 	}
 	return strings.Join(lines, "\n")
 }
 
-// holdsWrittenPassword is true for a connection whose password would go into the config file.
+// holdsWrittenPassword is true for a connection that carries a password, which the keyring
+// takes because no file masume writes holds one.
 func holdsWrittenPassword(profile cfg.Profile) bool {
 	return profile.Password != ""
+}
+
+// keepPasswordOutOfTheFile returns the profile as it is written to the config file, which
+// never carries a password. A password the connection holds goes to the keyring where the
+// machine has one; without a keyring the profile asks the user on the next connection.
+func keepPasswordOutOfTheFile(profile cfg.Profile) (cfg.Profile, error) {
+	if profile.Password == "" {
+		return profile, nil
+	}
+	password := profile.Password
+	profile.Password = ""
+	if !secret.IsAvailable() {
+		profile.Auth = cfg.AuthPrompt
+		return profile, nil
+	}
+	if err := secret.SavePassword(profile.Name, password); err != nil {
+		profile.Auth = cfg.AuthPrompt
+		return profile, err
+	}
+	profile.Auth = cfg.AuthKeyring
+	return profile, nil
 }
 
 // askSaveOnExit asks whether the connections that are in no config file are written to it
@@ -734,6 +775,11 @@ func (model *Model) askSaveOnExit() bool {
 func (model *Model) saveUnsavedConnections(unsaved []cfg.Profile) string {
 	written := 0
 	for _, profile := range unsaved {
+		profile, keyringErr := keepPasswordOutOfTheFile(profile)
+		if keyringErr != nil {
+			return fmt.Sprintf("%s: %s%s",
+				profile.Name, keyringErr.Error(), describeSavedSoFar(written))
+		}
 		if err := cfg.SaveProfileToFile(profile, "", cfg.ResolveConfigPath()); err != nil {
 			return fmt.Sprintf("%s could not be written: %s%s",
 				profile.Name, err.Error(), describeSavedSoFar(written))
@@ -836,6 +882,8 @@ func (model *Model) readConnected(answered connectedMsg) (tea.Model, tea.Cmd) {
 		answered.Session, answered.PreConnect, model.settings.HideSystemSchemas)
 	id := model.connections.open(connection)
 	model.screen = ScreenWorking
+	// The password is kept only once the server took it, so a wrong one is never stored.
+	model.keepTypedPassword(connection)
 	model.recordUnsavedConnection(connection.Profile())
 
 	profileName := connection.Profile().Name
@@ -861,6 +909,48 @@ func (model *Model) readConnected(answered connectedMsg) (tea.Model, tea.Cmd) {
 		commands = append(commands, command)
 	}
 	return model, tea.Batch(commands...)
+}
+
+// keepTypedPassword writes the password the user typed into the keyring, where they asked for
+// it. The profile is written back as one that reads the keyring, so the next connection needs
+// no password at all. A connection that is in no config file is marked in memory, and the
+// question asked on the way out writes it with the keyring as its source.
+func (model *Model) keepTypedPassword(connection *app.Connection) {
+	asked, typed := model.picker.keepInKeyring, model.picker.password.Text
+	model.picker.keepInKeyring = false
+	if !asked || typed == "" {
+		return
+	}
+
+	profile := connection.Profile()
+	if err := secret.SavePassword(profile.Name, typed); err != nil {
+		connection.ShowError(err.Error())
+		return
+	}
+
+	profile.Auth = cfg.AuthKeyring
+	profile.Password = ""
+	// A profile a file already holds is written back, so the next connection reads the
+	// keyring. For a project profile that write lands in the config file of the user, which
+	// is the one place a personal setting belongs.
+	if profile.IsInAFile() {
+		if err := cfg.SaveProfileToFile(
+			profile, profile.Name, cfg.ResolveConfigPath()); err != nil {
+			connection.ShowError(err.Error())
+			return
+		}
+		profile.InConfigFile, profile.ProjectFile = true, ""
+		model.profiles = replaceProfile(model.profiles, profile.Name, profile)
+		model.unsaved = dropProfile(model.unsaved, profile.Name)
+		connection.Show("the password of " + profile.Name + " is in the keyring")
+		return
+	}
+
+	// A connection that is in no file keeps the keyring as its source in memory. The
+	// question asked on the way out then writes it without a password in the file.
+	model.profiles = replaceProfile(model.profiles, profile.Name, profile)
+	model.unsaved = replaceProfile(model.unsaved, profile.Name, profile)
+	connection.Show("the password of " + profile.Name + " is in the keyring")
 }
 
 // readHealthDue asks the server whether it still returns.
@@ -1065,7 +1155,9 @@ func (model *Model) readSavedAnswer(answered savedReadMsg) (tea.Model, tea.Cmd) 
 		return model, nil
 	}
 	connection.Overlay = app.Overlay{
-		Kind: app.OverlaySaved, Saved: answered.Queries,
+		Kind: app.OverlaySaved,
+		Saved: app.BuildSavedRows(
+			answered.Queries, model.project, connection.Profile().Name),
 		Draft: app.NewEditorBuffer("", 0),
 	}
 	return model, nil

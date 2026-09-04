@@ -836,9 +836,15 @@ func (model *Model) deleteSavedQuery(
 	if overlay.List.Cursor >= len(queries) {
 		return model, nil
 	}
-	name := queries[overlay.List.Cursor].Name
+	chosen := queries[overlay.List.Cursor]
+	// A statement of the project file is removed by editing that file, which the whole
+	// team shares.
+	if chosen.IsFromProject() {
+		connection.ShowError(chosen.Name + " comes from " + chosen.ProjectFile)
+		return model, nil
+	}
 	return model, dropSavedQuery(
-		model.ActiveID(), model.log, connection.Profile().Name, name)
+		model.ActiveID(), model.log, connection.Profile().Name, chosen.Name)
 }
 
 // answerPrompt returns the one-line field an action opened.
@@ -1331,10 +1337,10 @@ func (model *Model) filterHistory(overlay app.Overlay) []hist.HistoryEntry {
 }
 
 // filterSaved returns the saved statements the term keeps.
-func (model *Model) filterSaved(overlay app.Overlay) []hist.SavedQuery {
+func (model *Model) filterSaved(overlay app.Overlay) []app.SavedRow {
 	return keepMatchingRows(overlay.Saved, model.readOverlayTerm(overlay),
-		func(saved hist.SavedQuery) string {
-			return saved.Name + " " + present.TruncateText(
+		func(saved app.SavedRow) string {
+			return saved.Name + " " + saved.Description + " " + present.TruncateText(
 				core.CollapseWhitespace(saved.SQL), savedSQLWidth)
 		})
 }

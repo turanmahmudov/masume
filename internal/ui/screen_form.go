@@ -13,6 +13,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/db/engines"
 	"github.com/turanmahmudov/masume/internal/present"
+	"github.com/turanmahmudov/masume/internal/secret"
 )
 
 // TestStateKind says how far a test of the form got.
@@ -44,9 +45,10 @@ type FormState struct {
 }
 
 // NewFormState opens the form on a profile, or on a blank one for a new connection.
-func NewFormState(profile cfg.Profile, editing bool) *FormState {
+func NewFormState(profile cfg.Profile, editing bool, secretStoreNames []string) *FormState {
 	form := &FormState{
-		Fields: cfg.BuildFormFields(profile, editing), Source: profile, Editing: editing,
+		Fields: cfg.BuildFormFields(profile, editing, secretStoreNames),
+		Source: profile, Editing: editing,
 		Test: TestIdle,
 	}
 	form.openField()
@@ -233,6 +235,9 @@ func (model *Model) runFormAction(match Match) (tea.Model, tea.Cmd, bool) {
 		return model, nil, true
 	case ActionTestConnection:
 		profile, err := form.BuildProfile()
+		if err == nil {
+			profile, err = cfg.ApplySecretCommand(profile, model.secrets)
+		}
 		if err != nil {
 			form.Test, form.Message = TestFailed, err.Error()
 			return model, nil, true
@@ -252,6 +257,9 @@ func (model *Model) runFormAction(match Match) (tea.Model, tea.Cmd, bool) {
 func (model *Model) saveForm() (tea.Model, tea.Cmd) {
 	form := model.form
 	profile, err := form.BuildProfile()
+	if err == nil {
+		profile, err = cfg.ApplySecretCommand(profile, model.secrets)
+	}
 	if err != nil {
 		form.Test, form.Message = TestFailed, err.Error()
 		return model, nil
@@ -261,12 +269,20 @@ func (model *Model) saveForm() (tea.Model, tea.Cmd) {
 	if form.Editing {
 		replacing = form.Source.Name
 	}
+	// The file holds no password. One the connection carries goes to the keyring instead.
+	profile, keyringErr := keepPasswordOutOfTheFile(profile)
+	if keyringErr != nil {
+		form.Test, form.Message = TestFailed, keyringErr.Error()
+		return model, nil
+	}
 	if writeErr := cfg.SaveProfileToFile(
 		profile, replacing, cfg.ResolveConfigPath()); writeErr != nil {
 		form.Test, form.Message = TestFailed, writeErr.Error()
 		return model, nil
 	}
 	profile.InConfigFile = true
+	// The config file of the user now holds it, so the project file no longer provides it.
+	profile.ProjectFile = ""
 
 	model.profiles = replaceProfile(model.profiles, replacing, profile)
 	// The file now holds it, so the question asked before the client ends does not offer
@@ -321,6 +337,12 @@ func sortProfiles(profiles []cfg.Profile) {
 
 // askDeleteProfile asks before a profile is removed from the config file.
 func (model *Model) askDeleteProfile(profile cfg.Profile) (tea.Model, tea.Cmd) {
+	// A connection of the project file is removed by editing that file, which the whole
+	// team shares. The config file of the user does not hold it.
+	if profile.ProjectFile != "" {
+		model.picker.problem = profile.Name + " comes from " + profile.ProjectFile
+		return model, nil
+	}
 	model.confirm = &confirmState{
 		Title:       " delete connection ",
 		Destructive: true,
@@ -334,6 +356,11 @@ func (model *Model) askDeleteProfile(profile cfg.Profile) (tea.Model, tea.Cmd) {
 				profile.Name, cfg.ResolveConfigPath()); err != nil {
 				model.picker.problem = err.Error()
 				return nil
+			}
+			// The password of the profile goes with it, so the keyring keeps no
+			// secret for a connection that is gone.
+			if err := secret.DeletePassword(profile.Name); err != nil {
+				model.picker.problem = err.Error()
 			}
 			model.profiles = dropProfile(model.profiles, profile.Name)
 			model.unsaved = dropProfile(model.unsaved, profile.Name)

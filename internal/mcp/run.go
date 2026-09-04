@@ -22,9 +22,15 @@ const serverName = "masume"
 // RunServer serves an agent until the client closes the stream, and returns the exit code of
 // the process.
 func RunServer(argv []string, version string) int {
-	loaded := cfg.LoadConfig(cfg.ResolveConfigPath())
+	loaded := cfg.LoadConfigForWorkingDirectory(cfg.ResolveConfigPath())
+	for _, problem := range loaded.Project.Problems {
+		fmt.Fprintln(os.Stderr, problem)
+	}
 	for _, problem := range loaded.Problems {
-		fmt.Fprintf(os.Stderr, "skipped profile %q: %s\n", problem.Name, problem.Reason)
+		fmt.Fprintln(os.Stderr, problem.Describe())
+	}
+	for _, warning := range loaded.Warnings {
+		fmt.Fprintln(os.Stderr, warning.DescribeWarning())
 	}
 
 	scoped, check, argumentErr := ReadServerArguments(argv)

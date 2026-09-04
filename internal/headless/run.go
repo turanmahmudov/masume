@@ -86,7 +86,9 @@ func (options Options) report(format string, parts ...any) {
 func Run(ctx context.Context, adapters engines.Adapters, options Options) int {
 	if cfg.NeedsPasswordPrompt(options.Profile) && options.Password == "" {
 		options.report("%s needs a password, and a run without a screen cannot ask for one; "+
-			"set password_env or password_command on the profile", options.Profile.Name)
+			"set password_env, password_command or a [secret] store on the profile, or "+
+			"open it once in the client so the keyring holds its password",
+			options.Profile.Name)
 		return CodeConnection
 	}
 

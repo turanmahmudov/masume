@@ -25,7 +25,8 @@ usage:
 
   TARGET                 a URL, a connection string, or a database file. With none,
                          --profile or $DATABASE_URL names the connection
-  -p, --profile NAME     a profile of the config file
+  -p, --profile NAME     a profile of the config file, or of the .masume.toml of
+                         the working directory
   -e, --execute FILE     read the statement from a file, or from - for stdin
   -f, --format FORMAT    table (the default), csv, json or markdown
   -l, --limit ROWS       how many rows to return. Without it, one page of the
@@ -271,7 +272,19 @@ func runHeadless(argv []string) int {
 		return 0
 	}
 
-	loaded := cfg.LoadConfig(cfg.ResolveConfigPath())
+	loaded := cfg.LoadConfigForWorkingDirectory(cfg.ResolveConfigPath())
+	for _, problem := range loaded.Project.Problems {
+		fmt.Fprintln(os.Stderr, "masume: "+problem)
+	}
+	// A profile the file got wrong is reported here as well as in the client. Without this
+	// a run of that profile only says the name is not one the file has, which sends the
+	// reader looking for a missing profile rather than a broken one.
+	for _, problem := range loaded.Problems {
+		fmt.Fprintln(os.Stderr, "masume: "+problem.Describe())
+	}
+	for _, warning := range loaded.Warnings {
+		fmt.Fprintln(os.Stderr, "masume: "+warning.DescribeWarning())
+	}
 	profile, err := resolveRunProfile(held, loaded.Profiles, readEnvironment)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "masume: "+err.Error())

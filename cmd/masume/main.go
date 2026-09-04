@@ -49,7 +49,8 @@ A connection given on the command line is not written to the config file. Press
 Ctrl+N and then e to save it. With no target, $DATABASE_URL is opened if it is set.
 
 The config file is read from $XDG_CONFIG_HOME/masume/config.toml, and the history
-from $XDG_STATE_HOME/masume/history.sqlite.`
+from $XDG_STATE_HOME/masume/history.sqlite. A .masume.toml found from the working
+directory upward adds the connections and the queries of a project.`
 
 func main() {
 	argv := os.Args[1:]
@@ -128,7 +129,8 @@ func runApp(held invocation) error {
 		problems = append(problems, "config: "+err.Error())
 	}
 
-	loaded := cfg.LoadConfig(configPath)
+	loaded := cfg.LoadConfigForWorkingDirectory(configPath)
+	problems = append(problems, loaded.Project.Problems...)
 
 	// Read before anything is opened, while the terminal still shows the shell.
 	listed, start, err := resolveStartProfile(held, loaded.Profiles, readEnvironment)
@@ -138,8 +140,10 @@ func runApp(held invocation) error {
 	loaded.Profiles = listed
 
 	for _, problem := range loaded.Problems {
-		problems = append(problems,
-			fmt.Sprintf("skipped profile %q: %s", problem.Name, problem.Reason))
+		problems = append(problems, problem.Describe())
+	}
+	for _, warning := range loaded.Warnings {
+		problems = append(problems, warning.DescribeWarning())
 	}
 	for _, problem := range loaded.ThemeProblems {
 		problems = append(problems, "theme: "+problem)

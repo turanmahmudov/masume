@@ -216,7 +216,7 @@ func TestTheRowsOfTheProfilePickerStandWhereTheyAreDrawn(t *testing.T) {
 func TestTheRowsOfTheConnectionFormStandWhereTheyAreDrawn(t *testing.T) {
 	model := buildOfflineModel(t, 120, 40)
 	model.screen = ScreenEditingConnection
-	model.form = NewFormState(cfg.Profile{Name: "alpha", Engine: "postgres"}, true)
+	model.form = NewFormState(cfg.Profile{Name: "alpha", Engine: "postgres"}, true, nil)
 	frame := strings.Split(model.render(), "\n")
 
 	fields := model.form.Shown()

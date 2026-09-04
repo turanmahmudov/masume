@@ -3,6 +3,7 @@ package cfg_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -343,12 +344,23 @@ func TestAProfileFromATargetSavesToTheConfigFile(t *testing.T) {
 		{"port", held.Port, built.Port},
 		{"database", held.Database, built.Database},
 		{"user", held.User, built.User},
-		{"password", held.Password, built.Password},
 		{"ssl mode", held.SSLMode, built.SSLMode},
 	} {
 		if one.got != one.want {
 			t.Errorf("the saved %s reads %v, wanted %v", one.part, one.got, one.want)
 		}
+	}
+	// The URL carried a password. No file masume writes holds one, so it is not in the
+	// saved profile and not in the text of the file.
+	if held.Password != "" {
+		t.Errorf("the saved profile carries the password %q", held.Password)
+	}
+	written, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("the config file could not be read: %v", readErr)
+	}
+	if strings.Contains(string(written), "hunter2") {
+		t.Errorf("the config file holds the password:\n%s", written)
 	}
 }
 

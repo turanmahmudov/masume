@@ -4,8 +4,9 @@
 # next to it. When you save a connection in the client, masume writes it back into this file
 # and keeps every other line unchanged.
 #
-# Never write a shared or a production password into a file that git tracks. Use
-# `auth = "prompt"`, `password_command`, or `password_env` instead.
+# No file that masume reads carries a password. A `password` key is ignored wherever it is
+# written, and reported. Use `auth = "keyring"`, `auth = "prompt"`, `password_command`,
+# `password_env`, or a `[secret]` store.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Example profiles. One profile is one connection. The name after `profile.` is the
@@ -75,6 +76,16 @@ preset = "default"
 # used when the line is missing.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# A secret store. Declared once, named by any number of profiles with `secret`. The command
+# prints one secret, and `{{ref}}` is where the reference of the profile goes. The reference
+# is passed as one quoted argument, so it can run nothing of its own. masume knows no tool.
+#
+# [secret.work]
+# command = "op read {{ref}}"
+#
+# [secret.infra]
+# command = "vault kv get -field=password {{ref}}"
+
 # A profile is one connection. The name after `profile.` is the name shown in the picker.
 #
 # [profile.a-name]
@@ -85,10 +96,13 @@ preset = "default"
 # port                 = 5432         # the default port of the engine when not set
 # database             = "shop"       # the file path for sqlite, the database number for redis
 # user                 = "you"
-# auth                 = "password"   # password command prompt
-# password             = "secret"     # stored in the file. Then the file must be readable by you only
+# auth                 = "password"   # password command prompt keyring secret
+#                                     # `password` here means password_env. A `password`
+#                                     # key in this file is ignored: no file holds a password
 # password_env         = "PGPASSWORD" # read the password from this environment variable
 # password_command     = "pass db/shop"   # read the password from the output of this command
+# secret               = "work"       # read the password from this [secret] store
+# secret_ref           = "op://eng/shop/password"   # the reference in that store
 # env                  = "dev"        # dev test prod. prod colours the title bar red
 # mode                 = "write"      # write read-only
 # confirm_writes       = "off"        # off delete write agent. unset: off on dev, delete on test, write on prod
@@ -163,6 +177,32 @@ preset = "default"
 # Colour overrides for the active theme, without a theme file. Every colour name
 # from the themes is allowed here.
 #
+# Named colours. Each entry must be a hex value. An entry of [ui.colors] or [ui.syntax] can
+# then use a name from here in place of a hex value.
+#
+# [ui.palette]
+# blue   = "#7aa2f7"
+# purple = "#bb9af7"
+# red    = "#f7768e"
+
+# The colours of the editor. Each token kind is a table. `fg` and `bg` take a hex value or
+# a colour name, and `bold`, `italic` and `underline` are flags. `link` copies another
+# highlight first, then the other keys apply on top. See docs/themes.md for every kind.
+#
+# [ui.syntax]
+# keyword    = { fg = "accent", bold = true }
+# type       = { fg = "accent_alt" }
+# string     = { fg = "success" }
+# comment    = { fg = "muted", italic = true }
+# number     = { fg = "accent_warm" }
+# identifier = { fg = "text" }
+# quoted     = { fg = "text" }
+# parameter  = { fg = "danger" }
+# problem    = { fg = "error", underline = true }
+# bracket    = { fg = "on_accent", bg = "accent_alt" }
+# guide      = { bg = "header" }
+# match      = { fg = "on_accent", bg = "accent_warm" }
+
 # [ui.colors]
 # background   = "#16161e"
 # panel        = "#1a1b26"

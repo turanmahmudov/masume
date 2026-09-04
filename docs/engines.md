@@ -65,9 +65,9 @@ masume queries the capabilities of the server and hides unsupported actions. An 
 
 The MongoDB row depends on the deployment. MongoDB supports transactions on a replica set or a sharded cluster, and not on a standalone server. masume reports the capabilities of the connected deployment.
 
-The panel of the statements a server spends its time in is not in the table, because no engine decides it. A PostgreSQL server answers for it only where the `pg_stat_statements` extension is installed, so the client asks the connection once it is open. A server without the extension draws no such panel.
+The panel of the statements a server spends its time in is not in the table. A PostgreSQL server answers for it only where the `pg_stat_statements` extension is installed, so the client asks the connection once it is open. A server without the extension draws no such panel.
 
-The server dashboard leaves out a panel the engine reports no numbers for. Every engine with **Activity** lists its sessions and refreshes them; the blocking tree needs **Locks** and the connection meter needs **Load**. MySQL reports the load through its status variables, and MariaDB does so from 10.5.2, which is the release that added `performance_schema.global_status`. Which of their sessions waits for a lock is in `performance_schema`, which this client does not read yet. Redshift keeps its own `stv_` tables rather than `pg_locks`, and TiDB answers a different set of status variables, so neither is read for either panel.
+The server dashboard leaves out a panel the engine reports no numbers for. Every engine with **Activity** lists its sessions and refreshes them; the blocking tree needs **Locks** and the connection meter needs **Load**. MySQL reports the load through its status variables, and MariaDB does so from 10.5.2, which is the release that added `performance_schema.global_status`. The session that waits for a lock is in `performance_schema`, which this client does not read yet. Redshift keeps its own `stv_` tables rather than `pg_locks`, and TiDB answers a different set of status variables, so neither is read for either panel.
 
 TiDB accepts `SET SESSION TRANSACTION READ ONLY` but does not enforce it. On a profile opened `read-only`, this client still refuses writes, but the server itself does not enforce the read-only session.
 
@@ -103,7 +103,7 @@ GET user:1
 
 The tree is built by scanning the key space, so it shows the state at the time of the last scan. A key written after that scan appears after the next scan. masume knows the Redis command set and marks unknown commands.
 
-A Redis profile can have a password without a user, because the server setting `requirepass` does not use a user name.
+A Redis profile can have a password without a user. Its server setting is `requirepass`, which has no user name.
 
 ## MongoDB
 

@@ -21,7 +21,8 @@ func FindUnreachableReason(profile cfg.Profile) string {
 		return ""
 	}
 	return "this profile asks the user for its password, which a server with no terminal " +
-		"cannot do; give it password_env or password_command to reach it from here"
+		"cannot do; give it password_env, password_command or a [secret] store, or open " +
+		"it once in the client so the keyring holds its password"
 }
 
 // Connection is one connection of this server, with its table list.

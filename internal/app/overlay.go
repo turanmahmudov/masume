@@ -193,7 +193,7 @@ type Overlay struct {
 	List ListState
 
 	Entries  []hist.HistoryEntry
-	Saved    []hist.SavedQuery
+	Saved    []SavedRow
 	Actions  []MenuAction
 	Palette  []PaletteAction
 	Choices  []Choice

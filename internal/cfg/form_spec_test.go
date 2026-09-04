@@ -25,7 +25,7 @@ func buildFormProfile() cfg.Profile {
 // profile and convert back into the same profile.
 func TestBuildProfileFromFieldsRoundTripsAProfile(t *testing.T) {
 	source := buildFormProfile()
-	fields := cfg.BuildFormFields(source, true)
+	fields := cfg.BuildFormFields(source, true, nil)
 	if len(fields) == 0 {
 		t.Fatal("the form holds no field")
 	}
@@ -61,7 +61,7 @@ func TestBuildProfileFromFieldsRoundTripsAProfile(t *testing.T) {
 // because the user would see the problem only at the next connection.
 func TestBuildProfileFromFieldsReportsAFieldThatIsNeeded(t *testing.T) {
 	source := buildFormProfile()
-	fields := cfg.ApplyFieldChange(cfg.BuildFormFields(source, true), "name", "")
+	fields := cfg.ApplyFieldChange(cfg.BuildFormFields(source, true, nil), "name", "")
 
 	if _, err := cfg.BuildProfileFromFields(fields, source, true); err == nil {
 		t.Error("a profile with no name was built")
@@ -72,7 +72,7 @@ func TestBuildProfileFromFieldsReportsAFieldThatIsNeeded(t *testing.T) {
 func TestBuildProfileFromFieldsReportsAPortThatIsNotANumber(t *testing.T) {
 	source := buildFormProfile()
 	for _, written := range []string{"nope", "-1", "0"} {
-		fields := cfg.ApplyFieldChange(cfg.BuildFormFields(source, true), "port", written)
+		fields := cfg.ApplyFieldChange(cfg.BuildFormFields(source, true, nil), "port", written)
 		if _, err := cfg.BuildProfileFromFields(fields, source, true); err == nil {
 			t.Errorf("a port of %q was accepted", written)
 		}
@@ -81,7 +81,7 @@ func TestBuildProfileFromFieldsReportsAPortThatIsNotANumber(t *testing.T) {
 
 // A field change modifies one field only, so an edit of the host does not clear the user.
 func TestApplyFieldChangeTouchesOneFieldOnly(t *testing.T) {
-	fields := cfg.BuildFormFields(buildFormProfile(), true)
+	fields := cfg.BuildFormFields(buildFormProfile(), true, nil)
 	before := cfg.ReadField(fields, "user")
 
 	held := cfg.ApplyFieldChange(fields, "host", "other.example.com")
@@ -101,7 +101,7 @@ func TestApplyConnectionUrlFillsTheFieldsItNames(t *testing.T) {
 		t.Fatal("the URL was not read")
 	}
 
-	fields := cfg.ApplyConnectionURL(cfg.BuildFormFields(cfg.Profile{}, false), held)
+	fields := cfg.ApplyConnectionURL(cfg.BuildFormFields(cfg.Profile{}, false, nil), held)
 	for _, one := range []struct{ key, want string }{
 		{"host", "db.example.com"},
 		{"port", "6543"},
@@ -150,7 +150,7 @@ func TestParseConnectionUrlKeepsTheTlsOfTheScheme(t *testing.T) {
 func TestFindShownFieldsLeavesOutWhatAnEngineDoesNotNeed(t *testing.T) {
 	file := cfg.BuildFormFields(cfg.Profile{
 		Name: "notes", Engine: core.EngineSqlite, Database: "/tmp/notes.db",
-	}, true)
+	}, true, nil)
 	shown := map[string]bool{}
 	for _, field := range cfg.FindShownFields(file) {
 		shown[field.Key] = true
@@ -163,7 +163,7 @@ func TestFindShownFieldsLeavesOutWhatAnEngineDoesNotNeed(t *testing.T) {
 	}
 
 	// A server needs both fields.
-	server := cfg.BuildFormFields(buildFormProfile(), true)
+	server := cfg.BuildFormFields(buildFormProfile(), true, nil)
 	shownServer := map[string]bool{}
 	for _, field := range cfg.FindShownFields(server) {
 		shownServer[field.Key] = true

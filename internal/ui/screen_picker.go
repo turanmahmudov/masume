@@ -2,6 +2,7 @@ package ui
 
 import (
 	"image/color"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -25,6 +26,9 @@ const (
 	pickerEnvWidth        = 4
 	// `ro`, or two spaces for a connection that can be written to.
 	pickerModeWidth = 2
+	// `project`, and the blank after it. The column stands empty where no connection
+	// comes from a project file.
+	pickerSourceWidth = 8
 	// The border, the padding of the card, and the padding of a row.
 	pickerChrome = 6
 	pickerGap    = 1
@@ -78,11 +82,11 @@ func (model *Model) runPickerAction(match Match) (tea.Model, tea.Cmd) {
 			return model.chooseProfile(profile)
 		}
 	case ActionNewConnection:
-		model.form = NewFormState(cfg.Profile{}, false)
+		model.form = NewFormState(cfg.Profile{}, false, model.secretStoreNames())
 		model.screen = ScreenEditingConnection
 	case ActionEditConnection:
 		if profile, found := model.pickedProfile(); found {
-			model.form = NewFormState(profile, true)
+			model.form = NewFormState(profile, true, model.secretStoreNames())
 			model.screen = ScreenEditingConnection
 		}
 	case ActionDeleteConnection:
@@ -121,13 +125,22 @@ func (model *Model) pickedProfile() (cfg.Profile, bool) {
 	return model.picker.pick(model.profiles)
 }
 
-// renderPicker draws the connections of the config file, one row each. The screen draws its
-// own rows, because a row holds four parts that each keep their own width.
+// renderPicker draws the connections of the config file and of the project file, one row
+// each. The screen draws its own rows, because a row holds parts that each keep their own
+// width.
 func (model *Model) renderPicker() string {
 	theme := model.styles.Theme
 	cardWidth := present.ResolveCardWidth(widestPickerCard, narrowestPickerCard, model.width)
+	// The source column stands empty where no connection comes from a project file, so a
+	// user without one loses no room to it.
+	sourceWidth := 0
+	if slices.ContainsFunc(model.profiles, func(profile cfg.Profile) bool {
+		return profile.ProjectFile != ""
+	}) {
+		sourceWidth = pickerSourceWidth
+	}
 	targetWidth := max(cardWidth-pickerChrome-pickerNameWidth-pickerEnvWidth-
-		pickerModeWidth-pickerGap*3, 12)
+		pickerModeWidth-sourceWidth-pickerGap*3, 12)
 
 	lines := []string{}
 	if len(model.profiles) == 0 {
@@ -143,6 +156,9 @@ func (model *Model) renderPicker() string {
 		cardRows += 2
 	}
 	if model.connections.count() > 0 {
+		cardRows++
+	}
+	if model.project.Path != "" {
 		cardRows++
 	}
 	left := halfRoundedUp(model.width - cardWidth)
@@ -162,6 +178,10 @@ func (model *Model) renderPicker() string {
 		if profile.AccessMode == cfg.AccessReadOnly {
 			mode = "ro"
 		}
+		source := ""
+		if profile.ProjectFile != "" {
+			source = "project"
+		}
 		target := present.TruncateText(cfg.DescribeProfileTarget(profile), targetWidth)
 
 		row := lipgloss.NewStyle().Background(theme.Panel)
@@ -177,9 +197,13 @@ func (model *Model) renderPicker() string {
 			nameStyle, envStyle, modeStyle, targetStyle = ink, ink, ink, ink
 		}
 
-		// One line, not four columns, which would share the width and cut every name short.
+		// One line, not five columns, which would share the width and cut every name short.
 		written := nameStyle.Render(name+" ") + envStyle.Render(environment+" ") +
-			modeStyle.Render(mode+" ") + targetStyle.Render(target)
+			modeStyle.Render(mode+" ")
+		if sourceWidth > 0 {
+			written += modeStyle.Render(present.FitText(source, sourceWidth))
+		}
+		written += targetStyle.Render(target)
 		lines = append(lines, row.Width(cardWidth-2).Render(" "+written))
 	}
 
@@ -197,6 +221,10 @@ func (model *Model) renderPicker() string {
 	said := present.TruncateText(keys.buildText(), cardWidth-4)
 	lines = model.appendCardKeyRow(
 		lines, keys, said, cardTop+cardBodyRow, left+cardBodyColumn)
+	if model.project.Path != "" {
+		lines = append(lines, model.styles.Muted().Render(
+			present.TruncateText("project file "+model.project.Path, cardWidth-4)))
+	}
 	if model.connections.count() > 0 {
 		lines = append(lines, model.styles.Muted().Render("Esc back to the open connection"))
 	}
@@ -240,11 +268,27 @@ func (model *Model) renderPassword() string {
 			Ground: theme.Background, Ink: theme.Text,
 			Masked: true, Focused: true, Placeholder: "password",
 		}),
-		"",
-		model.styles.Muted().Render(
-			present.TruncateText(keys.buildText(), cardWidth-4)),
 	}
+	if model.picker.offersKeyring() {
+		keys = keys.name("Tab", "keyring")
+		lines = append(lines, "", model.renderKeyringBox(cardWidth))
+	}
+	lines = append(lines, "", model.styles.Muted().Render(
+		present.TruncateText(keys.buildText(), cardWidth-4)))
 	return model.renderCard(" password ", cardWidth, lines, plainCard)
+}
+
+// renderKeyringBox draws the box that keeps the typed password in the keyring of the
+// operating system.
+func (model *Model) renderKeyringBox(cardWidth int) string {
+	mark := "[ ]"
+	style := model.styles.Muted()
+	if model.picker.keepInKeyring {
+		mark = "[x]"
+		style = model.styles.Ink()
+	}
+	return style.Render(present.TruncateText(
+		mark+" remember in the keyring", cardWidth-4))
 }
 
 // FieldLook says how one field of a form or a card is drawn.
@@ -375,6 +419,11 @@ func (model *Model) readPasswordKey(key tea.Key) (tea.Model, tea.Cmd) {
 	switch key.Code {
 	case tea.KeyEscape:
 		model.screen = ScreenPickingProfile
+		return model, nil
+	case tea.KeyTab:
+		if model.picker.offersKeyring() {
+			model.picker.keepInKeyring = !model.picker.keepInKeyring
+		}
 		return model, nil
 	case tea.KeyEnter:
 		profile := model.picker.pending

@@ -144,16 +144,16 @@ A profile served at `read-only` also connects read-only. masume sets the session
 
 When a profile has `confirm_writes` set, the server does not run the write on its own. It sends the confirmation question to the agent with `elicitation/create`, and waits for the answer.
 
-An agent whose client does not support elicitation cannot run such a write. The first line of the log says which kind of client is connected:
+An agent whose client does not support elicitation cannot run such a write. The first line of the log gives the kind of client:
 
 ```
 > initialize claude-code: can ask its user
 > initialize some-agent: cannot ask its user, so a write that confirms cannot run
 ```
 
-`write_plan` on the profile measures the write first, and the question then carries what it lands on: the rows it was counted at, the columns it assigns, the relations it reaches through a trigger or a foreign key, and whether the write can be undone. See [configuration.md](configuration.md#measuring-a-write).
+`write_plan` on the profile measures the write first, and the question then carries what it lands on: the rows it was counted at, the columns it assigns, the relations it reaches through a trigger or a foreign key, and the undo where there is one. See [configuration.md](configuration.md#measuring-a-write).
 
-Where the plan kept an undo, the answer of `run_query` carries an `undo` list: the statements that reverse the write, read inside its own transaction. They are not run. An agent can report them, and a person can run them.
+A plan that kept an undo puts an `undo` list in the answer of `run_query`: the statements that reverse the write, read inside its own transaction. They are not run. An agent can report them, and a person can run them.
 
 ## A client that cannot ask
 
