@@ -221,6 +221,9 @@ type RowBatcher struct {
 	onBatch func(rows [][]any, columns []ResultColumn) error
 	batch   [][]any
 	total   int64
+	// True once a batch has been handed over, so the columns of a result with no rows
+	// are reported one time and never after a batch that already carried them.
+	handed bool
 }
 
 // NewRowBatcher holds how many rows a batch takes, and what each full batch is handed to.
@@ -243,14 +246,21 @@ func (batcher *RowBatcher) AddRow(row []any, columns []ResultColumn) error {
 	return batcher.FlushRows(columns)
 }
 
-// FlushRows hands over the rows the last batch was short of, and nothing where there are
-// none.
+// FlushRows hands over the rows the last batch was short of. A result that held no rows at
+// all hands over one batch of no rows, so a caller learns the columns of a result it can
+// write nothing else about: a format needs them for its header, and asking the server again
+// would run the statement twice.
 func (batcher *RowBatcher) FlushRows(columns []ResultColumn) error {
 	if len(batcher.batch) == 0 {
-		return nil
+		if batcher.handed || len(columns) == 0 {
+			return nil
+		}
+		batcher.handed = true
+		return batcher.onBatch(nil, columns)
 	}
 	held := batcher.batch
 	batcher.batch = make([][]any, 0, batcher.size)
+	batcher.handed = true
 	return batcher.onBatch(held, columns)
 }
 

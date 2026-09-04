@@ -452,6 +452,77 @@ func TestRowBatcherHandsOverAFullBatchAndThenTheRest(t *testing.T) {
 	}
 }
 
+// A result with no rows still has columns, and a reader that writes a format needs them for
+// its header. Asking the server again would run the statement twice, so the batcher reports
+// them with a batch of no rows.
+func TestRowBatcherReportsTheColumnsOfAResultWithNoRows(t *testing.T) {
+	columns := []ResultColumn{{Name: "id"}}
+	handed := [][][]any{}
+	given := [][]ResultColumn{}
+	batcher := NewRowBatcher(2, func(rows [][]any, held []ResultColumn) error {
+		handed = append(handed, rows)
+		given = append(given, held)
+		return nil
+	})
+
+	if err := batcher.FlushRows(columns); err != nil {
+		t.Fatalf("the flush answered %v", err)
+	}
+	if len(handed) != 1 || len(handed[0]) != 0 {
+		t.Fatalf("the columns were reported as %v, wanted one batch of no rows", handed)
+	}
+	if len(given[0]) != 1 || given[0][0].Name != "id" {
+		t.Errorf("the batch carried %v, wanted the columns", given[0])
+	}
+	if batcher.CountRows() != 0 {
+		t.Errorf("the batcher counted %d rows, wanted none", batcher.CountRows())
+	}
+	// The report is made one time, so a reader does not write two headers.
+	if err := batcher.FlushRows(columns); err != nil || len(handed) != 1 {
+		t.Errorf("a second flush handed over %v, %v", handed, err)
+	}
+}
+
+// A statement with no result set has no columns to report, so nothing is handed over: a
+// reader that wrote a header for it would write a document of nothing.
+func TestRowBatcherReportsNothingForAStatementWithNoResultSet(t *testing.T) {
+	handed := 0
+	batcher := NewRowBatcher(2, func([][]any, []ResultColumn) error {
+		handed++
+		return nil
+	})
+
+	if err := batcher.FlushRows(nil); err != nil {
+		t.Fatalf("the flush answered %v", err)
+	}
+	if handed != 0 {
+		t.Errorf("the batcher handed over %d batches, wanted none", handed)
+	}
+}
+
+// A result whose rows were handed over must not report its columns again after them.
+func TestRowBatcherReportsNoColumnsAfterABatchOfRows(t *testing.T) {
+	columns := []ResultColumn{{Name: "id"}}
+	handed := [][][]any{}
+	batcher := NewRowBatcher(2, func(rows [][]any, _ []ResultColumn) error {
+		handed = append(handed, rows)
+		return nil
+	})
+
+	if err := batcher.AddRow([]any{1}, columns); err != nil {
+		t.Fatalf("the row answered %v", err)
+	}
+	if err := batcher.FlushRows(columns); err != nil {
+		t.Fatalf("the flush answered %v", err)
+	}
+	if err := batcher.FlushRows(columns); err != nil {
+		t.Fatalf("the second flush answered %v", err)
+	}
+	if len(handed) != 1 || len(handed[0]) != 1 {
+		t.Errorf("the batcher handed over %v, wanted the one row alone", handed)
+	}
+}
+
 // A size below one would never fill, so the batcher takes one row at a time instead.
 func TestRowBatcherTakesOneRowAtATimeForASizeBelowOne(t *testing.T) {
 	handed := 0

@@ -29,6 +29,10 @@ type Language interface {
 	FindLocalDiagnostics(text string, knowledge editor.SchemaKnowledge) []editor.Diagnostic
 	// ResolveWriteRisk weighs the statement, for the confirmation.
 	ResolveWriteRisk(text string) statement.WriteRisk
+	// HoldsRowLimit is true if the statement bounds its own result, with a LIMIT or the
+	// same idea in another language. Such a statement already holds how many rows it
+	// wants, so a reader gives it every row it returns instead of one page of them.
+	HoldsRowLimit(text string) bool
 	// ChangesCatalog is true if the statement makes the catalog of this client stale.
 	ChangesCatalog(text string) bool
 	// CanExplain is true if the server can plan the statement.

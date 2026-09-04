@@ -177,3 +177,31 @@ func TestResolveBatchRiskReadsACommandBatch(t *testing.T) {
 		t.Error("a batch holding a command that removes a key reads as a read")
 	}
 }
+
+// A statement that bounds its own result already holds how many rows it wants, so a reader
+// gives it every row it returns instead of one page of them.
+func TestHoldsRowLimitReadsTheClauseThatBoundsAResult(t *testing.T) {
+	held := language.SQL
+
+	for _, one := range []struct {
+		sql    string
+		bounds bool
+	}{
+		{"select * from orders", false},
+		{"select * from orders order by id", false},
+		{"select * from orders limit 250", true},
+		{"select * from orders LIMIT 250", true},
+		{"select * from orders order by id limit 250 offset 10", true},
+		{"select * from orders offset 10", false},
+		{"select * from orders fetch first 10 rows only", true},
+		// A word inside a name or a string is not the clause.
+		{"select limit_cents from orders", false},
+		{"select * from orders where note = 'limit'", false},
+		{"update orders set status = 'paid'", false},
+	} {
+		if held.HoldsRowLimit(one.sql) != one.bounds {
+			t.Errorf("%q bounds itself: %v, wanted %v",
+				one.sql, held.HoldsRowLimit(one.sql), one.bounds)
+		}
+	}
+}

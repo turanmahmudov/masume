@@ -53,6 +53,12 @@ func (language sqlLanguage) ResolveWriteRisk(text string) statement.WriteRisk {
 	return statement.ResolveStrongestRisk(risks)
 }
 
+// HoldsRowLimit is true if the statement carries a LIMIT or a FETCH of its own. An OFFSET
+// alone moves the start of a result and does not bound it.
+func (language sqlLanguage) HoldsRowLimit(text string) bool {
+	return statement.HoldsRowLimit(text, language.flavour)
+}
+
 func (language sqlLanguage) ChangesCatalog(text string) bool {
 	return statement.ChangesCatalog(text, language.flavour)
 }

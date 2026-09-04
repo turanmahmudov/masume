@@ -34,7 +34,7 @@ mode     = "write"
 | `sslmode` | `prefer`, or `require` for engines that only accept TLS | `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full` |
 | `statement_timeout_ms` | `0` | Time limit for one statement in milliseconds. `0` uses the server default |
 | `keepalive_s` | `30` | Seconds between two connection checks. `0` disables the keepalive |
-| `page_size` | `200` | Rows the grid loads per page. Must be above zero |
+| `page_size` | `200` | Rows the grid loads per page, and rows one page of `masume run` holds. Must be above zero |
 | `autocommit` | `true` | `false` keeps a transaction open until you commit or roll back |
 | `mcp` | | The access level for agents on this profile. See [mcp.md](mcp.md) |
 | `description` | | One line, shown in the picker |
@@ -110,6 +110,10 @@ The question names every such connection that was opened, one time each. `y` wri
 To save a connection earlier, or under another name, or without its password, press `Ctrl+N` for the picker, then `e` to open the connection form and `Ctrl+S` to save it. A connection saved that way is not offered again when you quit.
 
 A file that cannot be written keeps masume open with the reason, so the report does not disappear with the client.
+
+## Without a screen
+
+`masume run` uses the same profiles as the client, and every limit a profile sets: `statement_timeout_ms`, `mode = "read-only"`, `page_size` and the pre-connect `command`. See [headless.md](headless.md).
 
 ## Passwords
 

@@ -321,6 +321,10 @@ func (redisLanguage) FindLocalDiagnostics(text string, _ editor.SchemaKnowledge)
 	return problems
 }
 
+// HoldsRowLimit is always false: a command returns what it returns, and the protocol has
+// no clause that bounds a result for a reader to find.
+func (redisLanguage) HoldsRowLimit(string) bool { return false }
+
 // ChangesCatalog is always false: the tree is built by a scan of the key space, not
 // from a catalog, so a write changes only what the next scan finds.
 func (redisLanguage) ChangesCatalog(string) bool { return false }

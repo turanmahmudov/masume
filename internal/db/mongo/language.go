@@ -488,6 +488,20 @@ func isEmptyFilter(written string) bool {
 	return trimmed == "" || trimmed == "{}"
 }
 
+// HoldsRowLimit is true for a statement that bounds its own result: a `limit` call, or a
+// `findOne`, which returns one document by its name.
+func (mongoLanguage) HoldsRowLimit(text string) bool {
+	parsed, _, ok := ParseStatement(text)
+	if !ok {
+		return false
+	}
+	if parsed.ReadMethod() == "findOne" {
+		return true
+	}
+	_, held := parsed.FindCall("limit")
+	return held
+}
+
 // ChangesCatalog is true where the call adds, removes or renames something the tree
 // draws.
 func (mongoLanguage) ChangesCatalog(text string) bool {

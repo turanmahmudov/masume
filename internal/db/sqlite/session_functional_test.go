@@ -337,6 +337,61 @@ func TestSessionStreamsAReadInBatches(t *testing.T) {
 	}
 }
 
+// A read of no rows still has columns, and a caller that writes a format needs them for its
+// header. The statement is never run twice to get them, so the stream reports them itself.
+func TestSessionStreamsTheColumnsOfAReadWithNoRows(t *testing.T) {
+	session := openFile(t, shopSchema)
+
+	batches := 0
+	names := []string{}
+	total, err := session.StreamQuery(context.Background(),
+		"select customer from orders where customer = 'nobody'", nil, 2,
+		func(batch [][]any, columns []db.ResultColumn) error {
+			batches++
+			if len(batch) != 0 {
+				t.Errorf("a batch of %d rows arrived for a read of none", len(batch))
+			}
+			for _, column := range columns {
+				names = append(names, column.Name)
+			}
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("the stream answered %v", err)
+	}
+	if total != 0 {
+		t.Errorf("the stream counted %d rows, wanted none", total)
+	}
+	if batches != 1 {
+		t.Fatalf("the stream handed over %d batches, wanted one that carries the columns",
+			batches)
+	}
+	if len(names) != 1 || names[0] != "customer" {
+		t.Errorf("the batch carried the columns %v, wanted customer", names)
+	}
+}
+
+// A statement with no result set has no columns, so the stream hands over nothing: a caller
+// that wrote a header for it would write a document of nothing.
+func TestSessionStreamsNothingForAStatementWithNoResultSet(t *testing.T) {
+	session := openFile(t, shopSchema)
+
+	batches := 0
+	total, err := session.StreamQuery(context.Background(),
+		"update orders set customer = customer", nil, 2,
+		func([][]any, []db.ResultColumn) error {
+			batches++
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("the stream answered %v", err)
+	}
+	if total != 0 || batches != 0 {
+		t.Errorf("the stream counted %d rows in %d batches, wanted none of either",
+			total, batches)
+	}
+}
+
 // A batch the caller refuses stops the stream, because an export that cannot write has no
 // reason to read the rest of the relation.
 func TestSessionStopsAStreamTheCallerRefuses(t *testing.T) {

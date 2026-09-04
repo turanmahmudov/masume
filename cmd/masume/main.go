@@ -31,6 +31,7 @@ const usage = `masume - a database client for the terminal
 
 usage:
   masume                     open the client
+  masume run STATEMENT       run one statement, write the result, and exit
   masume URL                 open that connection, for example postgres://you@host/shop
   masume FILE                open that SQLite file, for example ./notes.db
   masume DSN                 open that connection string, for example "host=db dbname=shop"
@@ -42,6 +43,8 @@ usage:
   masume --version           write the version and exit
   masume --help              write this and exit
 
+Run masume run --help for the arguments of a run without a screen.
+
 A connection given on the command line is not written to the config file. Press
 Ctrl+N and then e to save it. With no target, $DATABASE_URL is opened if it is set.
 
@@ -50,6 +53,10 @@ from $XDG_STATE_HOME/masume/history.sqlite.`
 
 func main() {
 	argv := os.Args[1:]
+	// A subcommand reads its own arguments, so it is taken before the flags of the client.
+	if len(argv) > 0 && argv[0] == "run" {
+		os.Exit(runHeadless(argv[1:]))
+	}
 	if slices.Contains(argv, "--help") || slices.Contains(argv, "-h") {
 		fmt.Println(usage)
 		return

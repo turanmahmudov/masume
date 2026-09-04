@@ -17,6 +17,17 @@ func IsPageable(sql string, flavour syntax.SyntaxFlavour) bool {
 	return len(syntax.FindKeywordsAnywhere(tokens, WriteKeywords)) == 0
 }
 
+// rowLimitKeywords are the clauses that bound the rows a statement returns. An OFFSET
+// alone moves the start of a result and does not bound it.
+var rowLimitKeywords = []string{"limit", "fetch"}
+
+// HoldsRowLimit is true if the statement bounds its own result. Such a statement already
+// holds how many rows it wants, so a reader gives it every row it returns instead of one
+// page of them.
+func HoldsRowLimit(sql string, flavour syntax.SyntaxFlavour) bool {
+	return len(syntax.FindTopLevelKeywords(sql, rowLimitKeywords, flavour)) > 0
+}
+
 // plannedStarts are the words a server plans. A server plans the rows a statement
 // reads, but not a statement that defines an object or grants a right.
 var plannedStarts = map[string]bool{

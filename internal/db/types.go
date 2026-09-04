@@ -287,6 +287,11 @@ type QueryRunner interface {
 	// not check it.
 	CheckStatement(ctx context.Context, sql string) (StatementProblem, bool)
 	// StreamQuery reads a batch at a time, so an export never holds the whole relation.
+	// A statement with a result set hands over at least one batch, so a caller learns
+	// the columns even where there are no rows; the batch of such a result holds no
+	// rows. A statement with no result set hands over none. A store whose columns come
+	// from the documents it holds, rather than from the statement, reports none for a
+	// result of no documents.
 	StreamQuery(
 		ctx context.Context, sql string, params []any, batchSize int,
 		onBatch func(rows [][]any, columns []ResultColumn) error,

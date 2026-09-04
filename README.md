@@ -117,6 +117,7 @@ mise run install
 
 ```
 masume                        open the client
+masume run STATEMENT          run one statement, write the result, and exit
 masume URL                    open one connection, for example postgres://you@host/shop
 masume FILE                   open one SQLite file, for example ./notes.db
 masume DSN                    open one connection string, for example "host=db dbname=shop"
@@ -141,6 +142,20 @@ masume --detect
 `--detect` asks docker, or podman where there is no docker, for the containers that run on this machine. A container whose image is a database masume supports, and which publishes the port that database listens on, becomes a row in the connection picker. The user, the database and the password come from the environment of the container, so most local containers open with one `Enter` and nothing typed.
 
 masume asks for the password if the connection carries none. The connection is not written to the config file, so masume offers to write it when you quit. Answer `y` to save it as a profile and `n` to quit without it. To save it earlier, or under another name, press `Ctrl+N` for the picker, then `e` and `Ctrl+S`.
+
+### Without a screen
+
+`masume run` runs one statement and writes the result to stdout, over the same profiles, timeouts and access limits as the client. This is how a Makefile, a container or a CI job uses masume.
+
+```sh
+masume run -p shop-prod -f json 'select count(*) from orders'
+masume run -p shop -e ./reports/daily.sql --param day=2026-09-02
+masume run -p shop --explain 'select * from orders where status = :status' --param status=paid
+masume run ./notes.db -f csv 'select * from notes limit 100000' > notes.csv
+echo 'select 1' | masume run -p shop -e -
+```
+
+Formats are `table` (the default), `csv`, `json` and `markdown`. A statement without a limit of its own returns one page, `page_size` on the profile, the same as the client; the run says on stderr that the result is longer. A statement that bounds itself, with a `LIMIT`, returns every row it asks for, read a batch at a time so a result larger than memory still reaches the stream. `--limit ROWS` bounds a run whose statement names no limit. The exit code says what happened: `0` every statement ran, `1` the server refused one, `2` the connection could not be opened, `3` the profile is read-only and the statement writes. See `masume run --help` and [docs/headless.md](docs/headless.md).
 
 The config file is `$XDG_CONFIG_HOME/masume/config.toml`. The history file is `$XDG_STATE_HOME/masume/history.sqlite`. See [docs/mcp.md](docs/mcp.md) for the MCP server.
 
@@ -184,6 +199,7 @@ mode     = "write"
 | [Themes](docs/themes.md) | Built-in themes, and how to write a custom one |
 | [AI chat](docs/ai.md) | Providers, tools, what is sent to the provider |
 | [MCP server](docs/mcp.md) | Tools, limits, confirming a write |
+| [Without a screen](docs/headless.md) | `masume run` for scripts and CI |
 | [Architecture](docs/architecture.md) | How the source is organized |
 
 ## Contributing

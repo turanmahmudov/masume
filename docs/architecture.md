@@ -1,8 +1,8 @@
 # Architecture
 
-masume is one binary with two front ends. `cmd/masume` reads the arguments, decides which front end to start, and builds the profile of a connection given on the command line. `internal/ui` is the terminal user interface. `internal/mcp` is the MCP server for AI agents.
+masume is one binary with three front ends. `cmd/masume` reads the arguments and decides which one to start, and it builds the profile of a connection given on the command line. `internal/ui` is the terminal user interface. `internal/mcp` is the MCP server for AI agents. `internal/headless` is `masume run`, which draws nothing and answers with an exit code.
 
-Neither front end owns a connection. Both access a server through `internal/db`, and both write to the same history through `internal/hist`. This is why a statement run by an agent appears in the history under `Ctrl+T`.
+No front end owns a connection. Each one accesses a server through `internal/db`, and the two that keep a history write to the same one through `internal/hist`. This is why a statement run by an agent appears in the history under `Ctrl+T`.
 
 ## The packages
 
@@ -27,6 +27,7 @@ Neither front end owns a connection. Both access a server through `internal/db`,
 | `internal/ai` | One provider client each, for Anthropic and OpenAI |
 | `internal/mcp` | The JSON-RPC server, `list_profiles`, and the access policy |
 | `internal/detect` | The databases running in a container on this machine, read from docker or podman |
+| `internal/headless` | `masume run`: one statement, one format, one exit code, no screen |
 | `internal/hist` | The SQLite file: history, saved queries, marks, open tabs |
 
 Nothing under `internal/query` or `internal/present` opens a network connection. These packages take text and return text. This is why most of the tests need no server.
