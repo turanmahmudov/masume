@@ -266,8 +266,13 @@ func (model *Model) saveForm() (tea.Model, tea.Cmd) {
 		form.Test, form.Message = TestFailed, writeErr.Error()
 		return model, nil
 	}
+	profile.InConfigFile = true
 
 	model.profiles = replaceProfile(model.profiles, replacing, profile)
+	// The file now holds it, so the question asked before the client ends does not offer
+	// it again.
+	model.unsaved = dropProfile(model.unsaved, replacing)
+	model.unsaved = dropProfile(model.unsaved, profile.Name)
 	// A profile the list does not hold leaves the cursor on the first row.
 	at, _ := findProfileIndex(model.profiles, profile.Name)
 	model.picker.focus(at, len(model.profiles))
@@ -317,7 +322,8 @@ func sortProfiles(profiles []cfg.Profile) {
 // askDeleteProfile asks before a profile is removed from the config file.
 func (model *Model) askDeleteProfile(profile cfg.Profile) (tea.Model, tea.Cmd) {
 	model.confirm = &confirmState{
-		Title: " delete connection ",
+		Title:       " delete connection ",
+		Destructive: true,
 		Body: "Remove \"" + profile.Name + "\" from the config file?\n\n" +
 			cfg.DescribeProfileTarget(profile),
 		Answer: func(confirmed bool) tea.Cmd {
@@ -330,6 +336,7 @@ func (model *Model) askDeleteProfile(profile cfg.Profile) (tea.Model, tea.Cmd) {
 				return nil
 			}
 			model.profiles = dropProfile(model.profiles, profile.Name)
+			model.unsaved = dropProfile(model.unsaved, profile.Name)
 			model.picker.focus(model.picker.cursor, len(model.profiles))
 			return nil
 		},
@@ -349,8 +356,15 @@ func dropProfile(profiles []cfg.Profile, name string) []cfg.Profile {
 
 // confirmState is a question a screen without a connection asks, which holds its own answer.
 type confirmState struct {
-	Title  string
-	Body   string
+	Title string
+	Body  string
+	// What the card calls the two answers. Empty gives "yes" and "no".
+	Yes string
+	No  string
+	// True for a question whose answer cannot be taken back, which the card draws in the
+	// colour of an error.
+	Destructive bool
+	// Answer runs for both answers. Escape closes the question without either.
 	Answer func(bool) tea.Cmd
 }
 
@@ -518,7 +532,10 @@ func (model *Model) readConfirmKey(key tea.Key) (tea.Model, tea.Cmd) {
 	case ActionAnswerYes, ActionChooseRow:
 		model.confirm = nil
 		return model, held.Answer(true)
-	case ActionAnswerNo, ActionClose:
+	case ActionAnswerNo:
+		model.confirm = nil
+		return model, held.Answer(false)
+	case ActionClose:
 		model.confirm = nil
 		return model, nil
 	}

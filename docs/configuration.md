@@ -62,7 +62,7 @@ A URL that names no database connects to the database the server itself defaults
 
 `rediss://` connects with TLS and verifies the certificate. Every other setting the target does not carry takes the default of a new connection: `env = "dev"`, `mode = "write"`, `page_size = 200`.
 
-masume asks for the password if the target carries none. The profile it builds is not written to the config file, and the picker lists it under the name of its database or its file. To keep it, press `Ctrl+N` for the picker, then `e` to open the connection form and `Ctrl+S` to save it. A name a profile of the config file already holds gets a number after it, so the two rows can be told apart.
+masume asks for the password if the target carries none. The profile it builds is not written to the config file, and the picker lists it under the name of its database or its file. A name a profile of the config file already holds gets a number after it, so the two rows can be told apart.
 
 ```sh
 masume --profile shop-prod       # open one profile of the config file
@@ -88,6 +88,28 @@ Each connection gets `env = "dev"` and `mode = "write"`. A container of a hosted
 `--detect` exits with 1 if neither docker nor podman is on the path, if the tool reports an error, or if no container runs a database. It takes no connection of its own, so `--detect` with a URL or with `--profile` is an error.
 
 With no argument at all, masume opens `$DATABASE_URL` if the shell exports it. An argument on the command line is opened instead of the variable.
+
+## Keeping a connection that is in no file
+
+A connection opened from the command line, or found by `--detect`, is in no config file. masume asks about it when you quit:
+
+```
+┌─ save connection ─────────────────────────────┐
+│ Write "shop" to the config file?              │
+│                                               │
+│ shop  postgres@db.internal:5432/shop          │
+│                                               │
+│ The password is written to the file as well.   │
+│                                               │
+│ y save and quit · n quit without saving       │
+└───────────────────────────────────────────────┘
+```
+
+The question names every such connection that was opened, one time each. `y` writes them and quits, `n` quits without them, and `Esc` returns to the client. The last line appears only where a connection holds a password, because that password goes into the file with it. A profile the config file already holds is never offered, and neither is a connection that was listed but never opened.
+
+To save a connection earlier, or under another name, or without its password, press `Ctrl+N` for the picker, then `e` to open the connection form and `Ctrl+S` to save it. A connection saved that way is not offered again when you quit.
+
+A file that cannot be written keeps masume open with the reason, so the report does not disappear with the client.
 
 ## Passwords
 

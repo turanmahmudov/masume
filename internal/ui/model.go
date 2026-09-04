@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,6 +58,9 @@ type Model struct {
 	// The profile the command line named, which is opened as the client starts instead
 	// of drawing the picker.
 	startProfile *cfg.Profile
+	// The connections that were opened and are in no config file, so the client offers to
+	// write them to it before it ends.
+	unsaved []cfg.Profile
 
 	screen ScreenKind
 	picker pickerState
@@ -579,6 +584,13 @@ func (model *Model) readKey(key tea.Key) (tea.Model, tea.Cmd) {
 		if written, copies := model.readTextToCopy(); copies {
 			return model, model.copySelection(written)
 		}
+		// Quitting here would drop the connections the open question is asking about.
+		if model.confirm != nil {
+			return model, nil
+		}
+		if model.askSaveOnExit() {
+			return model, nil
+		}
 		model.quitting = true
 		return model, model.shutDown()
 	}
@@ -605,6 +617,96 @@ func (model *Model) readKey(key tea.Key) (tea.Model, tea.Cmd) {
 		return model.readWorkspaceKey(key)
 	}
 	return model, nil
+}
+
+// recordUnsavedConnection keeps a connection that is in no config file. One that was opened
+// twice is kept one time.
+func (model *Model) recordUnsavedConnection(profile cfg.Profile) {
+	if profile.InConfigFile {
+		return
+	}
+	if _, held := findProfileIndex(model.unsaved, profile.Name); held {
+		return
+	}
+	model.unsaved = append(model.unsaved, profile)
+}
+
+// describeSaveOnExit returns the question the card asks.
+func describeSaveOnExit(unsaved []cfg.Profile) string {
+	asked := "Write \"" + unsaved[0].Name + "\" to the config file?"
+	if len(unsaved) > 1 {
+		asked = fmt.Sprintf("Write %d connections to the config file?", len(unsaved))
+	}
+
+	lines := []string{asked, ""}
+	for _, profile := range unsaved {
+		lines = append(lines, profile.Name+"  "+cfg.DescribeProfileTarget(profile))
+	}
+	if slices.ContainsFunc(unsaved, holdsWrittenPassword) {
+		lines = append(lines, "", "The password is written to the file as well.")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// holdsWrittenPassword is true for a connection whose password would go into the config file.
+func holdsWrittenPassword(profile cfg.Profile) bool {
+	return profile.Password != ""
+}
+
+// askSaveOnExit asks whether the connections that are in no config file are written to it
+// before the client ends, and reports whether it asked.
+func (model *Model) askSaveOnExit() bool {
+	if len(model.unsaved) == 0 || model.confirm != nil {
+		return false
+	}
+	unsaved := model.unsaved
+
+	model.confirm = &confirmState{
+		Title: " save connection ",
+		Body:  describeSaveOnExit(unsaved),
+		Yes:   "save and quit", No: "quit without saving",
+		Answer: func(confirmed bool) tea.Cmd {
+			if !confirmed {
+				model.quitting = true
+				return model.shutDown()
+			}
+			if problem := model.saveUnsavedConnections(unsaved); problem != "" {
+				model.picker.problem = problem
+				model.screen = ScreenPickingProfile
+				return nil
+			}
+			model.quitting = true
+			return model.shutDown()
+		},
+	}
+	return true
+}
+
+// saveUnsavedConnections writes the connections to the config file and returns the reason
+// the first one could not be written.
+func (model *Model) saveUnsavedConnections(unsaved []cfg.Profile) string {
+	written := 0
+	for _, profile := range unsaved {
+		if err := cfg.SaveProfileToFile(profile, "", cfg.ResolveConfigPath()); err != nil {
+			return fmt.Sprintf("%s could not be written: %s%s",
+				profile.Name, err.Error(), describeSavedSoFar(written))
+		}
+		profile.InConfigFile = true
+		model.profiles = replaceProfile(model.profiles, profile.Name, profile)
+		model.unsaved = dropProfile(model.unsaved, profile.Name)
+		written++
+	}
+	return ""
+}
+
+// describeSavedSoFar returns how much of the file was written before a save stopped, and
+// nothing where it stopped on the first one.
+func describeSavedSoFar(written int) string {
+	if written == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (%s already written)", present.FormatCountOf(
+		int64(written), "connection", "connections"))
 }
 
 // shutDown closes every connection and the history file, and ends the program. The tabs
@@ -687,6 +789,7 @@ func (model *Model) readConnected(answered connectedMsg) (tea.Model, tea.Cmd) {
 		answered.Session, answered.PreConnect, model.settings.HideSystemSchemas)
 	id := model.connections.open(connection)
 	model.screen = ScreenWorking
+	model.recordUnsavedConnection(connection.Profile())
 
 	profileName := connection.Profile().Name
 	// The profile opens with the tabs it was left with, or with one empty query tab.

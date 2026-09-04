@@ -124,6 +124,9 @@ type Profile struct {
 	AiInstructions string
 	// The operations an agent can run here over MCP. Unset keeps the `[mcp]` level.
 	McpAccess McpAccess
+	// True for a profile the config file holds. One built from the command line or found
+	// in a container is false.
+	InConfigFile bool
 }
 
 // ProfileProblem is a profile that could not be read, with the reason.
@@ -346,7 +349,7 @@ func buildProfile(name string, source Table) (Profile, error) {
 		Command: command, WaitForPort: waitForPort, CommandTimeout: commandTimeout,
 		PageSize: pageSize, Keepalive: keepalive, Description: description,
 		StatementTimeout: time.Duration(timeoutMilliseconds) * time.Millisecond,
-		AiInstructions:   aiInstructions, McpAccess: mcpAccess,
+		AiInstructions:   aiInstructions, McpAccess: mcpAccess, InConfigFile: true,
 	}, nil
 }
 

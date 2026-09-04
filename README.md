@@ -140,7 +140,7 @@ masume --detect
 
 `--detect` asks docker, or podman where there is no docker, for the containers that run on this machine. A container whose image is a database masume supports, and which publishes the port that database listens on, becomes a row in the connection picker. The user, the database and the password come from the environment of the container, so most local containers open with one `Enter` and nothing typed.
 
-masume asks for the password if the connection carries none. The connection is not written to the config file. To keep it, press `Ctrl+N` for the picker, then `e` and `Ctrl+S` to save it as a profile.
+masume asks for the password if the connection carries none. The connection is not written to the config file, so masume offers to write it when you quit. Answer `y` to save it as a profile and `n` to quit without it. To save it earlier, or under another name, press `Ctrl+N` for the picker, then `e` and `Ctrl+S`.
 
 The config file is `$XDG_CONFIG_HOME/masume/config.toml`. The history file is `$XDG_STATE_HOME/masume/history.sqlite`. See [docs/mcp.md](docs/mcp.md) for the MCP server.
 

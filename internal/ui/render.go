@@ -52,11 +52,9 @@ func (model *Model) render() string {
 
 	// A question a screen without a connection asks is drawn over it.
 	if model.confirm != nil {
-		card := model.renderCard(model.confirm.Title,
-			present.ResolveCardWidth(64, 36, model.width), []string{
-				model.confirm.Body, "",
-				model.styles.Muted().Render(model.describeConfirmKeys()),
-			}, destructiveCard)
+		cardWidth := present.ResolveCardWidth(64, 36, model.width)
+		card := model.renderCard(model.confirm.Title, cardWidth,
+			model.buildConfirmLines(model.confirm, cardWidth), model.confirm.Destructive)
 		middle = model.styles.CenterRowsOn(card, model.width, body)
 	}
 
@@ -109,10 +107,30 @@ func (model *Model) renderThinkingLine(label string, since time.Time, ground col
 		paintText(theme.Muted, ground, said+describeElapsed(since))
 }
 
-// describeConfirmKeys names the keys a question returns to.
-func (model *Model) describeConfirmKeys() string {
-	return model.registry.FormatActionChords(cfg.ScopeDialog, ActionAnswerYes) + " yes · " +
-		model.registry.FormatActionChords(cfg.ScopeDialog, ActionAnswerNo) + " no"
+// buildConfirmLines returns the rows of a question. A card holds one string per row, so a
+// body of several lines is split into them and each one is cut to the width of the card.
+func (model *Model) buildConfirmLines(held *confirmState, cardWidth int) []string {
+	inner := max(cardWidth-4, 1)
+	lines := []string{}
+	for line := range strings.SplitSeq(held.Body, "\n") {
+		lines = append(lines, present.TruncateText(line, inner))
+	}
+	return append(lines, "",
+		model.styles.Muted().Render(
+			present.TruncateText(model.describeConfirmKeys(held), inner)))
+}
+
+// describeConfirmKeys names the keys a question returns to, in the words of the question.
+func (model *Model) describeConfirmKeys(held *confirmState) string {
+	yes, no := held.Yes, held.No
+	if yes == "" {
+		yes = "yes"
+	}
+	if no == "" {
+		no = "no"
+	}
+	return model.registry.FormatActionChords(cfg.ScopeDialog, ActionAnswerYes) + " " + yes +
+		" · " + model.registry.FormatActionChords(cfg.ScopeDialog, ActionAnswerNo) + " " + no
 }
 
 // The keys the title bar names on the right, so the palette, the help and the chat stay in
