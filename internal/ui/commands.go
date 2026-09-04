@@ -131,11 +131,22 @@ type savedReadMsg struct {
 	Queries      []hist.SavedQuery
 }
 
-// activityReadMsg returns the sessions of the server.
+// activityReadMsg returns what the server is doing: its sessions, the sessions waiting for a
+// lock, and the load it is under. The three arrive together.
 type activityReadMsg struct {
 	ConnectionID int
 	Sessions     []db.Activity
-	Problem      string
+	Locks        []db.LockWait
+	Load         db.ServerLoad
+	Slow         []db.StatementStat
+	// Whether the server answered for the locks, the load and the counts.
+	HasLocks bool
+	HasLoad  bool
+	HasSlow  bool
+	// Problem is set only where the session list itself failed.
+	Problem string
+	// True where the read was asked for by the refresh rather than by the reader.
+	Refresh bool
 }
 
 // marksReadMsg returns what the user marked on this profile.
@@ -560,16 +571,44 @@ func dropSavedQuery(connectionID int, log *hist.Store, profileName, name string)
 	}
 }
 
-// readActivity asks the server what its other connections are doing.
-func readActivity(connectionID int, session db.ServerAdmin) tea.Cmd {
+// The two ways the dashboard is read.
+const (
+	readAsked   = false
+	readRefresh = true
+)
+
+// readActivity asks the server what its other connections are doing, which sessions wait for
+// a lock, and the load it is under. Only the session list is reported as a fault.
+// dashboardReadTimeout is how long the four reads of one refresh have in all. A read longer
+// than several intervals answers with numbers too old to act on.
+const dashboardReadTimeout = 6 * time.Second
+
+func readActivity(connectionID int, session db.ServerAdmin, refresh bool) tea.Cmd {
 	return func() tea.Msg {
-		sessions, err := session.ListActivity(context.Background())
+		ctx, stop := context.WithTimeout(context.Background(), dashboardReadTimeout)
+		defer stop()
+
+		sessions, err := session.ListActivity(ctx)
 		if err != nil {
 			return activityReadMsg{
 				ConnectionID: connectionID, Problem: db.DescribeError(err),
+				Refresh: refresh,
 			}
 		}
-		return activityReadMsg{ConnectionID: connectionID, Sessions: sessions}
+		answered := activityReadMsg{
+			ConnectionID: connectionID, Sessions: sessions, Refresh: refresh,
+		}
+		if locks, lockErr := session.ListLockWaits(ctx); lockErr == nil {
+			answered.Locks, answered.HasLocks = locks, true
+		}
+		if load, loadErr := session.ReadServerLoad(ctx); loadErr == nil {
+			answered.Load, answered.HasLoad = load, true
+		}
+		if slow, slowErr := session.ListSlowStatements(
+			ctx, slowStatementRows); slowErr == nil {
+			answered.Slow, answered.HasSlow = slow, true
+		}
+		return answered
 	}
 }
 

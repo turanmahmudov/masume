@@ -218,6 +218,7 @@ var HelpSections = []HelpSection{
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionWriteExport}, Text: "write the file, in the export form"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionOpenInNewTab}, Text: "into a new tab, in the history"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionListSecondary}, Text: "the second choice a list offers"},
+			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionStopSession}, Text: "stop the statement of a session, in the server activity"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionToggleValue}, Text: "keep or drop a value, in the picker"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionKeepOnlyValue}, Text: "keep only the one under the cursor"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionKeepAllValues}, Text: "keep every value again"},

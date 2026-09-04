@@ -1,7 +1,9 @@
 package postgres
 
 import (
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/query"
@@ -57,6 +59,49 @@ func ReadTextArray(value any) []string {
 func readFlag(value any) bool {
 	held, isFlag := value.(bool)
 	return held && isFlag
+}
+
+// readTimestamp returns a timestamp column as a time. A column the server left null, or
+// one the driver gave in another shape, reads as the zero time, which every caller here
+// takes as "the server reported nothing".
+// readOptionalFloat reads a number the server can leave unset, and reports whether it was
+// there. A server that answers nothing for a measure has not measured zero.
+func readOptionalFloat(value any) (float64, bool) {
+	switch held := value.(type) {
+	case nil:
+		return 0, false
+	case float64:
+		return held, true
+	case float32:
+		return float64(held), true
+	case int64:
+		return float64(held), true
+	case int32:
+		return float64(held), true
+	case int:
+		return float64(held), true
+	case string:
+		// A numeric of the server arrives as its own text where the driver has no type
+		// for it. Read as nothing it would turn a measure the server did make into one
+		// it did not.
+		read, err := strconv.ParseFloat(held, 64)
+		return read, err == nil
+	}
+	// Anything else carries its value in a form only its own type knows, and the text of
+	// it is what every other reader of this package falls back to.
+	if written := db.ReadAnyText(value); written != "" {
+		read, err := strconv.ParseFloat(written, 64)
+		return read, err == nil
+	}
+	return 0, false
+}
+
+func readTimestamp(value any) time.Time {
+	held, isTime := value.(time.Time)
+	if !isTime {
+		return time.Time{}
+	}
+	return held
 }
 
 // RenderTableDDL builds a CREATE TABLE from the catalog rows the detail tabs already

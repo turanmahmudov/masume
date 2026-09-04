@@ -57,6 +57,13 @@ type Capabilities struct {
 	// Most servers report a syntax error if you ask for the plan of a DROP.
 	PlansEveryStatement bool
 	HasServerSessions   bool
+	// True if the server reports which of its sessions wait for a lock another one holds.
+	ReportsLockWaits bool
+	// True if the server reports the load it is under.
+	ReportsServerLoad bool
+	// True if the server keeps a count of the statements it has run. No engine sets this:
+	// the connection answers it once it is open.
+	ReportsStatementStats bool
 	// A cancel needs a second connection to the same server.
 	CancelsRunningQuery bool
 	HasTransactions     bool
@@ -111,6 +118,8 @@ var postgresCapabilities = Capabilities{
 	MeasuresPlan:        true,
 	PlansEveryStatement: false,
 	HasServerSessions:   true,
+	ReportsLockWaits:    true,
+	ReportsServerLoad:   true,
 	CancelsRunningQuery: true,
 	HasTransactions:     true,
 	SortsRead:           true,
@@ -121,7 +130,11 @@ var postgresCapabilities = Capabilities{
 	AppliesChangesTogether: true,
 }
 
-var mysqlCapabilities = postgresCapabilities
+var mysqlCapabilities = withPostgres(func(capabilities *Capabilities) {
+	// Which session waits for a lock is in performance_schema, which this client does not
+	// read yet.
+	capabilities.ReportsLockWaits = false
+})
 
 var engineRegistry = map[Engine]EngineInfo{
 	EnginePostgres: {
@@ -139,6 +152,8 @@ var engineRegistry = map[Engine]EngineInfo{
 			// `pg_stat_activity`, and it has no `pg_cancel_backend`.
 			capabilities.HasServerSessions = false
 			capabilities.CancelsRunningQuery = false
+			capabilities.ReportsLockWaits = false
+			capabilities.ReportsServerLoad = false
 		}),
 		DefaultPort: 26257, NeedsUser: true, NeedsPassword: true,
 		URLSchemes:           []string{"cockroachdb"},
@@ -153,9 +168,14 @@ var engineRegistry = map[Engine]EngineInfo{
 	},
 	EngineRedshift: {
 		Engine: EngineRedshift, Family: FamilyPostgres,
-		// EXPLAIN only estimates. There is no ANALYZE that runs and measures the query.
-		Capabilities: withPostgres(func(capabilities *Capabilities) { capabilities.MeasuresPlan = false }),
-		DefaultPort:  5439, NeedsUser: true, NeedsPassword: true,
+		Capabilities: withPostgres(func(capabilities *Capabilities) {
+			// EXPLAIN only estimates. There is no ANALYZE that measures the query.
+			capabilities.MeasuresPlan = false
+			// The cluster reports its locks and its load through its own `stv_` tables.
+			capabilities.ReportsLockWaits = false
+			capabilities.ReportsServerLoad = false
+		}),
+		DefaultPort: 5439, NeedsUser: true, NeedsPassword: true,
 		URLSchemes: []string{"redshift"},
 		// The cluster accepts a TLS connection only.
 		DefaultSSLMode:       SSLRequire,
@@ -187,9 +207,12 @@ var engineRegistry = map[Engine]EngineInfo{
 	},
 	EngineTidb: {
 		Engine: EngineTidb, Family: FamilyMysql,
-		// The server accepts `set session transaction read only` but does not apply it.
 		Capabilities: withMysql(func(capabilities *Capabilities) {
+			// The server accepts `set session transaction read only` but does not apply
+			// it.
 			capabilities.TakesReadOnlyMode = false
+			// The status variables of the server are its own, not the ones MySQL reports.
+			capabilities.ReportsServerLoad = false
 		}),
 		DefaultPort: 4000, NeedsUser: true, NeedsPassword: true,
 		SystemSchemas: append(append([]string{}, mysqlSystemSchemas...), "metrics_schema"),
@@ -199,6 +222,7 @@ var engineRegistry = map[Engine]EngineInfo{
 		Capabilities: withMysql(func(capabilities *Capabilities) {
 			capabilities.HasServerSessions = false
 			capabilities.CancelsRunningQuery = false
+			capabilities.ReportsServerLoad = false
 		}),
 		DefaultPort: 3306, NeedsUser: true, NeedsPassword: true, DefaultSSLMode: SSLRequire,
 		SystemSchemas: mysqlSystemSchemas,

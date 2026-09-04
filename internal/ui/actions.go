@@ -228,6 +228,7 @@ const (
 	ActionWriteExport      ActionID = "write-export"
 	ActionCopyValue        ActionID = "copy-value"
 	ActionListSecondary    ActionID = "list-secondary"
+	ActionStopSession      ActionID = "stop-session"
 	ActionToggleValue      ActionID = "toggle-value"
 	ActionKeepAllValues    ActionID = "keep-all-values"
 	ActionKeepOnlyValue    ActionID = "keep-only-value"
@@ -395,7 +396,9 @@ var dialogActions = []ActionDefinition{
 	{ID: ActionSaveCell}, {ID: ActionPrettifyJSON},
 	{ID: ActionSetNull}, {ID: ActionSetEmpty}, {ID: ActionSetDefault},
 	{ID: ActionRunWithValues}, {ID: ActionWriteExport}, {ID: ActionCopyValue},
-	{ID: ActionOpenInNewTab}, {ID: ActionListSecondary},
+	{ID: ActionOpenInNewTab}, {ID: ActionListSecondary}, {ID: ActionStopSession},
+	// A card with panels of its own folds them, with the keys that fold a schema.
+	{ID: ActionFoldRow}, {ID: ActionUnfoldRow},
 	{ID: ActionToggleValue}, {ID: ActionKeepAllValues}, {ID: ActionKeepOnlyValue},
 	{ID: ActionApplyChanges}, {ID: ActionDiscardChanges},
 	{ID: ActionInsertAiSQL}, {ID: ActionStopAiReply},

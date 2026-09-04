@@ -12,6 +12,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/app"
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
+	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
@@ -266,7 +267,7 @@ func (model *Model) renderOverlay(
 	case app.OverlayThemePicker:
 		return model.renderThemePicker(overlay, width)
 	case app.OverlayActivity:
-		return model.renderActivity(overlay, width)
+		return model.renderActivity(connection, overlay, width)
 	case app.OverlayExport:
 		return model.renderExport(overlay, width)
 	case app.OverlayImport:
@@ -289,6 +290,8 @@ type ListCard struct {
 	Title string
 	// The line at the top that searches the list, or nothing for a list without one.
 	Filter string
+	// The lines over the rows, which do not scroll and the cursor does not reach.
+	Header []string
 	Rows   []string
 	Cursor int
 	Offset int
@@ -300,6 +303,10 @@ type ListCard struct {
 	Rolled bool
 	// True for a list that says so where the term kept nothing.
 	ReportsNoMatch bool
+	// The line a card with no rows draws instead of its list, already styled.
+	EmptyReport string
+	// A note held against the right corner of the top border, already styled.
+	Note string
 	// How a drag of the bar moves the card. A card that keeps how far it has scrolled in
 	// its cursor rather than its offset gives its own, so a drag moves what the keys move.
 	Scrolls func(*app.Overlay, int)
@@ -325,11 +332,14 @@ func (model *Model) renderListCard(card ListCard) string {
 	if card.Filter != "" {
 		body = max(body-1, 1)
 	}
+	// So do the lines of the card's own header.
+	body = max(body-len(card.Header), 1)
 
 	lines := []string{""}
 	if card.Filter != "" {
 		lines = append(lines, card.Filter)
 	}
+	lines = append(lines, card.Header...)
 
 	// Where the rows land in the card, so a press chooses the row it looks like. The top
 	// border takes the first row, and the lines written above the list follow it.
@@ -340,9 +350,14 @@ func (model *Model) renderListCard(card ListCard) string {
 	}
 
 	written := 0
-	if len(card.Rows) == 0 && card.ReportsNoMatch {
-		lines = append(lines, " "+model.styles.Muted().Render("no match"))
-		written++
+	if len(card.Rows) == 0 {
+		if card.EmptyReport != "" {
+			lines = append(lines, " "+model.styles.Muted().Render(card.EmptyReport))
+			written++
+		} else if card.ReportsNoMatch {
+			lines = append(lines, " "+model.styles.Muted().Render("no match"))
+			written++
+		}
 	}
 	shown := scrollFrom(card.Cursor, card.Offset, body, len(card.Rows), card.Rolled)
 	// The bar stands over the last cell of the content, and a list that fits gets none.
@@ -384,7 +399,7 @@ func (model *Model) renderListCard(card ListCard) string {
 	lines = append(lines, "")
 
 	return model.styles.RenderBox(BoxOptions{
-		Width: card.Width, Height: height, Title: card.Title,
+		Width: card.Width, Height: height, Title: card.Title, Note: card.Note,
 		Focused: true, Lines: lines,
 	})
 }
@@ -1367,36 +1382,381 @@ func (model *Model) renderThemePicker(overlay app.Overlay, width int) string {
 	})
 }
 
-// renderActivity draws what the other connections of the server are doing.
-func (model *Model) renderActivity(overlay app.Overlay, width int) string {
+// The columns of the dashboard: the meter of the connections, and the clock at the right of
+// a row of the blocking tree.
+const (
+	dashboardMeterWidth = 10
+	dashboardGap        = "   "
+	// dashboardBusyShare is the share of the connection limit that reads as a warning.
+	dashboardBusyShare = 0.8
+)
+
+// renderActivity draws what the server is doing: the load it is under, the sessions waiting
+// for a lock, and every session it holds.
+func (model *Model) renderActivity(
+	connection *app.Connection, overlay app.Overlay, width int,
+) string {
 	rows := make([]string, 0, len(overlay.Sessions))
 	for at, session := range overlay.Sessions {
 		application := session.ApplicationName
 		if application == "" {
 			application = "?"
 		}
-		detail := present.FormatDuration(session.Duration) + " · " +
+		detail := core.FormatClock(session.Duration) + " · " +
 			session.User + "@" + application + " · " +
 			present.TruncateText(core.CollapseWhitespace(session.Query), 60)
 		rows = append(rows, model.renderListRow(ListRowSpec{
-			Label:      present.FormatCount(session.PID) + " " + session.State,
+			Label:      strconv.FormatInt(session.PID, 10) + " " + session.State,
 			LabelWidth: activityLabelWidth, Detail: detail,
 			Selected: at == overlay.List.Cursor, Destructive: session.State == "active",
 			Width: width,
 		}))
 	}
+
+	profile := connection.Profile()
 	keys := model.sayKeys().
-		bind(cfg.ScopeList, ActionChooseRow, "cancel query").
-		bind(cfg.ScopeDialog, ActionListSecondary, "terminate backend").
-		bind(cfg.ScopeDialog, ActionClose, "close")
+		bind(cfg.ScopeList, ActionChooseRow, "open statement").
+		bind(cfg.ScopeDialog, ActionStopSession, "stop statement").
+		bind(cfg.ScopeDialog, ActionListSecondary, "end session")
+	if len(overlay.Server.Locks) > 0 {
+		keys = keys.bind(cfg.ScopeDialog, ActionFoldRow, "fold").
+			bind(cfg.ScopeDialog, ActionUnfoldRow, "open")
+	}
+	keys = keys.bind(cfg.ScopeDialog, ActionClose, "close")
+
 	return model.renderListCard(ListCard{
-		Kind: app.OverlayActivity,
-		Title: " server activity · " +
-			present.FormatCount(int64(len(overlay.Sessions))) + " ",
-		Filter: model.renderFilterFieldOf(overlay, width, "pid or query", -1), Rows: rows,
-		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
-		ReportsNoMatch: true, Keys: keys,
+		Kind:   app.OverlayActivity,
+		Title:  " " + buildDashboardTitle(profile) + " ",
+		Note:   model.renderServerUptime(overlay.Server),
+		Header: model.buildDashboardHeader(overlay, width),
+		Rows:   rows,
+		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset,
+		Rolled: overlay.List.Rolled, Width: width,
+		EmptyReport: "the server holds no other session",
+		Keys:        keys,
 	})
+}
+
+// buildDashboardTitle names the connection the card is watching, its environment, and how
+// often it refreshes.
+func buildDashboardTitle(profile cfg.Profile) string {
+	said := present.SafeText(profile.Name)
+	if profile.Environment != "" {
+		said += " · " + string(profile.Environment)
+	}
+	return said + " · refreshing " + core.FormatLargestUnit(dashboardRefreshWait)
+}
+
+// renderServerUptime returns how long the server has been up, for the right of the title.
+func (model *Model) renderServerUptime(reading app.ServerReading) string {
+	if !reading.HasLoad || reading.Load.StartedAt.IsZero() {
+		return ""
+	}
+	return model.styles.Muted().Render(
+		" uptime " + core.FormatLargestUnit(time.Since(reading.Load.StartedAt)) + " ")
+}
+
+// buildDashboardHeader returns the lines over the list: what the server is carrying, and
+// the sessions waiting for a lock. A panel the server did not answer for is left out.
+func (model *Model) buildDashboardHeader(overlay app.Overlay, width int) []string {
+	lines := []string{}
+	if summary := model.buildDashboardSummary(overlay, width); summary != "" {
+		lines = append(lines, summary)
+	}
+	lines = append(lines, model.buildBlockingPanel(overlay, width)...)
+	lines = append(lines, model.buildSlowPanel(overlay, width)...)
+	if len(lines) == 0 {
+		return lines
+	}
+	theme := model.styles.Theme
+	return append(lines, model.renderPanelLine(
+		paintText(theme.Faint, theme.Panel,
+			strings.Repeat("─", max(width-present.CardChrome, 0))), width))
+}
+
+// buildDashboardSummary returns the one line of what the server is carrying now.
+func (model *Model) buildDashboardSummary(overlay app.Overlay, width int) string {
+	theme := model.styles.Theme
+	said := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
+
+	reading := overlay.Server
+	if reading.HasLoad {
+		load := reading.Load
+		said += paintText(theme.Muted, theme.Panel, "conns ")
+		said += paintText(model.resolveLoadInk(load), theme.Panel,
+			strconv.FormatInt(load.Connections, 10)+"/"+
+				strconv.FormatInt(load.MaxConnections, 10))
+		said += paintOn(theme.Panel, " ")
+		said += paintText(model.resolveLoadInk(load), theme.Panel, present.BuildMeter(
+			float64(load.Connections), float64(load.MaxConnections), dashboardMeterWidth))
+		said += paintOn(theme.Panel, dashboardGap)
+	}
+
+	said += paintText(theme.Muted, theme.Panel, "sessions ")
+	said += paintText(theme.Text, theme.Panel, strconv.Itoa(len(overlay.Sessions)))
+
+	if reading.HasLocks {
+		waiting := app.CountBlockedSessions(reading.Locks)
+		ink := theme.Text
+		if waiting > 0 {
+			ink = theme.Error
+		}
+		said += paintOn(theme.Panel, dashboardGap)
+		said += paintText(theme.Muted, theme.Panel, "locks ")
+		said += paintText(ink, theme.Panel, strconv.Itoa(waiting)+" waiting")
+	}
+	for _, measure := range model.buildDashboardMeasures(overlay) {
+		said += paintOn(theme.Panel, dashboardGap)
+		said += paintText(theme.Muted, theme.Panel, measure.label+" ")
+		said += paintText(measure.ink, theme.Panel, measure.value)
+	}
+	return model.renderPanelLine(said, width)
+}
+
+// dashboardMeasure is one number of the summary: what it is called, what it reads, and how
+// strongly it is drawn.
+type dashboardMeasure struct {
+	label string
+	value string
+	ink   color.Color
+}
+
+const (
+	poorCacheHitRate = 0.90
+	fairCacheHitRate = 0.99
+)
+
+const (
+	fairReplicationLag = 5 * time.Second
+	poorReplicationLag = time.Minute
+)
+
+// buildDashboardMeasures returns the numbers of the summary the server answered for. A rate
+// is left out until there are two readings to measure it between.
+func (model *Model) buildDashboardMeasures(overlay app.Overlay) []dashboardMeasure {
+	theme := model.styles.Theme
+	reading := overlay.Server
+	if !reading.HasLoad {
+		return nil
+	}
+	load := reading.Load
+	measures := []dashboardMeasure{}
+
+	span := reading.ReadAt.Sub(overlay.View.PreviousAt)
+	rates := overlay.View.HasPrevious && load.HasCounters && overlay.View.Previous.HasCounters
+	if rates {
+		if rate, held := app.ResolveCounterRate(
+			overlay.View.Previous.Transactions, load.Transactions, span); held {
+			measures = append(measures, dashboardMeasure{
+				label: "txn/s", value: core.FormatRate(rate), ink: theme.Text,
+			})
+		}
+		if rate, held := app.ResolveCounterRate(
+			overlay.View.Previous.WalBytes, load.WalBytes, span); held {
+			measures = append(measures, dashboardMeasure{
+				label: "wal", value: core.FormatByteRate(rate), ink: theme.Text,
+			})
+		}
+	}
+	if load.HasCacheHitRate {
+		measures = append(measures, dashboardMeasure{
+			label: "cache", value: core.FormatShare(load.CacheHitRate),
+			ink: model.resolveCacheInk(load.CacheHitRate),
+		})
+	}
+	if load.HasReplicationLag {
+		measures = append(measures, dashboardMeasure{
+			label: "lag", value: core.FormatLargestUnit(load.ReplicationLag),
+			ink: model.resolveLagInk(load.ReplicationLag),
+		})
+	}
+	if load.HasCounters {
+		ink := theme.Text
+		if load.TempFiles > 0 {
+			ink = theme.Warning
+		}
+		measures = append(measures, dashboardMeasure{
+			label: "tmp files", value: present.FormatCount(load.TempFiles), ink: ink,
+		})
+	}
+	return measures
+}
+
+// resolveCacheInk returns the colour of the cache hit rate.
+func (model *Model) resolveCacheInk(share float64) color.Color {
+	theme := model.styles.Theme
+	switch {
+	case share < poorCacheHitRate:
+		return theme.Error
+	case share < fairCacheHitRate:
+		return theme.Warning
+	}
+	return theme.Text
+}
+
+// resolveLagInk returns the colour of the replication lag.
+func (model *Model) resolveLagInk(lag time.Duration) color.Color {
+	theme := model.styles.Theme
+	switch {
+	case lag >= poorReplicationLag:
+		return theme.Error
+	case lag >= fairReplicationLag:
+		return theme.Warning
+	}
+	return theme.Text
+}
+
+// resolveLoadInk returns the colour of the connection count, which reads as a warning near
+// the limit and as a fault at it.
+func (model *Model) resolveLoadInk(load db.ServerLoad) color.Color {
+	theme := model.styles.Theme
+	if load.MaxConnections <= 0 {
+		return theme.Text
+	}
+	switch share := float64(load.Connections) / float64(load.MaxConnections); {
+	case share >= 1:
+		return theme.Error
+	case share >= dashboardBusyShare:
+		return theme.Warning
+	}
+	return theme.Text
+}
+
+// buildBlockingPanel returns the panel of sessions waiting for a lock, and none where
+// no session waits.
+func (model *Model) buildBlockingPanel(overlay app.Overlay, width int) []string {
+	reading := overlay.Server
+	if !reading.HasLocks || len(reading.Locks) == 0 {
+		return nil
+	}
+	theme := model.styles.Theme
+	folded := overlay.View.IsPanelFolded(app.PanelBlocking)
+
+	heading := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
+	heading += paintText(theme.Error, theme.Panel, model.readFoldMark(folded)+" blocking tree")
+	if folded {
+		heading += paintText(theme.Muted, theme.Panel, " · "+
+			strconv.Itoa(app.CountBlockedSessions(reading.Locks))+" waiting")
+		return []string{model.renderPanelLine(heading, width)}
+	}
+
+	nodes := app.BuildBlockingTree(reading.Locks)
+	depths := make([]int, 0, len(nodes))
+	for _, node := range nodes {
+		depths = append(depths, node.Depth)
+	}
+	guides := present.BuildGuidesForDepths(depths)
+
+	lines := []string{model.renderPanelLine(heading, width)}
+	for at, node := range nodes {
+		lines = append(lines, model.renderBlockingRow(node, guides[at], width))
+	}
+	return lines
+}
+
+// slowStatementRows is how many statements the panel draws.
+const slowStatementRows = 5
+
+// buildSlowPanel returns the panel of statements the server spends its time in.
+func (model *Model) buildSlowPanel(overlay app.Overlay, width int) []string {
+	reading := overlay.Server
+	if !reading.HasSlow || len(reading.Slow) == 0 {
+		return nil
+	}
+	theme := model.styles.Theme
+	folded := overlay.View.IsPanelFolded(app.PanelSlow)
+
+	heading := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
+	heading += paintText(theme.Text, theme.Panel,
+		model.readFoldMark(folded)+" slowest statements")
+	heading += paintText(theme.Muted, theme.Panel, " · by mean time")
+	if folded {
+		return []string{model.renderPanelLine(heading, width)}
+	}
+
+	shown := reading.Slow
+	if len(shown) > slowStatementRows {
+		shown = shown[:slowStatementRows]
+	}
+	meanWidth := 0
+	for _, held := range shown {
+		meanWidth = max(meanWidth, present.MeasureText(core.FormatDuration(held.MeanTime)))
+	}
+
+	lines := []string{model.renderPanelLine(heading, width)}
+	for _, held := range shown {
+		lines = append(lines, model.renderSlowRow(held, meanWidth, width))
+	}
+	return lines
+}
+
+// renderSlowRow draws one statement the server spends its time in: how long it takes on
+// average, how often it ran, and the statement itself.
+func (model *Model) renderSlowRow(
+	held db.StatementStat, meanWidth, width int,
+) string {
+	theme := model.styles.Theme
+	mean := core.FormatDuration(held.MeanTime)
+	calls := "×" + present.FormatCount(held.Calls)
+
+	said := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
+	said += paintText(theme.Text, theme.Panel,
+		strings.Repeat(" ", max(meanWidth-present.MeasureText(mean), 0))+mean)
+	said += paintText(theme.Muted, theme.Panel, " "+calls+" ")
+
+	room := max(width-present.CardChrome-rowPaddingLeft-meanWidth-
+		present.MeasureText(calls)-2-rowScrollbarWidth, 0)
+	said += paintText(theme.Muted, theme.Panel, present.FitText(
+		present.TruncateText(present.SafeText(
+			core.CollapseWhitespace(held.Query)), room), room))
+	return model.renderPanelLine(said, width)
+}
+
+// renderBlockingRow draws one session of the blocking tree: which session it is, what it is
+// running, and how long it has been waiting or holding.
+func (model *Model) renderBlockingRow(
+	node app.BlockingNode, guide string, width int,
+) string {
+	theme := model.styles.Theme
+	said := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
+	said += paintText(theme.Muted, theme.Panel, guide)
+	said += paintText(theme.Text, theme.Panel, strconv.FormatInt(node.PID, 10)+" ")
+
+	trail := core.FormatClock(node.Elapsed)
+	if node.Waiting {
+		trail = "waiting " + trail
+	} else if mode := core.FormatLockMode(node.Mode); mode != "" {
+		trail = mode + " " + trail
+	}
+	trail = present.SafeText(" " + trail + " ")
+
+	room := max(width-present.CardChrome-rowPaddingLeft-present.MeasureText(guide)-
+		present.MeasureText(strconv.FormatInt(node.PID, 10))-1-
+		present.MeasureText(trail)-rowScrollbarWidth, 0)
+	said += paintText(theme.Muted, theme.Panel, present.FitText(
+		present.TruncateText(present.SafeText(
+			core.CollapseWhitespace(node.Query)), room), room))
+
+	ink := theme.Warning
+	if node.Waiting {
+		ink = theme.Error
+	}
+	said += paintText(ink, theme.Panel, trail)
+	return model.renderPanelLine(said, width)
+}
+
+// readFoldMark returns the glyph of a panel that is folded away, or of one that is open.
+func (model *Model) readFoldMark(folded bool) string {
+	if folded {
+		return model.icons.Icon(cfg.IconFoldClosed)
+	}
+	return model.icons.Icon(cfg.IconFoldOpen)
+}
+
+// renderPanelLine pads a line of a panel to the width the rows of the list are drawn in.
+func (model *Model) renderPanelLine(written string, width int) string {
+	pad := paintOn(model.styles.Theme.Panel, " ")
+	return pad + padStyledOn(written, width-4, model.styles.Theme.Panel) + pad + pad
 }
 
 // renderExport draws the file and the options an export is written with.

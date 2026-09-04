@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/turanmahmudov/masume/internal/core"
@@ -27,5 +28,24 @@ func TestCancelRunningQueryRefusesAnUnknownBackend(t *testing.T) {
 	if described := db.DescribeError(err); described !=
 		"the server did not name this connection, so its statement cannot be cancelled" {
 		t.Errorf("the cancel describes as %q", described)
+	}
+}
+
+// Redshift documents the catalogs of PostgreSQL 8.0, which hold no pg_extension, so the
+// statement that opens a connection asks that server for less.
+func TestBuildIdentityStatementAsksOnlyTheServersThatHoldTheCatalog(t *testing.T) {
+	for _, one := range []struct {
+		name    string
+		flavour Flavour
+		asks    bool
+	}{
+		{"standard", FlavourStandard, true},
+		{"cockroach", FlavourCockroach, true},
+		{"redshift", FlavourRedshift, false},
+	} {
+		written := buildIdentityStatement(one.flavour)
+		if strings.Contains(written, "pg_extension") != one.asks {
+			t.Errorf("%s reads %q, wanted the catalog asked: %v", one.name, written, one.asks)
+		}
 	}
 }

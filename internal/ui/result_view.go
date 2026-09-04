@@ -1144,8 +1144,10 @@ const (
 	planRowsWidth   = 28
 	planTimeWidth   = 10
 	planDetailWidth = 100
-	// planBarWidth is the bar that draws the share of the run one node took.
+	// planBarWidth is the bar that draws the share of the run one node took, and
+	// wholeShare is the whole that share is measured against.
 	planBarWidth = 8
+	wholeShare   = 1.0
 )
 
 // renderPlan draws the plan as a tree, or as the server sent it. The strip over it
@@ -1254,7 +1256,8 @@ func (model *Model) renderPlanRow(
 		if row.Slowest {
 			barInk = theme.Error
 		}
-		right += paintText(barInk, ground, drawShareBar(row.Share))
+		right += paintText(barInk, ground,
+			present.BuildMeter(row.Share, wholeShare, planBarWidth))
 	}
 
 	return model.styles.RenderStrip(ground, width, label, right)
@@ -1291,10 +1294,4 @@ func describeSelfMs(node query.PlanNode) string {
 		return ""
 	}
 	return strconv.FormatFloat(node.SelfMs, 'f', 1, 64) + " ms"
-}
-
-// drawShareBar draws the share of the whole run one node took.
-func drawShareBar(share float64) string {
-	filled := max(min(int(share*planBarWidth+0.5), planBarWidth), 0)
-	return strings.Repeat("▇", filled) + strings.Repeat("░", planBarWidth-filled)
 }

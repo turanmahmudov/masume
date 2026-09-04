@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
@@ -197,6 +199,10 @@ type Overlay struct {
 	Changes  []db.Change
 	Lines    []string
 
+	// The last reading of the server, and the state of the card the reader set.
+	Server ServerReading
+	View   DashboardView
+
 	Window  RowWindow
 	Cell    CellTarget
 	Export  ExportRequest
@@ -229,6 +235,61 @@ type Overlay struct {
 	Prompt PromptKind
 	// The hint under the prompt, which says what the field is for.
 	Hint string
+}
+
+// The panels the dashboard folds.
+const (
+	PanelBlocking = "blocking"
+	PanelSlow     = "slow"
+)
+
+// DashboardPanels lists the panels, so a key that folds them folds every one.
+var DashboardPanels = []string{PanelBlocking, PanelSlow}
+
+// ServerReading is what one read of the server answered.
+type ServerReading struct {
+	Load  db.ServerLoad
+	Locks []db.LockWait
+	Slow  []db.StatementStat
+	// Which parts the server answered for. A part it does not report is left out.
+	HasLoad  bool
+	HasLocks bool
+	HasSlow  bool
+	ReadAt   time.Time
+}
+
+// DashboardView is what the card keeps across a refresh: what the reader has done to it,
+// and the reading a rate is measured against.
+type DashboardView struct {
+	Folded map[string]bool
+	// True while a read is on its way, so a slow server is asked once and not once per frame.
+	Reading bool
+	// The reading before the one on screen, which a rate is measured against.
+	Previous    db.ServerLoad
+	PreviousAt  time.Time
+	HasPrevious bool
+}
+
+// ResolveCounterRate returns how fast a counter counted up between two readings, per
+// second. It reports false where no time passed, or where the counter fell.
+func ResolveCounterRate(before, after int64, span time.Duration) (float64, bool) {
+	if span <= 0 || after < before {
+		return 0, false
+	}
+	return float64(after-before) / span.Seconds(), true
+}
+
+// IsPanelFolded is true where the reader folded that panel away.
+func (view DashboardView) IsPanelFolded(panel string) bool {
+	return view.Folded[panel]
+}
+
+// FoldPanel folds a panel away, or opens it again.
+func (view *DashboardView) FoldPanel(panel string, folded bool) {
+	if view.Folded == nil {
+		view.Folded = map[string]bool{}
+	}
+	view.Folded[panel] = folded
 }
 
 // IsOpen is true while an overlay owns the keyboard.

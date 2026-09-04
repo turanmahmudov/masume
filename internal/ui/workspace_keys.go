@@ -337,7 +337,7 @@ func (model *Model) runGlobalAction(
 			Draft: app.NewEditorBuffer("", 0),
 		}
 	case ActionShowActivity:
-		return model, readActivity(id, connection.Session)
+		return model, readActivity(id, connection.Session, readAsked)
 	case ActionShowThemes:
 		connection.Overlay = app.Overlay{
 			// The theme the picker opened on, so a walk that is cancelled goes back

@@ -774,6 +774,21 @@ func markDepthOpen(open []bool, depth int) []bool {
 	return open
 }
 
+// BuildGuidesForDepths returns the prefix of each row of a small tree given as the depth of
+// each row, in the order the rows are drawn. It is for a tree that is built whole and drawn
+// whole, such as the sessions waiting for a lock. A tree of thousands of rows uses
+// BuildTreeGuidesWithin, which builds only the prefixes of the rows on screen.
+func BuildGuidesForDepths(depths []int) []string {
+	guides := make([]string, len(depths))
+	open := []bool{}
+	for index := len(depths) - 1; index >= 0; index-- {
+		depth := max(depths[index], 0)
+		guides[index] = buildGuide(depth, open)
+		open = markDepthOpen(open, depth)
+	}
+	return guides
+}
+
 // BuildTreeGuidesWithin returns the prefix of each row between two positions, in that order.
 // The rows are read from the bottom to the top: a depth stays open while a row is at that
 // depth, and every deeper depth closes at the next row above it. So the walk starts at the

@@ -47,6 +47,7 @@ const connectTimeout = 10 * time.Second
 // mongoSession is one session on a MongoDB server.
 type mongoSession struct {
 	db.PlainCatalog
+	db.NoServerLoad
 	db.SessionFacts
 
 	client *mongo.Client

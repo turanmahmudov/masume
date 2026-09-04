@@ -80,7 +80,7 @@ masume has a built-in AI chat and an MCP server over stdio. The chat uses the cu
 
 **Named parameters:** a statement with `:name` placeholders opens a form for the values
 
-**Server activity:** list the other sessions and their statements, and stop one, on engines that support it
+**Server dashboard:** `Alt+O A` opens an operations view that refreshes every two seconds: the other sessions and what they are running, connections against the limit, transactions and write ahead log per second, the cache hit rate, replication lag, and the sessions waiting for a lock drawn as a tree of who waits for whom. With `pg_stat_statements` installed it also lists the statements the server spends the most time in. `Enter` opens a session's statement in a tab, `x` stops it, `Ctrl+D` ends the session
 
 **Redis and MongoDB:** a query tab accepts Redis commands or MongoDB shell syntax
 

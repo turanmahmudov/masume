@@ -40,12 +40,16 @@ var dialogGroups = map[string][]ActionID{
 	},
 	"parameters": {ActionClose, ActionRunWithValues, ActionPrettifyJSON},
 	// The find field turns into the replace field, so finding and replacing is one key.
-	"prompt":       {ActionClose, ActionReplaceInStatement},
-	"export":       {ActionClose, ActionWriteExport},
-	"cell":         {ActionClose, ActionCopyValue},
-	"history":      {ActionClose, ActionOpenInNewTab},
-	"saved":        {ActionClose, ActionOpenInNewTab, ActionListSecondary},
-	"ai-chats":     {ActionClose, ActionListSecondary},
+	"prompt":   {ActionClose, ActionReplaceInStatement},
+	"export":   {ActionClose, ActionWriteExport},
+	"cell":     {ActionClose, ActionCopyValue},
+	"history":  {ActionClose, ActionOpenInNewTab},
+	"saved":    {ActionClose, ActionOpenInNewTab, ActionListSecondary},
+	"ai-chats": {ActionClose, ActionListSecondary},
+	"activity": {
+		ActionClose, ActionChooseRow, ActionStopSession, ActionListSecondary,
+		ActionFoldRow, ActionUnfoldRow,
+	},
 	"changes":      {ActionClose, ActionApplyChanges, ActionDiscardChanges},
 	"value-filter": {ActionClose, ActionToggleValue, ActionKeepAllValues, ActionKeepOnlyValue},
 	"ai-chat": {

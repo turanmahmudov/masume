@@ -186,6 +186,28 @@ func (model *Model) Init() tea.Cmd {
 	return tea.Batch(commands...)
 }
 
+// dashboardRefreshWait is how long the dashboard leaves between two reads of the server. It
+// rides the wake the client already asks for rather than a clock of its own.
+const dashboardRefreshWait = 2 * time.Second
+
+// refreshDashboard reads the server again where the dashboard is open and the last answer
+// has gone stale. A read that is already on its way is left to land.
+func (model *Model) refreshDashboard(now time.Time) tea.Cmd {
+	connection := model.Active()
+	if connection == nil || model.screen != ScreenWorking {
+		return nil
+	}
+	overlay := &connection.Overlay
+	if overlay.Kind != app.OverlayActivity || overlay.View.Reading {
+		return nil
+	}
+	if now.Sub(overlay.Server.ReadAt) < dashboardRefreshWait {
+		return nil
+	}
+	overlay.View.Reading = true
+	return readActivity(model.ActiveID(), connection.Session, readRefresh)
+}
+
 // resolveTickWait returns how long until the next wake. A wheel that turns needs a frame ten
 // times a second; a client with nothing to wait for needs only to take a report off the bar.
 func (model *Model) resolveTickWait() time.Duration {
@@ -322,7 +344,8 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			connection.DropStaleNotice(time.Time(held))
 		}
 		return model, tea.Batch(
-			tick(model.resolveTickWait()), model.askTerminalAgain(time.Time(held)))
+			tick(model.resolveTickWait()), model.askTerminalAgain(time.Time(held)),
+			model.refreshDashboard(time.Time(held)))
 
 	case formTestedMsg:
 		if model.form != nil {
@@ -1042,19 +1065,53 @@ func (model *Model) readSavedAnswer(answered savedReadMsg) (tea.Model, tea.Cmd) 
 	return model, nil
 }
 
-// readActivityAnswer draws what the other connections of the server are doing.
+// readActivityAnswer draws what the server is doing. A refresh replaces what the read
+// answered and keeps what the reader did to the card.
 func (model *Model) readActivityAnswer(answered activityReadMsg) (tea.Model, tea.Cmd) {
 	connection, _, found := model.findConnection(answered.ConnectionID)
 	if !found {
 		return model, nil
 	}
+	held := connection.Overlay
+	open := held.Kind == app.OverlayActivity
 	if answered.Problem != "" {
-		connection.ShowError(answered.Problem)
+		if open {
+			held.View.Reading = false
+			connection.Overlay = held
+		}
+		if !answered.Refresh {
+			connection.ShowError(answered.Problem)
+		}
 		return model, nil
 	}
-	connection.Overlay = app.Overlay{
-		Kind: app.OverlayActivity, Sessions: answered.Sessions,
+	// A refresh whose card was closed would otherwise open it again under the reader.
+	if answered.Refresh && !open {
+		return model, nil
 	}
+
+	drawn := app.Overlay{
+		Kind: app.OverlayActivity, Sessions: answered.Sessions,
+		Server: app.ServerReading{
+			Load: answered.Load, Locks: answered.Locks, Slow: answered.Slow,
+			HasLoad: answered.HasLoad, HasLocks: answered.HasLocks,
+			HasSlow: answered.HasSlow,
+			ReadAt:  time.Now(),
+		},
+	}
+	if open {
+		drawn.List = held.List
+		drawn.View = held.View
+		// The reading being replaced is what the next rate is measured against, and is
+		// kept only where both readings carry the counters.
+		if held.Server.HasLoad && drawn.Server.HasLoad {
+			drawn.View.Previous = held.Server.Load
+			drawn.View.PreviousAt = held.Server.ReadAt
+			drawn.View.HasPrevious = true
+		}
+	}
+	drawn.View.Reading = false
+	drawn.List.Cursor = clamp(drawn.List.Cursor, len(drawn.Sessions))
+	connection.Overlay = drawn
 	return model, nil
 }
 

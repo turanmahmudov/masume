@@ -184,7 +184,7 @@ const listConstraintsSQL = `
 `
 
 const listActivitySQL = `
-  select pid,
+  select /*masume:dashboard*/ pid,
          coalesce(usename, '')           as usename,
          coalesce(application_name, '')  as application_name,
          coalesce(host(client_addr), '') as client_addr,
@@ -195,6 +195,92 @@ const listActivitySQL = `
    where datname = current_database()
      and pid <> pg_backend_pid()
    order by state = 'active' desc, query_start nulls last
+`
+
+// The sessions that wait for a lock, and the session that holds the one they wait for.
+// pg_blocking_pids answers the holders of one waiter without joining pg_locks to itself.
+// The mode reported is the one the holder was granted on the relation the waiter asked for.
+// A lock that is not on a relation leaves both the mode and the relation empty.
+const listLockWaitsSQL = `
+  select /*masume:dashboard*/ waiting.pid                 as blocked_pid,
+         coalesce(waiting.query, '') as blocked_query,
+         coalesce((extract(epoch from (now() - waiting.state_change)) * 1000)::int8, 0)
+                                     as waiting_ms,
+         coalesce(held.mode, '')     as mode,
+         coalesce(held.relname, '')  as relation,
+         holder.pid                  as blocking_pid,
+         coalesce(holder.query, '')  as blocking_query,
+         coalesce((extract(epoch from (now() - holder.query_start)) * 1000)::int8, 0)
+                                     as blocking_ms
+    from pg_stat_activity waiting
+    cross join lateral unnest(pg_blocking_pids(waiting.pid)) as blocker(pid)
+    join pg_stat_activity holder on holder.pid = blocker.pid
+    left join lateral (
+           select granted_lock.mode, relation.relname
+             from pg_locks asked
+             join pg_locks granted_lock
+               on granted_lock.pid = holder.pid
+              and granted_lock.granted
+              and granted_lock.relation is not distinct from asked.relation
+             left join pg_class relation on relation.oid = asked.relation
+            where asked.pid = waiting.pid
+              and not asked.granted
+            order by asked.relation nulls last
+            limit 1
+         ) held on true
+   where waiting.wait_event_type = 'Lock'
+     and waiting.datname = current_database()
+   order by waiting.state_change, waiting.pid, holder.pid
+`
+
+// The load the server itself is carrying: how many connections it holds, how many it allows,
+// and when it started. The count covers every database of the server.
+const readServerLoadSQL = `
+  select /*masume:dashboard*/ (select count(*) from pg_stat_activity)  as connections,
+         current_setting('max_connections')::int8 as max_connections,
+         pg_postmaster_start_time()               as started_at,
+         (select sum(xact_commit + xact_rollback)::int8 from pg_stat_database) as transactions,
+         (select sum(temp_files)::int8 from pg_stat_database)            as temp_files,
+         (select sum(blks_hit)::int8   from pg_stat_database)            as blocks_hit,
+         (select sum(blks_read)::int8  from pg_stat_database)            as blocks_read,
+         -- A standby cannot be asked where its own write ahead log stands, so the count
+         -- is read on the server that writes one.
+         case when pg_is_in_recovery() then null
+              else pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::int8
+         end as wal_bytes,
+         -- A standby reports how far behind the server that feeds it is. Any other server
+         -- reports the worst of the standbys it feeds, and nothing where it feeds none.
+         case when pg_is_in_recovery()
+              then extract(epoch from (now() - pg_last_xact_replay_timestamp()))::float8
+              else (select extract(epoch from max(replay_lag))::float8 from pg_stat_replication)
+         end as replication_lag_s
+`
+
+// DashboardMark is written into every statement the dashboard runs, so the panel of slow
+// statements can leave its own reads out of what it draws.
+//
+// The server counts a statement by the shape of its parse tree, and a comment is not part of
+// that shape. A reader who runs the same statement byte for byte apart from the mark shares
+// a row with it.
+const DashboardMark = "masume:dashboard"
+
+// The statements the server spent the most time in, the slowest by mean first. The count
+// belongs to the whole server, so it is narrowed to this database.
+const listSlowStatementsSQL = `
+  select /*masume:dashboard*/ query,
+         calls,
+         mean_exec_time::float8  as mean_ms,
+         total_exec_time::float8 as total_ms,
+         rows                    as rows_returned
+    from pg_stat_statements
+   where dbid = (select oid from pg_database where datname = current_database())
+     and calls > 0
+     -- The dashboard reads the server every two seconds, so its own reads would fill the
+     -- panel it draws. Every one of them carries the mark below and nothing else does,
+     -- so a reader's own statement about the statistics is still counted.
+     and query not like '%' || $2 || '%' 
+   order by mean_exec_time desc
+   limit $1
 `
 
 // The statements that print the definition of each kind of object Postgres describes

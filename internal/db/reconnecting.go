@@ -325,6 +325,26 @@ func (session *ReconnectingSession) CancelRunningQuery(ctx context.Context) (boo
 	return held.CancelRunningQuery(ctx)
 }
 
+func (session *ReconnectingSession) ListLockWaits(ctx context.Context) ([]LockWait, error) {
+	held, done := session.hold()
+	defer done()
+	return held.ListLockWaits(ctx)
+}
+
+func (session *ReconnectingSession) ReadServerLoad(ctx context.Context) (ServerLoad, error) {
+	held, done := session.hold()
+	defer done()
+	return held.ReadServerLoad(ctx)
+}
+
+func (session *ReconnectingSession) ListSlowStatements(
+	ctx context.Context, limit int,
+) ([]StatementStat, error) {
+	held, done := session.hold()
+	defer done()
+	return held.ListSlowStatements(ctx, limit)
+}
+
 func (session *ReconnectingSession) Ping(ctx context.Context) error {
 	held, done := session.hold()
 	defer done()

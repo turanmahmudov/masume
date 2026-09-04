@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // NullText is the text form of a null, used by the viewer, the clipboard and the cell
@@ -182,10 +183,112 @@ func FormatClockTime(at time.Time) string {
 	return at.Format("2006-01-02 15:04:05.000")
 }
 
+// FormatClock returns how long something has been running, as minutes and seconds, or as
+// hours, minutes and seconds once it passes an hour. Every value under an hour is five
+// characters and every value under a hundred hours is eight, so a column of them holds its
+// width while it refreshes. A time before the start reads as zero.
+func FormatClock(elapsed time.Duration) string {
+	seconds := max(int64(elapsed/time.Second), 0)
+	minutes, seconds := seconds/60, seconds%60
+	hours, minutes := minutes/60, minutes%60
+	if hours > 0 {
+		return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+	}
+	return fmt.Sprintf("%02d:%02d", minutes, seconds)
+}
+
+// FormatLockMode returns the name of a lock mode as words a reader knows. PostgreSQL names
+// its modes in one word with a Lock suffix, such as AccessExclusiveLock. A name in another
+// shape is answered as it stands, in capitals.
+func FormatLockMode(mode string) string {
+	trimmed := strings.TrimSuffix(strings.TrimSpace(mode), "Lock")
+	if trimmed == "" {
+		return ""
+	}
+	var said strings.Builder
+	for at, letter := range trimmed {
+		if at > 0 && unicode.IsUpper(letter) {
+			said.WriteByte(' ')
+		}
+		said.WriteRune(unicode.ToUpper(letter))
+	}
+	return said.String()
+}
+
+// FormatLargestUnit returns a span of time as its largest unit that is not zero: days, then
+// hours, then minutes, then seconds. A span of less than a second, or one before now, reads
+// as zero seconds.
+func FormatLargestUnit(elapsed time.Duration) string {
+	seconds := max(int64(elapsed/time.Second), 0)
+	for _, unit := range []struct {
+		mark    string
+		seconds int64
+	}{
+		{"d", 24 * 60 * 60},
+		{"h", 60 * 60},
+		{"m", 60},
+	} {
+		if seconds >= unit.seconds {
+			return fmt.Sprintf("%d%s", seconds/unit.seconds, unit.mark)
+		}
+	}
+	return fmt.Sprintf("%ds", seconds)
+}
+
+// byteUnits are the marks of the sizes a rate is written in, from the largest down.
+var byteUnits = []struct {
+	mark string
+	of   float64
+}{
+	{"TB", 1 << 40}, {"GB", 1 << 30}, {"MB", 1 << 20}, {"kB", 1 << 10},
+}
+
+// FormatByteRate returns how many bytes a second something writes, in the largest size that
+// leaves a whole number in front of the point, with one decimal at most.
+func FormatByteRate(perSecond float64) string {
+	if perSecond < 0 {
+		perSecond = 0
+	}
+	for _, unit := range byteUnits {
+		if perSecond >= unit.of {
+			return trimTrailingZero(fmt.Sprintf("%.1f", perSecond/unit.of)) + unit.mark + "/s"
+		}
+	}
+	return fmt.Sprintf("%.0fB/s", perSecond)
+}
+
+// FormatRate returns how often something happens in a second: 1.2k for twelve hundred, 940
+// for nine hundred and forty.
+func FormatRate(perSecond float64) string {
+	if perSecond < 0 {
+		perSecond = 0
+	}
+	if perSecond >= 1000 {
+		return trimTrailingZero(fmt.Sprintf("%.1f", perSecond/1000)) + "k"
+	}
+	if perSecond >= 10 {
+		return fmt.Sprintf("%.0f", perSecond)
+	}
+	return trimTrailingZero(fmt.Sprintf("%.1f", perSecond))
+}
+
+// FormatShare returns a share from zero to one as a percentage with one decimal.
+func FormatShare(share float64) string {
+	return trimTrailingZero(fmt.Sprintf("%.1f", min(max(share, 0), 1)*100)) + "%"
+}
+
+// trimTrailingZero drops a decimal of nothing, so a whole number reads as one.
+func trimTrailingZero(written string) string {
+	return strings.TrimSuffix(written, ".0")
+}
+
 // FormatDuration returns a run time in milliseconds or in seconds, whichever is easier
 // to read.
 func FormatDuration(elapsed time.Duration) string {
 	milliseconds := float64(elapsed) / float64(time.Millisecond)
+	if milliseconds < 1 {
+		return fmt.Sprintf("%.2f ms", milliseconds)
+	}
 	if milliseconds < 1000 {
 		return fmt.Sprintf("%d ms", int64(math.Round(milliseconds)))
 	}

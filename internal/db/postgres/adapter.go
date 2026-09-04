@@ -21,12 +21,14 @@ import (
 type postgresSession struct {
 	db.SessionFacts
 
-	flavour     Flavour
-	connection  *pgx.Conn
-	backendPID  int64
-	password    string
-	transaction db.TransactionMark
-	side        *db.SideConnection[*pgx.Conn]
+	flavour    Flavour
+	connection *pgx.Conn
+	// True where the server has the extension that counts statements, read once at connect.
+	holdsStatementStats bool
+	backendPID          int64
+	password            string
+	transaction         db.TransactionMark
+	side                *db.SideConnection[*pgx.Conn]
 
 	// typeNames names every type the server holds, read once at connect, because the
 	// map the driver ships knows the standard types only and a server also holds its
@@ -37,6 +39,14 @@ type postgresSession struct {
 	// connection that is still answering the first.
 	mainQueue *db.CallQueue
 	sideQueue *db.CallQueue
+}
+
+// Capabilities returns what this connection does. Every entry is a fact of the engine except
+// the count of statements, which holds only where the extension is installed.
+func (session *postgresSession) Capabilities() core.Capabilities {
+	held := session.Support.Capabilities
+	held.ReportsStatementStats = session.holdsStatementStats
+	return held
 }
 
 func (session *postgresSession) ReadTransactionState() db.TransactionState {
@@ -747,6 +757,99 @@ func (session *postgresSession) ListActivity(ctx context.Context) ([]db.Activity
 	return activity, nil
 }
 
+func (session *postgresSession) ListLockWaits(ctx context.Context) ([]db.LockWait, error) {
+	if !session.Support.Capabilities.ReportsLockWaits {
+		return nil, db.NewUnsupportedError("report which sessions wait for a lock")
+	}
+	rows, err := session.readRows(ctx, listLockWaitsSQL)
+	if err != nil {
+		return nil, err
+	}
+	waits := make([]db.LockWait, 0, len(rows))
+	for _, row := range rows {
+		waits = append(waits, db.LockWait{
+			BlockedPID:   db.ReadNonNegativeCount(row["blocked_pid"]),
+			BlockedQuery: db.ReadAnyText(row["blocked_query"]),
+			Waiting: time.Duration(db.ReadNonNegativeCount(row["waiting_ms"])) *
+				time.Millisecond,
+			Mode:          db.ReadAnyText(row["mode"]),
+			Relation:      db.ReadAnyText(row["relation"]),
+			BlockingPID:   db.ReadNonNegativeCount(row["blocking_pid"]),
+			BlockingQuery: db.ReadAnyText(row["blocking_query"]),
+			BlockingFor: time.Duration(db.ReadNonNegativeCount(row["blocking_ms"])) *
+				time.Millisecond,
+		})
+	}
+	return waits, nil
+}
+
+func (session *postgresSession) ReadServerLoad(ctx context.Context) (db.ServerLoad, error) {
+	if !session.Support.Capabilities.ReportsServerLoad {
+		return db.ServerLoad{}, db.NewUnsupportedError("report the load it is under")
+	}
+	rows, err := session.readRows(ctx, readServerLoadSQL)
+	if err != nil {
+		return db.ServerLoad{}, err
+	}
+	if len(rows) == 0 {
+		return db.ServerLoad{}, nil
+	}
+	held := rows[0]
+	load := db.ServerLoad{
+		Connections:    db.ReadNonNegativeCount(held["connections"]),
+		MaxConnections: db.ReadNonNegativeCount(held["max_connections"]),
+		StartedAt:      readTimestamp(held["started_at"]),
+		Transactions:   db.ReadNonNegativeCount(held["transactions"]),
+		WalBytes:       db.ReadNonNegativeCount(held["wal_bytes"]),
+		TempFiles:      db.ReadNonNegativeCount(held["temp_files"]),
+	}
+	// The counters are reported together, so one of them being there means the server counts.
+	_, countsTransactions := readOptionalFloat(held["transactions"])
+	load.HasCounters = countsTransactions
+
+	hit, hasHit := readOptionalFloat(held["blocks_hit"])
+	read, hasRead := readOptionalFloat(held["blocks_read"])
+	if hasHit && hasRead && hit+read > 0 {
+		load.CacheHitRate, load.HasCacheHitRate = hit/(hit+read), true
+	}
+	if lag, held := readOptionalFloat(held["replication_lag_s"]); held {
+		load.ReplicationLag = time.Duration(max(lag, 0) * float64(time.Second))
+		load.HasReplicationLag = true
+	}
+	return load, nil
+}
+
+// ListSlowStatements returns the statements this server spent the most time in, the slowest
+// by mean time first, narrowed to the database of this connection.
+func (session *postgresSession) ListSlowStatements(
+	ctx context.Context, limit int,
+) ([]db.StatementStat, error) {
+	if !session.Capabilities().ReportsStatementStats {
+		return nil, db.NewUnsupportedError("report the statements it spends its time in")
+	}
+	if limit < 1 {
+		return nil, nil
+	}
+	rows, err := session.readRows(ctx, listSlowStatementsSQL, limit, DashboardMark)
+	if err != nil {
+		return nil, err
+	}
+
+	held := make([]db.StatementStat, 0, len(rows))
+	for _, row := range rows {
+		mean, _ := readOptionalFloat(row["mean_ms"])
+		total, _ := readOptionalFloat(row["total_ms"])
+		held = append(held, db.StatementStat{
+			Query:     db.ReadAnyText(row["query"]),
+			Calls:     db.ReadNonNegativeCount(row["calls"]),
+			MeanTime:  time.Duration(max(mean, 0) * float64(time.Millisecond)),
+			TotalTime: time.Duration(max(total, 0) * float64(time.Millisecond)),
+			Rows:      db.ReadNonNegativeCount(row["rows_returned"]),
+		})
+	}
+	return held, nil
+}
+
 // CancelBackend stops another session on the second connection, because the one of the
 // user can be busy.
 func (session *postgresSession) CancelBackend(
@@ -922,8 +1025,8 @@ func (adapter *postgresAdapter) Connect(
 
 	backendPID := int64(0)
 	defaultSchema := "public"
-	identity, identityErr := connection.Query(
-		ctx, "select pg_backend_pid() as pid, current_schema() as schema")
+	holdsStatementStats := false
+	identity, identityErr := connection.Query(ctx, buildIdentityStatement(adapter.flavour))
 	if identityErr != nil {
 		return fail(identityErr)
 	}
@@ -934,6 +1037,9 @@ func (adapter *postgresAdapter) Connect(
 			if written := db.ReadAnyText(values[1]); written != "" {
 				defaultSchema = written
 			}
+		}
+		if valueErr == nil && len(values) > 2 {
+			holdsStatementStats = readFlag(values[2])
 		}
 	}
 	identity.Close()
@@ -946,7 +1052,8 @@ func (adapter *postgresAdapter) Connect(
 			Support: adapter.support,
 		},
 		flavour: adapter.flavour, connection: connection,
-		backendPID: backendPID, password: password, typeNames: typeNames,
+		holdsStatementStats: holdsStatementStats,
+		backendPID:          backendPID, password: password, typeNames: typeNames,
 		side: db.NewSideConnection(func() (*pgx.Conn, error) {
 			return openPostgresConnection(context.Background(), profile, password)
 		}),
@@ -956,3 +1063,13 @@ func (adapter *postgresAdapter) Connect(
 
 // The compiler reports a part of the port this session has not answered for.
 var _ db.Session = (*postgresSession)(nil)
+
+// buildIdentityStatement returns the statement that reads the identity of the connection.
+func buildIdentityStatement(flavour Flavour) string {
+	written := "select pg_backend_pid() as pid, current_schema() as schema"
+	if flavour.HasExtensionCatalog {
+		written += `, (select count(*) from pg_extension
+		                where extname = 'pg_stat_statements') > 0 as counts_statements`
+	}
+	return written
+}

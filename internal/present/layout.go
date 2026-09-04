@@ -484,3 +484,21 @@ func ResolveLineSpan(text string, diagnostic editor.Diagnostic) LineSpan {
 	}
 	return LineSpan{Line: at.Line - 1, Start: start, End: end}
 }
+
+// The two halves of a meter. A cell is filled up to the value and empty after it.
+const (
+	meterFilled = "▇"
+	meterEmpty  = "░"
+)
+
+// BuildMeter draws a value against the whole it is part of, as a bar of that many cells.
+// A whole of zero or less draws an empty bar, because no share of it can be known. The
+// filled cells round to the nearest, so a value just over half a cell fills it.
+func BuildMeter(value, of float64, width int) string {
+	width = max(width, 0)
+	filled := 0
+	if of > 0 {
+		filled = max(min(int(value/of*float64(width)+0.5), width), 0)
+	}
+	return strings.Repeat(meterFilled, filled) + strings.Repeat(meterEmpty, width-filled)
+}

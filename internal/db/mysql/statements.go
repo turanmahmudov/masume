@@ -136,6 +136,19 @@ const listMysqlConstraintsSQL = `
    order by tc.constraint_type, tc.constraint_name
 `
 
+// The load the server itself is carrying. The connection count and the uptime are status
+// variables and the limit is a system variable, so one statement reads all three out of
+// the tables that hold them rather than through three SHOW commands.
+const readMysqlServerLoadSQL = `
+  select (select cast(variable_value as unsigned)
+            from performance_schema.global_status
+           where variable_name = 'Threads_connected')        as connections,
+         @@max_connections                                   as max_connections,
+         (select cast(variable_value as unsigned)
+            from performance_schema.global_status
+           where variable_name = 'Uptime')                    as uptime_seconds
+`
+
 const listMysqlActivitySQL = `
   select id                        as pid,
          coalesce(user, '')        as user,

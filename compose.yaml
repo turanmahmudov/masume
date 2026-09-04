@@ -15,6 +15,9 @@ services:
     environment:
       POSTGRES_PASSWORD: secret
       POSTGRES_DB: shop
+    # pg_stat_statements only counts if the server loads it before it accepts a
+    # connection, so the dashboard has nothing to draw without this.
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     ports:
       - "127.0.0.1:55432:5432"
     # tmpfs, because a test database is discarded and never needs to survive a restart.

@@ -11,6 +11,9 @@ type Flavour struct {
 	ReadOnlyStatement string
 	// The function that stops another session. The name differs per server.
 	BuildCancelFunction func(terminate bool) string
+	// True where the server holds pg_extension. Redshift documents the catalogs of
+	// PostgreSQL 8.0 and this is not among them.
+	HasExtensionCatalog bool
 }
 
 const postgresReadOnlyStatement = "set default_transaction_read_only = on"
@@ -24,6 +27,7 @@ func buildPostgresCancelFunction(terminate bool) string {
 
 // FlavourStandard is PostgreSQL itself, which the other flavours differ from.
 var FlavourStandard = Flavour{
+	HasExtensionCatalog: true,
 	BuildExplainPrefix: func(analyze bool) string {
 		if analyze {
 			return "explain (ANALYZE, BUFFERS, COSTS)"
@@ -36,6 +40,7 @@ var FlavourStandard = Flavour{
 
 // FlavourCockroach writes its own plan, and takes no options in brackets.
 var FlavourCockroach = Flavour{
+	HasExtensionCatalog: true,
 	BuildExplainPrefix: func(analyze bool) string {
 		if analyze {
 			return "explain analyze"

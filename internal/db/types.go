@@ -163,6 +163,55 @@ type Activity struct {
 	Query           string
 }
 
+// LockWait is one session waiting for a lock another session holds. It carries the
+// statement of both sides.
+type LockWait struct {
+	BlockedPID   int64
+	BlockedQuery string
+	Waiting      time.Duration
+	Mode         string
+	Relation     string
+	// The session that holds the lock, and how long its statement has run.
+	BlockingPID   int64
+	BlockingQuery string
+	BlockingFor   time.Duration
+}
+
+// ServerLoad is what the server itself is carrying now. A field the server does not report
+// is left at zero.
+type ServerLoad struct {
+	Connections    int64
+	MaxConnections int64
+	StartedAt      time.Time
+
+	// Counters that count up from the moment the server started, so a rate needs two
+	// readings. HasCounters is false where the server reports none of them.
+	Transactions int64
+	WalBytes     int64
+	TempFiles    int64
+	HasCounters  bool
+
+	// The share of block reads the server answered from its own cache, from 0 to 1, and
+	// unset where it has read no block.
+	CacheHitRate    float64
+	HasCacheHitRate bool
+
+	// How far behind a standby is, or the worst of the standbys this server feeds, and
+	// unset where there is neither.
+	ReplicationLag    time.Duration
+	HasReplicationLag bool
+}
+
+// StatementStat is one statement the server has been keeping count of. It is a shape of a
+// statement and not one run of it, so one row stands for every run.
+type StatementStat struct {
+	Query     string
+	Calls     int64
+	MeanTime  time.Duration
+	TotalTime time.Duration
+	Rows      int64
+}
+
 // SchemaObjectKind is a kind of object a schema holds beside its relations.
 type SchemaObjectKind string
 
@@ -287,11 +336,8 @@ type QueryRunner interface {
 	// not check it.
 	CheckStatement(ctx context.Context, sql string) (StatementProblem, bool)
 	// StreamQuery reads a batch at a time, so an export never holds the whole relation.
-	// A statement with a result set hands over at least one batch, so a caller learns
-	// the columns even where there are no rows; the batch of such a result holds no
-	// rows. A statement with no result set hands over none. A store whose columns come
-	// from the documents it holds, rather than from the statement, reports none for a
-	// result of no documents.
+	// A statement with a result set hands over at least one batch, so a caller learns the
+	// columns even where there are no rows. One with no result set hands over none.
 	StreamQuery(
 		ctx context.Context, sql string, params []any, batchSize int,
 		onBatch func(rows [][]any, columns []ResultColumn) error,
@@ -316,6 +362,16 @@ type ServerAdmin interface {
 	ListActivity(ctx context.Context) ([]Activity, error)
 	CancelBackend(ctx context.Context, pid int64, terminate bool) (bool, error)
 	CancelRunningQuery(ctx context.Context) (bool, error)
+	// ListLockWaits returns every session waiting for a lock another session holds. Only
+	// an engine whose ReportsLockWaits is true returns these.
+	ListLockWaits(ctx context.Context) ([]LockWait, error)
+	// ListSlowStatements returns the statements the server spent the most time in, the
+	// slowest by mean time first. Only an engine whose ReportsStatementStats is true
+	// answers it, and that is known only once the connection is open.
+	ListSlowStatements(ctx context.Context, limit int) ([]StatementStat, error)
+	// ReadServerLoad returns what the server is carrying now. Only an engine whose
+	// ReportsServerLoad is true returns it.
+	ReadServerLoad(ctx context.Context) (ServerLoad, error)
 }
 
 type SessionLifecycle interface {

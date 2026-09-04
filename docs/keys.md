@@ -35,6 +35,7 @@ An action bound to `[]` has no key binding.
 | `delete-connection` | `d` |
 | `discard-changes` | `x` |
 | `edit-connection` | `e` |
+| `fold-row` | `left` |
 | `insert-ai-sql` | `ctrl+j` |
 | `keep-all-values` | `a` |
 | `keep-only-value` | `o` |
@@ -56,7 +57,9 @@ An action bound to `[]` has no key binding.
 | `set-null` | `ctrl+l` |
 | `show-ai-chats` | `ctrl+o` |
 | `stop-ai-reply` | `ctrl+x` |
+| `stop-session` | `x` |
 | `test-connection` | `ctrl+t` |
+| `unfold-row` | `right` |
 | `toggle-value` | `space` |
 | `write-export` | `ctrl+s` |
 

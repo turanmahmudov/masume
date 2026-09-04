@@ -60,8 +60,9 @@ var paletteEntries = []paletteEntry{
 		scope: cfg.ScopeGlobal, action: ActionSaveQuery},
 	{id: "show-saved", label: "Saved queries",
 		scope: cfg.ScopeGlobal, action: ActionShowSaved},
-	{id: "activity", label: "Server activity", detail: "what other sessions are running",
-		scope: cfg.ScopeGlobal, action: ActionShowActivity},
+	{id: "show-activity", label: "Server activity",
+		detail: "the load, the locks and what other sessions are running",
+		scope:  cfg.ScopeGlobal, action: ActionShowActivity},
 	{id: "export-csv", label: "Export result as CSV",
 		scope: cfg.ScopeGlobal, action: ActionExportCSV},
 	{id: "export-json", label: "Export result as JSON",
@@ -288,7 +289,7 @@ func (model *Model) runPaletteAction(
 
 	action, known := FindActionID(id)
 	if !known {
-		connection.ShowError("\"" + id + "\" is offered by the palette and nothing runs it")
+		connection.ShowError("there is no action called \"" + id + "\"")
 		return model, nil
 	}
 	scope := cfg.ScopeGlobal

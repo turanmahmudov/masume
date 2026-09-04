@@ -35,33 +35,39 @@ Engines that share a protocol behave the same way. This is why a hosted service 
 
 masume queries the capabilities of the server and hides unsupported actions. An action that the engine does not support has no key binding and is not shown in menus. So the interface never offers an action that the server refuses.
 
-| Engine | Plans | Measures | Transactions | Cancels | Activity | Sorts | Truncates | DDL |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| aurora-mysql | yes | yes | yes | yes | yes | yes | yes | yes |
-| cockroach | yes | yes | yes | no | no | yes | yes | yes |
-| mariadb | yes | yes | yes | yes | yes | yes | yes | yes |
-| mongodb | yes | yes | yes | no | yes | yes | no | no |
-| mysql | yes | yes | yes | yes | yes | yes | yes | yes |
-| neon | yes | yes | yes | yes | yes | yes | yes | yes |
-| planetscale | yes | yes | yes | no | no | yes | yes | yes |
-| postgres | yes | yes | yes | yes | yes | yes | yes | yes |
-| redis | no | no | no | no | yes | no | no | no |
-| redshift | yes | no | yes | yes | yes | yes | yes | yes |
-| sqlite | yes | no | yes | no | no | yes | no | yes |
-| supabase | yes | yes | yes | yes | yes | yes | yes | yes |
-| tidb | yes | yes | yes | yes | yes | yes | yes | yes |
-| timescale | yes | yes | yes | yes | yes | yes | yes | yes |
+| Engine | Plans | Measures | Transactions | Cancels | Activity | Locks | Load | Sorts | Truncates | DDL |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| aurora-mysql | yes | yes | yes | yes | yes | no | yes | yes | yes | yes |
+| cockroach | yes | yes | yes | no | no | no | no | yes | yes | yes |
+| mariadb | yes | yes | yes | yes | yes | no | yes | yes | yes | yes |
+| mongodb | yes | yes | yes | no | yes | no | no | yes | no | no |
+| mysql | yes | yes | yes | yes | yes | no | yes | yes | yes | yes |
+| neon | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| planetscale | yes | yes | yes | no | no | no | no | yes | yes | yes |
+| postgres | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| redis | no | no | no | no | yes | no | no | no | no | no |
+| redshift | yes | no | yes | yes | yes | no | no | yes | yes | yes |
+| sqlite | yes | no | yes | no | no | no | no | yes | no | yes |
+| supabase | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| tidb | yes | yes | yes | yes | yes | no | no | yes | yes | yes |
+| timescale | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 
 - **Plans** - the server can return the query plan of a statement.
 - **Measures** - the plan can include measured execution times.
 - **Transactions** - begin, commit and roll back by hand.
 - **Cancels** - a running statement can be cancelled.
 - **Activity** - other sessions can be listed, and one can be stopped.
+- **Locks** - the server reports which of its sessions wait for a lock another one holds, which the dashboard draws as a blocking tree.
+- **Load** - the server reports the load it is under: how many connections it holds, how many it allows, when it started, and the counters a rate is measured from. A PostgreSQL server also reports the share of reads it answered from its own cache and how far behind its standbys are.
 - **Sorts** - the grid can sort a query result.
 - **Truncates** - `TRUNCATE` is offered in the object menu.
 - **DDL** - the server can return the `CREATE` statement of an object.
 
 The MongoDB row depends on the deployment. MongoDB supports transactions on a replica set or a sharded cluster, and not on a standalone server. masume reports the capabilities of the connected deployment.
+
+The panel of the statements a server spends its time in is not in the table, because no engine decides it. A PostgreSQL server answers for it only where the `pg_stat_statements` extension is installed, so the client asks the connection once it is open. A server without the extension draws no such panel.
+
+The server dashboard leaves out a panel the engine reports no numbers for. Every engine with **Activity** lists its sessions and refreshes them; the blocking tree needs **Locks** and the connection meter needs **Load**. MySQL reports the load through its status variables, and MariaDB does so from 10.5.2, which is the release that added `performance_schema.global_status`. Which of their sessions waits for a lock is in `performance_schema`, which this client does not read yet. Redshift keeps its own `stv_` tables rather than `pg_locks`, and TiDB answers a different set of status variables, so neither is read for either panel.
 
 TiDB accepts `SET SESSION TRANSACTION READ ONLY` but does not enforce it. On a profile opened `read-only`, this client still refuses writes, but the server itself does not enforce the read-only session.
 

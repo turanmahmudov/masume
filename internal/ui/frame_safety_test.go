@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/turanmahmudov/masume/internal/app"
@@ -144,6 +145,47 @@ func TestFrameHoldsNothingATerminalCannotDraw(t *testing.T) {
 			connection.Overlay = app.Overlay{
 				Kind: app.OverlayMessage, Title: " report ",
 				Body: "line one\x1b[31m\nline\atwo",
+			}
+		}},
+		{"the server dashboard", func() {
+			// Every text of this card comes from the server: the statement of a
+			// session, the name of a relation and the mode of a lock all reach the
+			// frame as the server wrote them.
+			nasty := "alter\x1b[31m table\a orders\r"
+			connection.Overlay = app.Overlay{
+				Kind: app.OverlayActivity,
+				Sessions: []db.Activity{{
+					PID: 4417, User: "wri\x1bter", ApplicationName: "ps\aql",
+					State: "act\rive", Duration: 4 * time.Minute, Query: nasty,
+				}},
+				Server: app.ServerReading{
+					HasLoad: true, HasLocks: true,
+					Load: db.ServerLoad{
+						Connections: 84, MaxConnections: 100,
+						StartedAt: time.Now().Add(-41 * 24 * time.Hour),
+					},
+					Locks: []db.LockWait{{
+						BlockedPID: 4520, BlockedQuery: nasty, Waiting: 4 * time.Minute,
+						Mode: "Access\x1b[31mExclusiveLock", Relation: "ord\aers",
+						BlockingPID: 4417, BlockingQuery: nasty,
+						BlockingFor: 5 * time.Minute,
+					}},
+					ReadAt: time.Now(),
+				},
+			}
+		}},
+		{"the server dashboard with its panel folded", func() {
+			connection.Overlay = app.Overlay{
+				Kind: app.OverlayActivity,
+				Server: app.ServerReading{
+					HasLocks: true,
+					Locks: []db.LockWait{{
+						BlockedPID: 4520, BlockedQuery: "select \a1", Waiting: time.Minute,
+						BlockingPID: 4417, BlockingQuery: "alter\x1b[31m table",
+					}},
+					ReadAt: time.Now(),
+				},
+				View: app.DashboardView{Folded: map[string]bool{app.PanelBlocking: true}},
 			}
 		}},
 		{"the cell editor", func() {

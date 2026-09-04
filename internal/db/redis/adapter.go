@@ -57,6 +57,7 @@ func readRedisCommandLine(line string) (RedisCommand, bool) {
 type redisSession struct {
 	db.PlainCatalog
 	db.NoUserTransactions
+	db.NoServerLoad
 	db.SessionFacts
 
 	client *redis.Client

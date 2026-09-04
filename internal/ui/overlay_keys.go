@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -564,6 +565,29 @@ func (model *Model) runOverlayAction(
 			held, command := model.deleteSavedQuery(connection, overlay)
 			return true, held, command
 		}
+
+	case app.OverlayActivity:
+		switch match.Action {
+		case ActionFoldRow, ActionUnfoldRow:
+			// Every panel folds together, because the cursor stands in the session list
+			// and not on a panel, so there is no one panel the key could mean.
+			for _, panel := range app.DashboardPanels {
+				overlay.View.FoldPanel(panel, match.Action == ActionFoldRow)
+			}
+			return true, model, nil
+		}
+		if overlay.List.Cursor >= len(overlay.Sessions) {
+			return false, model, nil
+		}
+		session := overlay.Sessions[overlay.List.Cursor]
+		switch match.Action {
+		case ActionStopSession:
+			held, command := model.askStopBackend(connection, session, stopStatement)
+			return true, held, command
+		case ActionListSecondary:
+			held, command := model.askStopBackend(connection, session, endSession)
+			return true, held, command
+		}
 	}
 	return false, model, nil
 }
@@ -667,7 +691,13 @@ func (model *Model) chooseOverlayRow(
 		if overlay.List.Cursor >= len(overlay.Sessions) {
 			return model, nil
 		}
-		return model.askStopBackend(connection, overlay.Sessions[overlay.List.Cursor])
+		statement := overlay.Sessions[overlay.List.Cursor].Query
+		if strings.TrimSpace(statement) == "" {
+			connection.Show("that session is running no statement")
+			return model, nil
+		}
+		connection.Overlay = app.Overlay{}
+		return model.loadSQL(connection, tab, statement, inNewTab)
 
 	case app.OverlayPrompt:
 		return model.answerPrompt(connection, tab, *overlay)
@@ -697,18 +727,30 @@ func (model *Model) loadSQL(
 	return model, nil
 }
 
+// The two ways the server stops a session. Cancelling ends the statement and leaves the
+// connection open; ending the session closes the connection with it.
+const (
+	stopStatement = false
+	endSession    = true
+)
+
 type stoppedBackendMsg struct {
 	ConnectionID int
 	PID          int64
+	Ended        bool
 	Stopped      bool
 	Problem      string
 }
 
-func stopBackend(id int, session db.ServerAdmin, pid int64) tea.Cmd {
+func stopBackend(id int, session db.ServerAdmin, pid int64, ends bool) tea.Cmd {
 	return func() tea.Msg {
-		stopped, err := session.CancelBackend(context.Background(), pid, false)
+		ctx, stop := context.WithTimeout(context.Background(), readTimeout)
+		defer stop()
+
+		stopped, err := session.CancelBackend(ctx, pid, ends)
 		return stoppedBackendMsg{
-			ConnectionID: id, PID: pid, Stopped: stopped, Problem: db.DescribeError(err),
+			ConnectionID: id, PID: pid, Ended: ends, Stopped: stopped,
+			Problem: db.DescribeError(err),
 		}
 	}
 }
@@ -718,12 +760,16 @@ func (model *Model) readStopBackendAnswer(answered stoppedBackendMsg) (tea.Model
 	if !found {
 		return model, nil
 	}
-	named := present.FormatCount(answered.PID)
+	named := strconv.FormatInt(answered.PID, 10)
+	done := "the statement of session " + named
+	if answered.Ended {
+		done = "session " + named
+	}
 	switch {
 	case answered.Problem != "":
-		connection.ShowError("session " + named + " was not stopped: " + answered.Problem)
+		connection.ShowError(done + " was not stopped: " + answered.Problem)
 	case answered.Stopped:
-		connection.Show("session " + named + " was stopped")
+		connection.Show(done + " was stopped")
 	default:
 		connection.Show("the server holds no session " + named + " any more")
 	}
@@ -749,24 +795,34 @@ func (model *Model) keepTheme(
 	return model, nil
 }
 
-// askStopBackend asks before another session of the server is stopped.
+// askStopBackend asks before another session of the server is stopped. Ending the session
+// closes its connection as well, so each way names what it does.
 func (model *Model) askStopBackend(
-	connection *app.Connection, session db.Activity,
+	connection *app.Connection, session db.Activity, ends bool,
 ) (tea.Model, tea.Cmd) {
 	pid := session.PID
 	held := connection.Session
 	id := model.ActiveID()
 
+	named := strconv.FormatInt(pid, 10)
+	title, question, said := " stop the statement ",
+		"Stop the statement of session "+named+"?",
+		"asked the server to stop the statement of session "+named
+	if ends {
+		title, question, said = " end the session ",
+			"End session "+named+"? Its statement stops and its connection closes.",
+			"asked the server to end session "+named
+	}
+
 	connection.Overlay = app.Overlay{
-		Kind: app.OverlayConfirm, Title: " stop the session ",
-		Body: "Stop session " + present.FormatCount(pid) + "?\n\n" +
-			present.TruncateText(session.Query, 60),
+		Kind: app.OverlayConfirm, Title: title,
+		Body: question + "\n\n" + present.TruncateText(session.Query, 60),
 		Answers: app.OverlayAnswers{Answer: func(confirmed bool) app.AnswerCommand {
 			if !confirmed {
 				return nil
 			}
-			connection.Show("asked the server to stop session " + present.FormatCount(pid))
-			return carryAnswer(stopBackend(id, held, pid))
+			connection.Show(said)
+			return carryAnswer(stopBackend(id, held, pid, ends))
 		}},
 	}
 	return model, nil

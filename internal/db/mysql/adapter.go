@@ -17,6 +17,7 @@ import (
 )
 
 type mysqlSession struct {
+	db.NoServerLoad
 	db.SessionFacts
 
 	flavour     Flavour
@@ -534,6 +535,29 @@ func (session *mysqlSession) ListActivity(ctx context.Context) ([]db.Activity, e
 		})
 	}
 	return activity, nil
+}
+
+// ReadServerLoad returns the load of the server. The server reports how long it has been
+// up rather than when it started, so the start is counted back from now.
+func (session *mysqlSession) ReadServerLoad(ctx context.Context) (db.ServerLoad, error) {
+	if !session.Support.Capabilities.ReportsServerLoad {
+		return db.ServerLoad{}, db.NewUnsupportedError("report the load it is under")
+	}
+	rows, _, err := session.readNamedRows(ctx, readMysqlServerLoadSQL)
+	if err != nil {
+		return db.ServerLoad{}, err
+	}
+	if len(rows) == 0 {
+		return db.ServerLoad{}, nil
+	}
+	load := db.ServerLoad{
+		Connections:    db.ReadNonNegativeCount(rows[0]["connections"]),
+		MaxConnections: db.ReadNonNegativeCount(rows[0]["max_connections"]),
+	}
+	if seconds := db.ReadNonNegativeCount(rows[0]["uptime_seconds"]); seconds > 0 {
+		load.StartedAt = time.Now().Add(-time.Duration(seconds) * time.Second)
+	}
+	return load, nil
 }
 
 // CancelBackend stops another session on the second connection, because the one of the
