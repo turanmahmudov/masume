@@ -24,8 +24,21 @@ func (model *Model) readOverlayKey(
 	overlay := &connection.Overlay
 	tab := connection.Active()
 
-	// Escape belongs to no action. It closes what is open.
+	// The picker of an import reads every key of its own stage, so its own list keys
+	// work as they do everywhere else it is used.
+	if overlay.Kind == app.OverlayImport && overlay.Import.Stage == app.ImportPick &&
+		key.Code != tea.KeyEscape {
+		if held, command, taken := model.readPickerMessage(tea.KeyPressMsg(key)); taken {
+			return held, command
+		}
+	}
+
+	// Escape belongs to no action. It closes what is open, or steps back where the card
+	// holds a stage to step back to.
 	if key.Code == tea.KeyEscape {
+		if leaveImportReview(overlay) {
+			return model, nil
+		}
 		model.cancelOverlay(connection, overlay)
 		return model, nil
 	}
@@ -100,8 +113,8 @@ func takesListKeys(overlay app.Overlay) bool {
 	case app.OverlayCellEdit:
 		// A cell picked from a list is a list; a cell written into is a field.
 		return len(overlay.Cell.Choices) > 0
-	case app.OverlayParameters, app.OverlayExport, app.OverlayPrompt, app.OverlayChoice,
-		app.OverlayMessage, app.OverlayConfirm, app.OverlayAiChat:
+	case app.OverlayParameters, app.OverlayExport, app.OverlayImport, app.OverlayPrompt,
+		app.OverlayChoice, app.OverlayMessage, app.OverlayConfirm, app.OverlayAiChat:
 		return false
 	}
 	return true
@@ -109,6 +122,10 @@ func takesListKeys(overlay app.Overlay) bool {
 
 // cancelOverlay closes what is open without an answer, and puts back what a preview changed.
 func (model *Model) cancelOverlay(connection *app.Connection, overlay *app.Overlay) {
+	// An import that writes now is ended with the card that started it.
+	if overlay.Kind == app.OverlayImport {
+		connection.StopImport()
+	}
 	if overlay.Kind == app.OverlayThemePicker && overlay.Body != "" &&
 		overlay.Body != model.styles.Theme.Name {
 		model.styles.ApplyThemeByName(overlay.Body)
@@ -386,6 +403,9 @@ func (model *Model) runOverlayAction(
 
 	switch match.Action {
 	case ActionClose:
+		if leaveImportReview(overlay) {
+			return true, model, nil
+		}
 		model.cancelOverlay(connection, overlay)
 		return true, model, nil
 
@@ -559,6 +579,9 @@ func (model *Model) chooseOverlayRow(
 	connection *app.Connection, tab *app.Tab, overlay *app.Overlay, inNewTab bool,
 ) (tea.Model, tea.Cmd) {
 	switch overlay.Kind {
+	case app.OverlayImport:
+		return model.stepImport(connection, overlay)
+
 	case app.OverlayHistory:
 		entries := model.filterHistory(*overlay)
 		if overlay.List.Cursor >= len(entries) {
@@ -948,6 +971,12 @@ func (model *Model) runObjectAction(
 		statement = build.GenerateCreateView(row.Node.Schema, dialect)
 	case app.ObjectErDiagram:
 		return model.showDiagram(connection, row.Node.Table)
+	case app.ObjectImportFile:
+		return model.openImport(connection, row.Node.Table, intoTableThatIsThere)
+	case app.ObjectImportNewTable:
+		return model.openImport(connection, db.TableRef{
+			Schema: row.Node.Schema, Name: "",
+		}, intoNewTable)
 
 	case app.ObjectTruncate:
 		statement = build.GenerateTruncate(row.Node.Table.Qualified(), dialect)
@@ -1058,6 +1087,28 @@ func (model *Model) readOverlayField(
 		return model.submitChatQuestion(connection, tab)
 	}
 
+	// The import form returns the arrows the same way the export form does, and its
+	// review takes none of them.
+	if overlay.Kind == app.OverlayImport && overlay.Import.Stage != app.ImportReview {
+		switch key.Code {
+		case tea.KeyUp:
+			StepImportField(overlay, -1)
+			return model, nil
+		case tea.KeyDown, tea.KeyTab:
+			StepImportField(overlay, 1)
+			return model, nil
+		case tea.KeyLeft, tea.KeyRight:
+			if len(BuildImportFields(*overlay)[overlay.Field].Choices) > 0 {
+				step := 1
+				if key.Code == tea.KeyLeft {
+					step = -1
+				}
+				StepImportChoice(overlay, step)
+				return model, nil
+			}
+		}
+	}
+
 	// A form returns the arrows itself: one moves through the rows, the other steps
 	// through the values of the row under the cursor.
 	if overlay.Kind == app.OverlayExport {
@@ -1094,11 +1145,17 @@ func (model *Model) readOverlayField(
 		if overlay.Kind == app.OverlayExport {
 			ReadExportField(overlay, buffer.Text)
 		}
+		if overlay.Kind == app.OverlayImport {
+			ReadImportField(overlay, buffer.Text)
+		}
 		return model, nil
 	case tea.KeyDelete:
 		buffer.DeleteForward()
 		if overlay.Kind == app.OverlayExport {
 			ReadExportField(overlay, buffer.Text)
+		}
+		if overlay.Kind == app.OverlayImport {
+			ReadImportField(overlay, buffer.Text)
 		}
 		return model, nil
 	case tea.KeyLeft:
@@ -1141,6 +1198,9 @@ func (model *Model) readOverlayField(
 	}
 	if overlay.Kind == app.OverlayExport {
 		ReadExportField(overlay, buffer.Text)
+	}
+	if overlay.Kind == app.OverlayImport {
+		ReadImportField(overlay, buffer.Text)
 	}
 	return model, nil
 }

@@ -171,6 +171,7 @@ type Connection struct {
 	// stopExport ends the export that streams now. Reading every row can take minutes, so
 	// the cancel key stops it as it stops a statement.
 	stopExport func()
+	stopImport func()
 
 	// The object tree as it was last built, and the state it was built from. The whole
 	// catalog goes into one, so it is kept until something it reads changes.
@@ -247,6 +248,22 @@ func (connection *Connection) StopExport() {
 	}
 	connection.stopExport()
 	connection.stopExport = nil
+}
+
+// BeginImport holds what ends the import that writes now, so closing the card stops it.
+func (connection *Connection) BeginImport(stop func()) {
+	connection.StopImport()
+	connection.stopImport = stop
+}
+
+// StopImport ends the import that writes now, where one does. The rows already written are
+// inside a transaction that the server rolls back when the connection drops the statement.
+func (connection *Connection) StopImport() {
+	if connection.stopImport == nil {
+		return
+	}
+	connection.stopImport()
+	connection.stopImport = nil
 }
 
 // Show reports an outcome the app decided itself, which takes no key to dismiss.

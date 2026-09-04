@@ -26,6 +26,7 @@ No front end owns a connection. Each one accesses a server through `internal/db`
 | `internal/agent` | The nine tools shared by the chat and the MCP server |
 | `internal/ai` | One provider client each, for Anthropic and OpenAI |
 | `internal/mcp` | The JSON-RPC server, `list_profiles`, and the access policy |
+| `internal/load` | Reading a data file into an import: sampling, kinds, mapping, the dry run, the statements |
 | `internal/detect` | The databases running in a container on this machine, read from docker or podman |
 | `internal/headless` | `masume run`: one statement, one format, one exit code, no screen |
 | `internal/hist` | The SQLite file: history, saved queries, marks, open tabs |

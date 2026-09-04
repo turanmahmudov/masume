@@ -31,6 +31,10 @@ var Dialect = &query.Dialect{
 	CanCompareType: func(dataType string) bool {
 		return !postgresIncomparableTypes[query.ReadBaseType(dataType)]
 	},
+	ColumnTypes: map[core.ColumnKind]string{
+		core.KindText: "text", core.KindInteger: "bigint", core.KindNumber: "numeric",
+		core.KindBoolean: "boolean", core.KindTimestamp: "timestamptz",
+	},
 	IdentityColumn: "id bigserial primary key",
 	DropSchema: func(dialect *query.Dialect, schema string) string {
 		return "drop schema " + dialect.QuoteIdentifier(schema) + " restrict;"

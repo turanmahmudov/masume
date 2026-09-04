@@ -25,6 +25,13 @@ var Dialect = &query.Dialect{
 	},
 	// SQLite compares any two values it stores, whatever the column type is.
 	CanCompareType: func(string) bool { return true },
+	BindLimit:      32766,
+	ColumnTypes: map[core.ColumnKind]string{
+		core.KindText: "text", core.KindInteger: "integer", core.KindNumber: "real",
+		// SQLite holds neither a boolean nor a timestamp of its own: a boolean is a
+		// number of zero or one, and a timestamp is the text of its own form.
+		core.KindBoolean: "integer", core.KindTimestamp: "text",
+	},
 	IdentityColumn: "id integer primary key autoincrement",
 	// A SQLite database is a file, and DETACH is the only way to release one.
 	DropSchema: func(dialect *query.Dialect, schema string) string {

@@ -86,6 +86,8 @@ masume has a built-in AI chat and an MCP server over stdio. The chat uses the cu
 
 **Export and copy:** CSV, JSON, Markdown, `INSERT` statements, one row as JSON, or one column as an `IN` clause
 
+**Import:** a CSV or JSON file into a table, or into a table the import makes. A file picker offers the files it can read, types are read from the file, columns are mapped by name, and a dry run reports the rows that cannot be written before any of them are
+
 **Query history and saved queries.** Open tabs are restored after a restart
 
 **Manual transactions:** disable autocommit, then begin, commit or roll back

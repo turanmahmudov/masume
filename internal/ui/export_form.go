@@ -11,18 +11,6 @@ import (
 // The form the export dialog draws: one row per setting, each typed into or stepped
 // through. The CSV settings only stand where CSV is the format.
 
-// ExportField is one row of the export form.
-type ExportField struct {
-	Key   string
-	Label string
-	Value string
-	// Choices are the values the field steps through. A typed field has none.
-	Choices []string
-}
-
-// The two answers a yes-or-no field steps through.
-var yesOrNo = []string{"yes", "no"}
-
 // The two sets of rows an export writes.
 const (
 	exportLoaded = "loaded so far"
@@ -33,7 +21,7 @@ const (
 const exportPathField = 0
 
 // BuildExportFields returns the rows of the form as the overlay stands now.
-func BuildExportFields(overlay app.Overlay) []ExportField {
+func BuildExportFields(overlay app.Overlay) []DialogField {
 	// The count says what "loaded so far" means, because the grid holds one page and
 	// not the whole relation.
 	loaded := exportLoaded + " (" + present.FormatCount(int64(overlay.Export.RowCount)) + ")"
@@ -47,7 +35,7 @@ func BuildExportFields(overlay app.Overlay) []ExportField {
 		formats = append(formats, string(format))
 	}
 
-	fields := []ExportField{
+	fields := []DialogField{
 		{Key: "path", Label: "file", Value: readExportPath(overlay)},
 		{Key: "format", Label: "format", Value: string(overlay.Export.Format), Choices: formats},
 		{Key: "scope", Label: "rows", Value: rows, Choices: []string{loaded, exportEvery}},
@@ -65,21 +53,21 @@ func BuildExportFields(overlay app.Overlay) []ExportField {
 		endings = append(endings, string(ending))
 	}
 	return append(fields,
-		ExportField{Key: "delimiter", Label: "delimiter", Value: overlay.Export.CSV.Delimiter},
-		ExportField{
+		DialogField{Key: "delimiter", Label: "delimiter", Value: overlay.Export.CSV.Delimiter},
+		DialogField{
 			Key: "header", Label: "header",
 			Value: describeYesOrNo(overlay.Export.CSV.Header), Choices: yesOrNo,
 		},
-		ExportField{
+		DialogField{
 			Key: "quoting", Label: "quote",
 			Value: string(overlay.Export.CSV.Quoting), Choices: quotings,
 		},
-		ExportField{
+		DialogField{
 			Key: "line-ending", Label: "line ending",
 			Value: string(overlay.Export.CSV.LineEnding), Choices: endings,
 		},
-		ExportField{Key: "null-text", Label: "null as", Value: overlay.Export.CSV.NullText},
-		ExportField{
+		DialogField{Key: "null-text", Label: "null as", Value: overlay.Export.CSV.NullText},
+		DialogField{
 			Key: "formulas", Label: "guard formulas",
 			Value: describeYesOrNo(overlay.Export.CSV.SanitizeFormulas), Choices: yesOrNo,
 		},
@@ -93,13 +81,6 @@ func readExportPath(overlay app.Overlay) string {
 		return overlay.Draft.Text
 	}
 	return overlay.Export.Path
-}
-
-func describeYesOrNo(held bool) string {
-	if held {
-		return "yes"
-	}
-	return "no"
 }
 
 // FindExportProblem returns why the export cannot be written, and nothing where it can.

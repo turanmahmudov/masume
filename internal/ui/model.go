@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/filepicker"
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -51,6 +52,10 @@ type Model struct {
 	// The chat settings the config file carried, and the provider the palette chose.
 	ai         cfg.AiConfig
 	aiProvider cfg.AiProviderID
+
+	// The file picker of the import that is open on each connection. It is kept here
+	// because it answers with commands of the draw loop.
+	importPickers map[int]*filepicker.Model
 
 	profiles []cfg.Profile
 	// What the config and the theme files got wrong, which the palette lists.
@@ -355,6 +360,15 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case diagramMsg:
 		return model.readDiagramAnswer(held)
 
+	case importReadMsg:
+		return model.readImportAnswer(held)
+
+	case importCheckedMsg:
+		return model.readImportCheck(held)
+
+	case importRanMsg:
+		return model.readImportRun(held)
+
 	case healthDueMsg:
 		return model.readHealthDue(held)
 
@@ -420,6 +434,10 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 	case conversationKeptMsg:
 		return model.readConversationKept(held)
+	}
+
+	if held, command, taken := model.readPickerMessage(message); taken {
+		return held, command
 	}
 	return model, nil
 }

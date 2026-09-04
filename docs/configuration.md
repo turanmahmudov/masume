@@ -111,6 +111,71 @@ To save a connection earlier, or under another name, or without its password, pr
 
 A file that cannot be written keeps masume open with the reason, so the report does not disappear with the client.
 
+## Importing a file
+
+The object menu on a table, `m` in the tree, offers **Import a file…**. The same entry on a schema imports into a table the import makes.
+
+The card opens on a file picker of the directory masume was started in. `↑↓` moves, `→` opens a directory, `←` goes to the one above, and `Enter` chooses. Only the files an import can read are offered; any other is drawn dimmed and cannot be chosen.
+
+Choosing a file reads it and shows the form, which asks how the file is read and maps the columns:
+
+```
+┌─ import orders.csv · 4 rows ──────────────────────────────┐
+│ ▸ file                  ./orders.csv                      │
+│   table                 public.orders                     │
+│   format                csv                               │
+│   delimiter             ,                                 │
+│   header                yes                               │
+│   null as               \N                                │
+│   order_id integer      order_id                          │
+│   placed_at timestamp   placed_at                         │
+│   coupon text           (skip)                            │
+│ ↑↓ field · ← → change · Enter review · Esc cancel         │
+└───────────────────────────────────────────────────────────┘
+```
+
+`Enter` steps forward one stage at a time: the file is read, then what the import would do is reviewed, and only then are the rows written. `Esc` in the review goes back to the form, so a mapping can be changed without the file being read again.
+
+`Enter` on the `file` row opens the picker again, so the file can be changed after its columns were mapped. The row is also typed into, for a path that is quicker to paste than to walk to.
+
+| Setting | Meaning |
+| --- | --- |
+| `file` | The path of the file, filled in by the picker. A leading `~` is expanded |
+| `table` | Where the rows go. A name with a dot in it names its schema as well |
+| `format` | `csv` or `json`. The name of the file chooses it, until you choose one yourself |
+| `delimiter` | One character, for a CSV. A `.tsv` file gets a tab |
+| `header` | Whether the first row of a CSV names the columns. A file without one names them by position |
+| `null as` | The text a CSV writes a value that is not there with. An empty field is one whatever this holds |
+
+### The columns
+
+Each column of the file is one row of the form, labelled with the kind of value it holds, and it steps through the columns of the table. A column of the file whose name a column of the table holds is mapped onto it by itself; any other is left out until you map it. A column the server fills itself is never offered.
+
+The kinds are read from the first 200 rows: `integer`, `number`, `boolean`, `timestamp` and `text`. A number written with a zero in front of it, such as a postal code, is read as text, because a number would drop the zero. A column of two kinds is read as the kind that holds both, and text holds anything.
+
+For a table that is already there, a value is cast to the type of the column it goes into. For a table the import makes, the kinds of the file become its types: `bigint`, `numeric`, `boolean`, `timestamptz` and `text` on PostgreSQL, and the same idea in each server's own names.
+
+### The review
+
+The review says how many rows would be written, lists the rows that cannot be, and shows the SQL:
+
+```
+3 of 4 rows into orders, 5 columns
+
+1 row not written:
+  line 5  total_cents: "n/a" is no whole number
+
+insert into "public"."orders" (order_id, placed_at, total_cents, paid, note)
+values (100241, '2026-02-11 09:03:00.000', 4990, true, 'first order'),
+       (100242, '2026-02-12 00:00:00.000', 1200, false, null)
+```
+
+The dry run reads the whole file and reaches no server, so its answer is the same whether the import runs after it or not. A row it refuses is left out of the import rather than stopping it, because you have already read how many there are.
+
+The rows are written in batches of 1000 inside one transaction, so an import that fails part way leaves the table as it was, and the reason stays on the card.
+
+Not yet: an upsert on a key, Parquet, and an encoding other than UTF-8.
+
 ## Without a screen
 
 `masume run` uses the same profiles as the client, and every limit a profile sets: `statement_timeout_ms`, `mode = "read-only"`, `page_size` and the pre-connect `command`. See [headless.md](headless.md).

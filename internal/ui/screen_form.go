@@ -358,7 +358,7 @@ func dropProfile(profiles []cfg.Profile, name string) []cfg.Profile {
 type confirmState struct {
 	Title string
 	Body  string
-	// What the card calls the two answers. Empty gives "yes" and "no".
+	// The words the card puts on the two answers. Empty gives "yes" and "no".
 	Yes string
 	No  string
 	// True for a question whose answer cannot be taken back, which the card draws in the

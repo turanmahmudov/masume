@@ -27,6 +27,10 @@ var Dialect = &query.Dialect{
 	},
 	// MySQL compares every type it stores, including its own `json`.
 	CanCompareType: func(string) bool { return true },
+	ColumnTypes: map[core.ColumnKind]string{
+		core.KindText: "text", core.KindInteger: "bigint", core.KindNumber: "decimal(38,10)",
+		core.KindBoolean: "boolean", core.KindTimestamp: "datetime",
+	},
 	IdentityColumn: "id bigint auto_increment primary key",
 	// A MySQL schema is a database, so a drop removes the database.
 	DropSchema: func(dialect *query.Dialect, schema string) string {

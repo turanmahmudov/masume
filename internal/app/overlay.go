@@ -5,6 +5,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/hist"
+	"github.com/turanmahmudov/masume/internal/load"
 	"github.com/turanmahmudov/masume/internal/present"
 	"github.com/turanmahmudov/masume/internal/query/result"
 )
@@ -37,6 +38,7 @@ const (
 	OverlayConfirm     OverlayKind = "confirm"
 	OverlayChoice      OverlayKind = "choice"
 	OverlayExport      OverlayKind = "export"
+	OverlayImport      OverlayKind = "import"
 	OverlayPrompt      OverlayKind = "prompt"
 )
 
@@ -129,6 +131,34 @@ type ExportRequest struct {
 	WholeRead bool
 }
 
+// ImportStage is where an import stands.
+type ImportStage string
+
+const (
+	// ImportPick is the stage that picks the file out of a directory.
+	ImportPick ImportStage = "pick"
+	// ImportFile is the stage that asks for the file and how it is read.
+	ImportFile ImportStage = "file"
+	// ImportMapping is the stage that maps the columns, after the file was read.
+	ImportMapping ImportStage = "mapping"
+	// ImportReview is the stage that shows what the import would do, and its SQL.
+	ImportReview ImportStage = "review"
+)
+
+// ImportRequest is the import the form is building.
+type ImportRequest struct {
+	Stage       ImportStage
+	Plan        load.Plan
+	TargetNames []string
+	// True once the user chose the format, so the name of a file no longer chooses it.
+	FormatChosen    bool
+	DelimiterChosen bool
+	Report          load.CheckReport
+	Statements      []string
+	Running         bool
+	Written         int
+}
+
 // AnswerCommand is the work an answer starts, handed back to the caller that ran the answer.
 // It is the shape of a command of the draw loop, named here so this package stays free of it.
 type AnswerCommand func() any
@@ -170,6 +200,7 @@ type Overlay struct {
 	Window  RowWindow
 	Cell    CellTarget
 	Export  ExportRequest
+	Import  ImportRequest
 	Answers OverlayAnswers
 
 	// The rows the card gives its content, read when it opens, so the card does not
@@ -215,6 +246,8 @@ const (
 	ObjectCreateTable    = "create-table"
 	ObjectCreateView     = "create-view"
 	ObjectErDiagram      = "er-diagram"
+	ObjectImportFile     = "import-file"
+	ObjectImportNewTable = "import-new-table"
 	ObjectTruncate       = "truncate"
 	ObjectDropRelation   = "drop-relation"
 	ObjectDropSchema     = "drop-schema"
@@ -238,6 +271,10 @@ var tableActions = []MenuAction{
 	{
 		ID: ObjectGenerateInsert, Label: "Generate INSERT", Detail: "into the editor",
 		Icon: cfg.IconQuery,
+	},
+	{
+		ID: ObjectImportFile, Label: "Import a file…", Detail: "a CSV or a JSON file",
+		Icon: cfg.IconTable,
 	},
 	{ID: ObjectAddColumn, Label: "Add column…", Detail: "alter table", Icon: cfg.IconColumn},
 	{ID: ObjectCreateIndex, Label: "Create index…", Detail: "create index", Icon: cfg.IconIndex},
@@ -268,6 +305,10 @@ var objectActions = []MenuAction{
 }
 
 var schemaActions = []MenuAction{
+	{
+		ID: ObjectImportNewTable, Label: "Import a file…", Detail: "into a new table",
+		Icon: cfg.IconTable,
+	},
 	{
 		ID: ObjectCreateTable, Label: "Create table…", Detail: "into the editor",
 		Icon: cfg.IconTable,

@@ -247,10 +247,6 @@ func BuildUpdateStatement(
 	}, nil
 }
 
-// maxBindParameters is how many placeholders one statement may hold. Both servers
-// count them in a 16-bit field, so a larger delete is split.
-const maxBindParameters = 65535
-
 // buildDeleteChunk removes a set of rows with one statement, one clause per row.
 func buildDeleteChunk(target WriteTarget, rows [][]any) (query.BoundStatement, error) {
 	dialect := target.Dialect
@@ -298,7 +294,7 @@ func buildDeleteChunks(
 	target WriteTarget, rows [][]any, maxParameters int,
 ) ([][][]any, error) {
 	if maxParameters <= 0 {
-		maxParameters = maxBindParameters
+		maxParameters = target.Dialect.ResolveBindLimit()
 	}
 	chunks := [][][]any{}
 	chunk := [][]any{}
@@ -437,7 +433,8 @@ func BuildChangeStatements(
 			deleted = append(deleted, rows[rowIndex])
 		}
 	}
-	removals, err := BuildDeleteChangeStatements(target, deleted, maxBindParameters)
+	removals, err := BuildDeleteChangeStatements(
+		target, deleted, target.Dialect.ResolveBindLimit())
 	if err != nil {
 		return nil, err
 	}
