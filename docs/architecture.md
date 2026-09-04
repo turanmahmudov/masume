@@ -26,6 +26,7 @@ Neither front end owns a connection. Both access a server through `internal/db`,
 | `internal/agent` | The nine tools shared by the chat and the MCP server |
 | `internal/ai` | One provider client each, for Anthropic and OpenAI |
 | `internal/mcp` | The JSON-RPC server, `list_profiles`, and the access policy |
+| `internal/detect` | The databases running in a container on this machine, read from docker or podman |
 | `internal/hist` | The SQLite file: history, saved queries, marks, open tabs |
 
 Nothing under `internal/query` or `internal/present` opens a network connection. These packages take text and return text. This is why most of the tests need no server.

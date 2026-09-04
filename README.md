@@ -121,6 +121,7 @@ masume URL                    open one connection, for example postgres://you@ho
 masume FILE                   open one SQLite file, for example ./notes.db
 masume DSN                    open one connection string, for example "host=db dbname=shop"
 masume --profile NAME         open one profile of the config file
+masume --detect               list the databases running in a container on this machine
 masume --mcp                  run the MCP server for the configured profiles
 masume --mcp --profile=NAME   run the MCP server for one profile
 masume --mcp --check          connect to every configured profile once, print a report, and exit
@@ -134,7 +135,10 @@ masume postgres://reader@db.internal:5432/shop?sslmode=verify-full
 masume "host=db.internal dbname=shop user=reader"
 masume ./notes.db
 masume --profile shop-prod
+masume --detect
 ```
+
+`--detect` asks docker, or podman where there is no docker, for the containers that run on this machine. A container whose image is a database masume supports, and which publishes the port that database listens on, becomes a row in the connection picker. The user, the database and the password come from the environment of the container, so most local containers open with one `Enter` and nothing typed.
 
 masume asks for the password if the connection carries none. The connection is not written to the config file. To keep it, press `Ctrl+N` for the picker, then `e` and `Ctrl+S` to save it as a profile.
 

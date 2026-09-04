@@ -68,6 +68,25 @@ masume asks for the password if the target carries none. The profile it builds i
 masume --profile shop-prod       # open one profile of the config file
 ```
 
+## Databases in a container
+
+```sh
+masume --detect
+```
+
+`--detect` asks `docker` for the containers that run on this machine, and `podman` where there is no docker. Every database it finds becomes a row of the connection picker, before the profiles of the config file. Nothing is written to the config file.
+
+A container is offered when both are true:
+
+- Its image names a database masume supports. `postgres`, `postgis`, `pgvector`, `timescale`, `supabase`, `cockroach`, `mysql`, `percona`, `mariadb`, `tidb`, `redis`, `valkey` and `mongo` are read from the image name, whatever the registry and the tag are. An image built on another one is read as itself, so `supabase/postgres` is Supabase and not PostgreSQL.
+- It publishes the port that database listens on. A container that publishes no port cannot be reached from this machine, so it is left out.
+
+The user, the database and the password come from the environment of the container: `POSTGRES_USER`, `POSTGRES_DB` and `POSTGRES_PASSWORD`; `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` and `MYSQL_ROOT_PASSWORD`, and the same names with a `MARIADB_` prefix; `MONGO_INITDB_ROOT_USERNAME`, `MONGO_INITDB_ROOT_PASSWORD` and `MONGO_INITDB_DATABASE`; `REDIS_PASSWORD`; `COCKROACH_USER`, `COCKROACH_PASSWORD` and `COCKROACH_DATABASE`. What the image itself defaults to is used where a variable is not set, so a `postgres` container with only `POSTGRES_DB` set still connects as the `postgres` user.
+
+Each connection gets `env = "dev"` and `mode = "write"`. A container of a hosted service such as `supabase/postgres` gets `sslmode = "prefer"` instead of the `require` its engine defaults to, because a container on this machine listens without TLS.
+
+`--detect` exits with 1 if neither docker nor podman is on the path, if the tool reports an error, or if no container runs a database. It takes no connection of its own, so `--detect` with a URL or with `--profile` is an error.
+
 With no argument at all, masume opens `$DATABASE_URL` if the shell exports it. An argument on the command line is opened instead of the variable.
 
 ## Passwords

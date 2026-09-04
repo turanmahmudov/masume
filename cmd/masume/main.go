@@ -35,6 +35,7 @@ usage:
   masume FILE                open that SQLite file, for example ./notes.db
   masume DSN                 open that connection string, for example "host=db dbname=shop"
   masume --profile NAME      open that profile of the config file
+  masume --detect            list the databases running in a container on this machine
   masume --mcp               serve the profiles to an agent over JSON-RPC on stdio
   masume --mcp --profile=NAME  serve that one profile alone
   masume --mcp --check       open every profile once, report, and exit

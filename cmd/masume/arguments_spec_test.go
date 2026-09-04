@@ -52,18 +52,35 @@ func TestParseArgumentsReadsATargetAndAProfileName(t *testing.T) {
 	}
 }
 
+// A scan of the containers of this machine finds the connections itself, so it takes
+// nothing else.
+func TestParseArgumentsReadsTheDetectFlag(t *testing.T) {
+	held, err := parseArguments([]string{"--detect"})
+	if err != nil {
+		t.Fatalf("--detect does not read: %v", err)
+	}
+	if !held.detect {
+		t.Error("--detect does not ask for a scan")
+	}
+	if held.target != "" || held.profileName != "" {
+		t.Error("--detect named a connection of its own")
+	}
+}
+
 // An argument the command does not read must be reported. A misspelled flag that is taken
 // for a connection target would open the picker and look as if it was accepted.
 func TestParseArgumentsReportsWhatItCannotRead(t *testing.T) {
 	for _, argv := range [][]string{
 		{"--proflie=shop"},
-		{"--detect"},
+		{"--detekt"},
 		{"-x"},
 		{"--profile"},
 		{"--profile="},
 		{"--profile", "--mcp"},
 		{"postgres://ada@host/shop", "./notes.db"},
 		{"--profile=shop", "postgres://ada@host/shop"},
+		{"--detect", "postgres://ada@host/shop"},
+		{"--detect", "--profile=shop"},
 		{"", "./notes.db"},
 		{"  "},
 	} {

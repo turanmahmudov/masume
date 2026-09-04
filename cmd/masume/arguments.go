@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"strings"
 
 	"github.com/turanmahmudov/masume/internal/cfg"
+	"github.com/turanmahmudov/masume/internal/detect"
 )
 
 // Reads what the command was given: a connection target, or the name of a profile of the
@@ -24,6 +26,7 @@ func failArgument(reason string) error { return argumentError{reason: reason} }
 type invocation struct {
 	target      string
 	profileName string
+	detect      bool
 }
 
 // parseArguments reads the arguments of the client.
@@ -43,6 +46,8 @@ func parseArguments(argv []string) (invocation, error) {
 			if held.profileName == "" {
 				return invocation{}, failArgument("--profile= names no profile")
 			}
+		case argument == "--detect":
+			held.detect = true
 		case strings.HasPrefix(argument, "-"):
 			return invocation{}, failArgument(
 				argument + " is not an argument this command reads")
@@ -60,6 +65,10 @@ func parseArguments(argv []string) (invocation, error) {
 		return invocation{}, failArgument(
 			"--profile and a connection target are two ways to name one connection")
 	}
+	if held.detect && (held.target != "" || held.profileName != "") {
+		return invocation{}, failArgument(
+			"--detect finds the connections itself, so it takes no connection to open")
+	}
 	return held, nil
 }
 
@@ -68,6 +77,10 @@ func parseArguments(argv []string) (invocation, error) {
 func resolveStartProfile(
 	held invocation, profiles []cfg.Profile, environment func(string) string,
 ) ([]cfg.Profile, *cfg.Profile, error) {
+	if held.detect {
+		listed, err := listDetectedProfiles(profiles)
+		return listed, nil, err
+	}
 	if held.profileName != "" {
 		for _, profile := range profiles {
 			if profile.Name == held.profileName {
@@ -96,3 +109,23 @@ func resolveStartProfile(
 
 // readEnvironment is the source resolveStartProfile reads outside the tests.
 func readEnvironment(name string) string { return os.Getenv(name) }
+
+// listDetectedProfiles returns the databases of the containers of this machine, before the
+// profiles of the config file.
+func listDetectedProfiles(profiles []cfg.Profile) ([]cfg.Profile, error) {
+	found, err := detect.BuildContainerProfiles()
+	if err != nil {
+		return nil, err
+	}
+	if len(found) == 0 {
+		return nil, errors.New("no database runs in a container on this machine")
+	}
+
+	listed := []cfg.Profile{}
+	for _, profile := range found {
+		profile.Name = cfg.ResolveUniqueProfileName(
+			append(append([]cfg.Profile{}, listed...), profiles...), profile.Name)
+		listed = append(listed, profile)
+	}
+	return append(listed, profiles...), nil
+}
