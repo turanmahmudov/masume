@@ -24,6 +24,7 @@ var Dialect = &query.Dialect{
 	},
 	BuildPlaceholder: func(position int) string { return fmt.Sprintf("$%d", position) },
 	CountExpression:  "count(*)::int8",
+	RowLockClause:    " for update",
 	// A backslash is a plain character in a Postgres literal, so only a quote is doubled.
 	QuoteTextLiteral: func(text string) string {
 		return "'" + strings.ReplaceAll(text, "'", "''") + "'"

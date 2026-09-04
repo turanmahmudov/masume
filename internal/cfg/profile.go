@@ -51,15 +51,33 @@ var AccessModes = []AccessMode{AccessReadOnly, AccessWrite}
 // ConfirmWrites says which statements need a confirmation before they run.
 type ConfirmWrites string
 
-// The three levels of confirmation.
+// The four levels of confirmation.
 const (
 	ConfirmOff    ConfirmWrites = "off"
 	ConfirmDelete ConfirmWrites = "delete"
 	ConfirmWrite  ConfirmWrites = "write"
+	// ConfirmAgent confirms every write, and lets an agent carry the answer of the user
+	// where its client cannot show a question of its own.
+	ConfirmAgent ConfirmWrites = "agent"
 )
 
 // ConfirmModes lists the levels a profile can use.
-var ConfirmModes = []ConfirmWrites{ConfirmOff, ConfirmDelete, ConfirmWrite}
+var ConfirmModes = []ConfirmWrites{ConfirmOff, ConfirmDelete, ConfirmWrite, ConfirmAgent}
+
+// WritePlan says how much of a write is measured before the user is asked to run it.
+type WritePlan string
+
+// The three levels of measurement.
+const (
+	PlanOff WritePlan = "off"
+	// PlanCount counts the rows the write lands on and the relations it reaches.
+	PlanCount WritePlan = "count"
+	// PlanUndo also reads the rows the write changes, so they can be put back.
+	PlanUndo WritePlan = "undo"
+)
+
+// WritePlanModes lists the levels a profile can use.
+var WritePlanModes = []WritePlan{PlanOff, PlanCount, PlanUndo}
 
 // McpAccess is the set of operations an agent can run on a connection.
 type McpAccess string
@@ -85,6 +103,9 @@ const (
 	DefaultPageSize = 200
 	// DefaultKeepalive is the time between two checks that the server responds.
 	DefaultKeepalive = 30 * time.Second
+	// DefaultUndoRows is how many rows a plan reads to build an undo. A write over this
+	// many rows runs without one.
+	DefaultUndoRows = 1000
 )
 
 // Profile is one connection as the config file defines it.
@@ -107,6 +128,9 @@ type Profile struct {
 	SSLMode         core.SSLMode
 	Autocommit      bool
 	ConfirmWrites   ConfirmWrites
+	WritePlan       WritePlan
+	// How many rows a plan reads to build an undo.
+	UndoRows int
 	// A command to run before the connection, for example a tunnel.
 	Command string
 	// The port the command must open before the client connects.
@@ -151,6 +175,17 @@ func resolveDefaultConfirmWrites(environment Environment) ConfirmWrites {
 		return ConfirmDelete
 	}
 	return ConfirmOff
+}
+
+// resolveDefaultWritePlan uses the environment, as the confirmation does.
+func resolveDefaultWritePlan(environment Environment) WritePlan {
+	switch environment {
+	case EnvironmentProd:
+		return PlanUndo
+	case EnvironmentTest:
+		return PlanCount
+	}
+	return PlanOff
 }
 
 type profileError struct{ reason string }
@@ -258,6 +293,11 @@ func buildProfile(name string, source Table) (Profile, error) {
 	if err != nil {
 		return Profile{}, err
 	}
+	writePlan, err := resolveOneOf(
+		source, "write_plan", WritePlanModes, resolveDefaultWritePlan(environment))
+	if err != nil {
+		return Profile{}, err
+	}
 	sslMode, err := readSSLMode(source, engine)
 	if err != nil {
 		return Profile{}, err
@@ -317,6 +357,13 @@ func buildProfile(name string, source Table) (Profile, error) {
 	if err != nil {
 		return Profile{}, err
 	}
+	undoRows, hasUndoRows, err := readCount(source, "undo_rows")
+	if err != nil {
+		return Profile{}, err
+	}
+	if !hasUndoRows {
+		undoRows = DefaultUndoRows
+	}
 
 	commandTimeout := DefaultCommandTimeout
 	if hasTimeout {
@@ -346,6 +393,7 @@ func buildProfile(name string, source Table) (Profile, error) {
 		Auth: auth, Environment: environment, AccessMode: accessMode,
 		Password: password, PasswordEnv: passwordEnv, PasswordCommand: passwordCommand,
 		SSLMode: sslMode, Autocommit: autocommit, ConfirmWrites: confirmWrites,
+		WritePlan: writePlan, UndoRows: undoRows,
 		Command: command, WaitForPort: waitForPort, CommandTimeout: commandTimeout,
 		PageSize: pageSize, Keepalive: keepalive, Description: description,
 		StatementTimeout: time.Duration(timeoutMilliseconds) * time.Millisecond,

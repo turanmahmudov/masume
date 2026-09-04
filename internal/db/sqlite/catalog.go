@@ -130,6 +130,27 @@ func (session *sqliteSession) readRowEstimates(
 	return estimates
 }
 
+// triggerEvents name the writes a trigger can run for.
+var triggerEvents = map[string]bool{"insert": true, "update": true, "delete": true}
+
+// readTriggerEvents returns the write a trigger runs for, read out of the statement that
+// made it. SQLite keeps that statement and no field of its own for the event, and the event
+// always stands before the ON of the relation.
+func readTriggerEvents(written string) string {
+	for _, token := range syntax.ReadCodeTokens(written, syntax.FlavourStandard) {
+		if !syntax.IsWordKind(token.Kind) {
+			continue
+		}
+		if token.Text == "on" {
+			return ""
+		}
+		if triggerEvents[token.Text] {
+			return token.Text
+		}
+	}
+	return ""
+}
+
 // ListSchemaObjects returns the triggers, which are the only SQLite object that is
 // neither a relation nor an index.
 func (session *sqliteSession) ListSchemaObjects(ctx context.Context) ([]db.SchemaObject, error) {
@@ -137,7 +158,7 @@ func (session *sqliteSession) ListSchemaObjects(ctx context.Context) ([]db.Schem
 
 	for _, schema := range session.listSchemas(ctx) {
 		rows, err := session.readCatalog(ctx, fmt.Sprintf(`
-        select name, tbl_name
+        select name, tbl_name, sql
           from %s
          where type = 'trigger'
          order by name
@@ -149,7 +170,9 @@ func (session *sqliteSession) ListSchemaObjects(ctx context.Context) ([]db.Schem
 			name := db.ReadAnyText(row["name"])
 			objects = append(objects, db.SchemaObject{
 				Schema: schema, Name: name, Kind: db.ObjectTrigger,
-				Detail: db.ReadAnyText(row["tbl_name"]), Identity: schema + "." + name,
+				Detail:   db.ReadAnyText(row["tbl_name"]),
+				Events:   readTriggerEvents(db.ReadAnyText(row["sql"])),
+				Identity: schema + "." + name,
 			})
 		}
 	}
@@ -191,6 +214,7 @@ func (session *sqliteSession) DescribeTable(
 // column.
 type foreignKeyRows struct {
 	targetTable   string
+	deleteRule    query.DeleteRule
 	columns       []string
 	targetColumns []string
 	// True if the key names no column of the target, so its primary key is used.
@@ -211,7 +235,10 @@ func (session *sqliteSession) readForeignKeys(
 		id := db.ReadNonNegativeCount(row["id"])
 		group, held := grouped[id]
 		if !held {
-			group = &foreignKeyRows{targetTable: db.ReadAnyText(row["target_table"])}
+			group = &foreignKeyRows{
+				targetTable: db.ReadAnyText(row["target_table"]),
+				deleteRule:  query.ParseDeleteRule(db.ReadAnyText(row["delete_rule"])),
+			}
 			grouped[id] = group
 			order = append(order, id)
 		}
@@ -239,6 +266,7 @@ func (session *sqliteSession) readForeignKeys(
 			Name: fmt.Sprintf("fk_%d", id), Columns: group.columns,
 			// A key never points outside its own database.
 			TargetSchema: schema, TargetTable: group.targetTable, TargetColumns: targetColumns,
+			DeleteRule: group.deleteRule,
 		})
 	}
 	return keys, nil

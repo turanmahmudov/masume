@@ -13,6 +13,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
+	"github.com/turanmahmudov/masume/internal/query"
 	"github.com/turanmahmudov/masume/internal/query/result"
 )
 
@@ -457,7 +458,7 @@ func (session *postgresSession) ListSchemaObjects(ctx context.Context) ([]db.Sch
 		objects = append(objects, db.SchemaObject{
 			Schema: db.ReadAnyText(row["schema"]), Name: db.ReadAnyText(row["name"]),
 			Kind: db.SchemaObjectKind(kind), Detail: db.ReadAnyText(row["detail"]),
-			Identity: db.ReadAnyText(row["identity"]),
+			Events: db.ReadAnyText(row["events"]), Identity: db.ReadAnyText(row["identity"]),
 		})
 	}
 	return objects, nil
@@ -526,6 +527,7 @@ func readForeignKeys(rows []map[string]any) []db.ForeignKey {
 			TargetSchema:  db.ReadAnyText(row["target_schema"]),
 			TargetTable:   db.ReadAnyText(row["target_table"]),
 			TargetColumns: ReadTextArray(row["target_columns"]),
+			DeleteRule:    query.ParseDeleteRule(db.ReadAnyText(row["delete_rule"])),
 		})
 	}
 	return keys
@@ -543,6 +545,7 @@ func (session *postgresSession) ListRelationships(ctx context.Context) ([]db.Rel
 			TargetSchema:  db.ReadAnyText(row["target_schema"]),
 			TargetTable:   db.ReadAnyText(row["target_table"]),
 			TargetColumns: ReadTextArray(row["target_columns"]),
+			DeleteRule:    query.ParseDeleteRule(db.ReadAnyText(row["delete_rule"])),
 			Schema:        db.ReadAnyText(row["schema"]), Table: db.ReadAnyText(row["table"]),
 		})
 	}

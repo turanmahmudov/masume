@@ -10,6 +10,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/load"
 	"github.com/turanmahmudov/masume/internal/present"
 	"github.com/turanmahmudov/masume/internal/query/result"
+	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
 // OverlayKind names what is drawn over the workspace.
@@ -38,6 +39,7 @@ const (
 	OverlayAiChat      OverlayKind = "ai-chat"
 	OverlayAiChats     OverlayKind = "ai-chats"
 	OverlayConfirm     OverlayKind = "confirm"
+	OverlayWritePlan   OverlayKind = "write-plan"
 	OverlayChoice      OverlayKind = "choice"
 	OverlayExport      OverlayKind = "export"
 	OverlayImport      OverlayKind = "import"
@@ -203,8 +205,10 @@ type Overlay struct {
 	Server ServerReading
 	View   DashboardView
 
-	Window  RowWindow
-	Cell    CellTarget
+	Window RowWindow
+	Cell   CellTarget
+	// What the write of the card would do.
+	Plan    writeplan.Plan
 	Export  ExportRequest
 	Import  ImportRequest
 	Answers OverlayAnswers

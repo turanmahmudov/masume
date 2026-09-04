@@ -55,14 +55,16 @@ func (asker *Asker) findAskWriter() func(message any) {
 	return asker.write
 }
 
-// RememberClient reads the capabilities of the client from the initialize parameters.
-func (asker *Asker) RememberClient(capabilities any) {
+// RememberClient reads the capabilities of the client from the initialize parameters, and
+// returns whether this client can ask its user anything.
+func (asker *Asker) RememberClient(capabilities any) bool {
 	named, _ := capabilities.(map[string]any)
 	elicitation, is := named["elicitation"].(map[string]any)
 
 	asker.guard.Lock()
 	defer asker.guard.Unlock()
 	asker.clientCanAsk = is && elicitation != nil
+	return asker.clientCanAsk
 }
 
 // AttachWriter stores the write function after the transport has one.
@@ -110,7 +112,7 @@ func (asker *Asker) AskConfirmation(ctx context.Context, title, body string) boo
 		JSONRPC: jsonRPCVersion, ID: id, Method: "elicitation/create",
 		Params: map[string]any{
 			"message":         title + "\n\n" + body,
-			"requestedSchema": buildAnswerSchema(body),
+			"requestedSchema": buildAnswerSchema(),
 		},
 	})
 
@@ -149,13 +151,15 @@ func (asker *Asker) waitForAnswer(id string, answered chan any) any {
 	}
 }
 
-// buildAnswerSchema returns the schema of the answer: one field the user confirms.
-func buildAnswerSchema(body string) map[string]any {
+// buildAnswerSchema returns the schema of the answer: one field the user confirms. The
+// question itself is the message of the request, so the field does not repeat it.
+func buildAnswerSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"confirm": map[string]any{
-				"type": "boolean", "title": "Run this statement", "description": body,
+				"type": "boolean", "title": "Run this statement",
+				"description": "Yes runs the statement above. No leaves it unrun.",
 			},
 		},
 		"required": []string{"confirm"},

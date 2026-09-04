@@ -90,7 +90,7 @@ func TestInitializeReportsTheVersionAsked(t *testing.T) {
 	if !responder.deps.Asker.CanAsk() {
 		t.Error("a client that says it can ask its user was not remembered")
 	}
-	if len(*written) != 1 || (*written)[0] != "> initialize probe" {
+	if len(*written) != 1 || (*written)[0] != "> initialize probe: can ask its user" {
 		t.Errorf("the log holds %v", *written)
 	}
 
@@ -308,5 +308,22 @@ func TestReadIncomingMessage(t *testing.T) {
 			t.Errorf("%s read as kind %d, answer %v, method %q",
 				held.written, read.kind, read.wantsAnswer, read.method)
 		}
+	}
+}
+
+// The log says whether the client can be asked, because that decides whether a write that
+// confirms can run at all on it.
+func TestInitializeLogsAClientThatCannotBeAsked(t *testing.T) {
+	responder, written := buildTestResponder(nil)
+	answerOne(t, responder,
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":`+
+			`{"protocolVersion":"2025-06-18","capabilities":{},`+
+			`"clientInfo":{"name":"probe"}}}`)
+
+	if responder.deps.Asker.CanAsk() {
+		t.Error("a client that reported no elicitation was remembered as one that asks")
+	}
+	if len(*written) != 1 || !strings.Contains((*written)[0], "cannot ask its user") {
+		t.Errorf("the log holds %v", *written)
 	}
 }

@@ -298,12 +298,18 @@ func (responder *Responder) answerCall(
 }
 
 func (responder *Responder) startSession(params map[string]any) sessionStart {
-	responder.deps.Asker.RememberClient(params["capabilities"])
+	canAsk := responder.deps.Asker.RememberClient(params["capabilities"])
 	client, named := castToObject(params["clientInfo"])["name"].(string)
 	if !named {
 		client = "a client"
 	}
-	responder.deps.LogEvent("> initialize " + client)
+	// Whether the client can be asked decides whether a write that needs a confirmation
+	// can run at all, so the log says it once per session.
+	asking := "cannot ask its user, so a write that confirms cannot run"
+	if canAsk {
+		asking = "can ask its user"
+	}
+	responder.deps.LogEvent("> initialize " + client + ": " + asking)
 	return sessionStart{
 		ProtocolVersion: resolveProtocolVersion(params["protocolVersion"]),
 		Capabilities:    serverCapabilities{Tools: toolCapabilities{ListChanged: false}},

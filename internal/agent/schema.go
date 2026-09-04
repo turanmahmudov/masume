@@ -72,6 +72,19 @@ func BuildEmptySchema() map[string]any {
 // add the profile of a call. The schema of a definition is built one time, so this function
 // copies it and does not modify it.
 func ExtendSchema(schema map[string]any, name, description string) map[string]any {
+	extended := addTextField(schema, name, description)
+	required, _ := schema["required"].([]string)
+	extended["required"] = append(append([]string{}, required...), name)
+	return extended
+}
+
+// ExtendSchemaOptionally returns the schema with one more text field the caller may leave
+// out.
+func ExtendSchemaOptionally(schema map[string]any, name, description string) map[string]any {
+	return addTextField(schema, name, description)
+}
+
+func addTextField(schema map[string]any, name, description string) map[string]any {
 	extended := map[string]any{}
 	maps.Copy(extended, schema)
 
@@ -80,9 +93,6 @@ func ExtendSchema(schema map[string]any, name, description string) map[string]an
 	}}
 	maps.Copy(properties, castProperties(schema))
 	extended["properties"] = properties
-
-	required, _ := schema["required"].([]string)
-	extended["required"] = append(append([]string{}, required...), name)
 	return extended
 }
 

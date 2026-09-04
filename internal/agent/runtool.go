@@ -8,6 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/query/language"
+	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
 // The only tool that changes data. The runner of the caller decides whether it can run.
@@ -83,7 +84,8 @@ var runQuery = ToolDefinition{
 		"block instead, unrun. The user is asked before anything runs and may say no, and " +
 		"what a statement is allowed to do depends on the connection. The result is cut to " +
 		"the row limit, so a read of a large table needs its own LIMIT and ORDER BY to mean " +
-		"anything.",
+		"anything. Where the connection measures a write before it runs, the answer carries " +
+		"an `undo` list: the statements that reverse it, read inside its transaction.",
 	InputSchema: buildSchema(runQueryFields),
 	Call: func(ctx context.Context, deps ToolDeps, input map[string]any) any {
 		read, problem := readInput(runQueryFields, input)
@@ -95,10 +97,10 @@ var runQuery = ToolDefinition{
 
 		runner := deps.Runner
 		statements := deps.Session.Language().SplitStatements(sql)
-		refusal := runner.AskToRun(
+		permission := runner.AskToRun(
 			ctx, language.ResolveBatchRisk(statements, deps.Session.Language()), statements)
-		if refusal != "" {
-			return map[string]any{"ran": false, "reason": refusal}
+		if permission.Refusal != "" {
+			return map[string]any{"ran": false, "reason": permission.Refusal}
 		}
 
 		rowLimit := runner.RowLimit
@@ -106,7 +108,8 @@ var runQuery = ToolDefinition{
 			rowLimit = asked
 		}
 		startedAt := time.Now()
-		answered, err := runner.RunStatement(ctx, sql, rowLimit)
+		ran, err := runner.RunStatement(ctx, sql, rowLimit)
+		answered := ran.Result
 		if err != nil {
 			message := db.DescribeError(err)
 			if runner.ReportRun != nil {
@@ -125,7 +128,96 @@ var runQuery = ToolDefinition{
 		}
 
 		answer := map[string]any{"ran": true}
+		if len(ran.Undo) > 0 {
+			answer["undo"] = ran.Undo
+		}
+		if ran.UndoReason != "" {
+			answer["undo_reason"] = ran.UndoReason
+		}
 		maps.Copy(answer, describeResultForModel(answered))
 		return answer
 	},
+}
+
+var planWriteFields = []field{
+	{
+		name: "sql", kind: kindString, required: true,
+		description: "The exact write to measure. It is not run.",
+	},
+}
+
+var planWrite = ToolDefinition{
+	Name: "plan_write",
+	Description: "Measure what a write would do before running it: the rows it lands on, " +
+		"counted on the server; the columns it assigns; the relations it reaches through a " +
+		"trigger or a foreign key; the relations that block it; and whether it can be undone. " +
+		"Nothing is written. Call this before run_query for an UPDATE, DELETE or TRUNCATE, " +
+		"show the answer to the user, and run the statement only if they agree. Where the " +
+		"answer carries a `token`, pass it to run_query as `plan_token` to run that one " +
+		"statement without being asked again.",
+	InputSchema: buildSchema(planWriteFields),
+	Call: func(ctx context.Context, deps ToolDeps, input map[string]any) any {
+		read, problem := readInput(planWriteFields, input)
+		if problem != "" {
+			return refuseInput(problem)
+		}
+		sql, _ := readText(read, "sql")
+
+		if deps.Runner.MeasureWrite == nil {
+			return map[string]any{
+				"measured": false, "reason": "this connection measures no write",
+			}
+		}
+		measured, held := deps.Runner.MeasureWrite(ctx, sql)
+		if !held {
+			return map[string]any{"measured": false, "reason": describeUnmeasured(sql, deps)}
+		}
+		return describeMeasuredWrite(measured)
+	},
+}
+
+// describeUnmeasured says why a statement was not measured, so a model does not call the
+// tool again with the same statement.
+func describeUnmeasured(sql string, deps ToolDeps) string {
+	if language.ResolveBatchRisk(
+		deps.Session.Language().SplitStatements(sql), deps.Session.Language()) == statement.RiskNone {
+		return "this statement writes nothing, so there is nothing to measure"
+	}
+	return "this write was not read as one relation and one predicate, so its rows cannot " +
+		"be counted. A write that joins a second relation, that names its target through an " +
+		"alias, or that runs beside other statements is not measured"
+}
+
+// describeMeasuredWrite returns the plan in the form the model reads.
+func describeMeasuredWrite(measured MeasuredWrite) map[string]any {
+	undo := map[string]any{"rows": measured.UndoRows}
+	if measured.UndoReason != "" {
+		undo = map[string]any{"rows": 0, "reason": measured.UndoReason}
+	}
+	described := map[string]any{
+		"measured": true,
+		"table":    measured.Table,
+		"rows":     describeCount(measured.Rows, measured.HasRows),
+		"total":    describeCount(measured.Total, measured.HasTotal),
+		"columns":  measured.Columns,
+		"cascades": measured.Cascades,
+		"blocked":  measured.Blocked,
+		"undo":     undo,
+		"plan":     measured.Lines,
+	}
+	if measured.Token != "" {
+		described["token"] = measured.Token
+		described["note"] = "Show the plan to the user and ask whether to run the " +
+			"statement. If they agree, call run_query with this token as `plan_token`."
+	}
+	return described
+}
+
+// describeCount writes a number the server did not answer for as null, because a missing
+// field reads as a field the model did not request.
+func describeCount(count int64, held bool) any {
+	if !held {
+		return nil
+	}
+	return count
 }

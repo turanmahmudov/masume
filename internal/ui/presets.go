@@ -50,6 +50,7 @@ var defaultChords = map[string][]string{
 	"global:commit-transaction":   {"ctrl+l"},
 	"global:rollback-transaction": {"ctrl+u"},
 	"global:toggle-autocommit":    {"ctrl+o"},
+	"global:undo-write":           {"alt+u"},
 	"global:open-picker":          {"ctrl+n"},
 	"global:close-connection":     {"ctrl+w"},
 

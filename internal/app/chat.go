@@ -8,6 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/hist"
 	"github.com/turanmahmudov/masume/internal/present"
+	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
 // The chat of one connection: the turns said so far, what the reply is doing now, and the
@@ -58,6 +59,8 @@ type PendingRun struct {
 	// prod".
 	Summary string
 	SQL     string
+	// What the write does, one line each, and nothing where none was measured.
+	Plan []string
 }
 
 // ChatEventKind names what happened while a reply was written.
@@ -74,6 +77,8 @@ const (
 	ChatRunAsked ChatEventKind = "run-asked"
 	// ChatTableRead marks a relation the chat described as read in the tree as well.
 	ChatTableRead ChatEventKind = "table-read"
+	// ChatUndoKept hands over the undo of a write that ran.
+	ChatUndoKept ChatEventKind = "undo-kept"
 	// ChatEnded says the run is over, with what it spent and what went wrong.
 	ChatEnded ChatEventKind = "ended"
 )
@@ -92,6 +97,7 @@ type ChatEvent struct {
 	// The relation the chat described, and what the server said about it.
 	Table  db.TableRef
 	Detail db.TableDetail
+	Undo   writeplan.Undo
 }
 
 // Chat is the chat of one connection.

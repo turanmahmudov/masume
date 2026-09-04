@@ -22,6 +22,7 @@ const (
 	NeedsSortsRead      Capability = "sortsRead"
 	NeedsTruncatesTable Capability = "truncatesTable"
 	NeedsWritesDDL      Capability = "writesDdl"
+	NeedsPlansWrites    Capability = "plansWrites"
 )
 
 // AnswersFor is true if the server has the capability the action needs. An action that needs
@@ -46,6 +47,8 @@ func AnswersFor(capabilities core.Capabilities, needs Capability) bool {
 		return capabilities.TruncatesTable
 	case NeedsWritesDDL:
 		return capabilities.WritesDDL
+	case NeedsPlansWrites:
+		return capabilities.PlansWrites
 	}
 	// A capability no arm answers for is one the catalog names and this switch does not,
 	// so the action stays out of reach rather than being offered on every server.
@@ -120,6 +123,7 @@ const (
 	ActionFocusEditor         ActionID = "focus-editor"
 	ActionFocusResult         ActionID = "focus-result"
 	ActionShowActivity        ActionID = "show-activity"
+	ActionUndoWrite           ActionID = "undo-write"
 	ActionShowThemes          ActionID = "show-themes"
 
 	// The statement being written. A move takes the selection with it while Shift is held,
@@ -267,6 +271,7 @@ var globalActions = []ActionDefinition{
 	{ID: ActionShowSaved, WhileRunning: true},
 	{ID: ActionSaveQuery, WhileRunning: true, EditorOnly: true},
 	{ID: ActionShowActivity, Needs: NeedsServerSessions, WhileRunning: true},
+	{ID: ActionUndoWrite, Needs: NeedsPlansWrites, WhileRunning: true},
 	{ID: ActionShowThemes, WhileRunning: true},
 	{ID: ActionFocusSidebar, WhileRunning: true},
 	{ID: ActionFocusEditor, WhileRunning: true},

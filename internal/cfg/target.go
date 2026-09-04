@@ -69,6 +69,8 @@ func buildTargetProfile(engine core.Engine) Profile {
 		Auth: AuthPassword, Environment: EnvironmentDev, AccessMode: AccessWrite,
 		SSLMode: core.ResolveEngineInfo(engine).DefaultSSLMode, Autocommit: true,
 		ConfirmWrites:  resolveDefaultConfirmWrites(EnvironmentDev),
+		WritePlan:      resolveDefaultWritePlan(EnvironmentDev),
+		UndoRows:       DefaultUndoRows,
 		CommandTimeout: DefaultCommandTimeout, PageSize: DefaultPageSize,
 		Keepalive: DefaultKeepalive,
 	}

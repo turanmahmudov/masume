@@ -110,6 +110,7 @@ var overlayShares = map[app.OverlayKind]int{
 	app.OverlayActivity:    92,
 	app.OverlayDiagram:     92,
 	app.OverlayChanges:     86,
+	app.OverlayWritePlan:   86,
 	app.OverlayCellEdit:    80,
 	app.OverlayCell:        80,
 	app.OverlayValueFilter: 60,
@@ -248,6 +249,8 @@ func (model *Model) renderOverlay(
 		return model.renderMenu(overlay, width)
 	case app.OverlayConfirm:
 		return model.renderConfirm(overlay, width)
+	case app.OverlayWritePlan:
+		return model.renderWritePlan(overlay, width)
 	case app.OverlayMessage:
 		return model.renderMessage(overlay, width)
 	case app.OverlayDiagram:

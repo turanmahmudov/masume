@@ -20,6 +20,7 @@ var Dialect = &query.Dialect{
 	},
 	BuildPlaceholder: func(int) string { return "?" },
 	CountExpression:  "count(*)",
+	RowLockClause:    " for update",
 	// A backslash starts an escape in a MySQL literal, so it is doubled too. Only a
 	// literal rendered for a reader passes through here, never a value a run binds.
 	QuoteTextLiteral: func(text string) string {

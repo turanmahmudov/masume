@@ -338,6 +338,8 @@ func (model *Model) runGlobalAction(
 		}
 	case ActionShowActivity:
 		return model, readActivity(id, connection.Session, readAsked)
+	case ActionUndoWrite:
+		return model.undoLastWrite(connection)
 	case ActionShowThemes:
 		connection.Overlay = app.Overlay{
 			// The theme the picker opened on, so a walk that is cancelled goes back

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/turanmahmudov/masume/internal/db"
+	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
 type runBatch struct {
@@ -9,6 +10,8 @@ type runBatch struct {
 	reads       []db.ComposedRead
 	rowLimit    int
 	profileName string
+	// The undo of a planned write, read inside the transaction of that write.
+	undo writeplan.UndoPlan
 }
 
 // batchKey names the tab a run belongs to. A connection carries a run per tab, so a run

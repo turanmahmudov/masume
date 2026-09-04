@@ -20,6 +20,42 @@ type StatementReport struct {
 	ErrorMessage string
 }
 
+// RunPermission is the answer to asking whether a statement may run.
+type RunPermission struct {
+	// Refusal is empty where the statement may run, and the reason where it may not.
+	Refusal string
+}
+
+// StatementAnswer is what one statement answered, and the undo the caller kept with it.
+type StatementAnswer struct {
+	Result db.QueryResult
+	// Undo holds the statements that reverse the write, read inside its transaction.
+	Undo []string
+	// UndoReason says why no undo was kept, where the caller measured the write.
+	UndoReason string
+}
+
+// MeasuredWrite is what a write would do, for a caller that shows it to the user itself.
+type MeasuredWrite struct {
+	// Lines is the plan as text, one line each.
+	Lines []string
+	// Table, Rows and Total are what the write lands on.
+	Table    string
+	Rows     int64
+	HasRows  bool
+	Total    int64
+	HasTotal bool
+	Columns  []string
+	Cascades []string
+	Blocked  []string
+	// UndoRows is the rows the undo would hold, and UndoReason why it holds none.
+	UndoRows   int64
+	UndoReason string
+	// Token lets the caller run this one statement without being asked again. It is empty
+	// where the client of the caller asks the user itself.
+	Token string
+}
+
 // StatementRunner is the interface a caller uses to allow a statement. The caller decides:
 // the chat asks the user in a card, and the server checks the access level of the connection
 // and then asks the user through their own client.
@@ -27,10 +63,14 @@ type StatementRunner struct {
 	// RowLimit is the number of rows one run returns, which is also the maximum a caller
 	// can request.
 	RowLimit int
-	// AskToRun returns an empty text if the statement can run, and the reason if it
-	// cannot.
-	AskToRun     func(ctx context.Context, risk statement.WriteRisk, statements []string) string
-	RunStatement func(ctx context.Context, sql string, rowLimit int) (db.QueryResult, error)
+	// AskToRun returns whether the statement can run, and the reason if it cannot.
+	AskToRun func(
+		ctx context.Context, risk statement.WriteRisk, statements []string,
+	) RunPermission
+	// MeasureWrite measures one write without running it. A caller that measures no write
+	// on this connection leaves it unset, or answers false.
+	MeasureWrite func(ctx context.Context, sql string) (MeasuredWrite, bool)
+	RunStatement func(ctx context.Context, sql string, rowLimit int) (StatementAnswer, error)
 	// ReportRun is called after the run, so the caller can store the result.
 	ReportRun func(report StatementReport)
 }

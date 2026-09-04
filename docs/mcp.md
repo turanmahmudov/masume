@@ -83,6 +83,7 @@ When one server serves more than one profile, every tool takes a `profile` argum
 | `list_relationships` | The foreign keys into and out of a table |
 | `validate_query` | Whether a statement parses and its names resolve, without running it |
 | `explain_query` | The plan of a statement, estimated or measured |
+| `plan_write` | What a write would do, measured without running it |
 | `run_query` | The rows returned by a statement |
 
 `list_profiles` is the one tool that the MCP server has and the [chat](ai.md) does not. Call it first. `run_query` is the only tool that can write, and the only tool that returns table data. The other tools read the catalog, parse a statement, or read a plan.
@@ -143,7 +144,34 @@ A profile served at `read-only` also connects read-only. masume sets the session
 
 When a profile has `confirm_writes` set, the server does not run the write on its own. It sends the confirmation question to the agent with `elicitation/create`, and waits for the answer.
 
-An agent whose client does not support elicitation cannot run such a write.
+An agent whose client does not support elicitation cannot run such a write. The first line of the log says which kind of client is connected:
+
+```
+> initialize claude-code: can ask its user
+> initialize some-agent: cannot ask its user, so a write that confirms cannot run
+```
+
+`write_plan` on the profile measures the write first, and the question then carries what it lands on: the rows it was counted at, the columns it assigns, the relations it reaches through a trigger or a foreign key, and whether the write can be undone. See [configuration.md](configuration.md#measuring-a-write).
+
+Where the plan kept an undo, the answer of `run_query` carries an `undo` list: the statements that reverse the write, read inside its own transaction. They are not run. An agent can report them, and a person can run them.
+
+## A client that cannot ask
+
+Elicitation is optional, and several agent clients do not implement it. On one of those, a profile with `confirm_writes` set can run no write at all: masume has no way to reach you.
+
+`confirm_writes = "agent"` is for that case, and only for that case. **A client that can show a dialog is always shown the dialog**, whatever the agent sends: masume issues no token to such a client, and refuses one that arrives anyway. The token is a way to reach you where nothing else can, never a way around the question.
+
+On a client that cannot be asked it works like this:
+
+1. The agent calls `plan_write` with the statement. masume measures it and answers with the plan and a `token`. Nothing is written.
+2. The agent shows you the plan and asks, in its own words.
+3. If you agree, it calls `run_query` with that `token` as `plan_token`, and the write runs without a dialog.
+
+A token is bound to one statement on one connection, is taken one time, and goes stale after ten minutes. A statement that differs by one character does not match it. A profile set to `write` or `delete` issues no token at all, and neither does any profile on a client that shows dialogs.
+
+This is weaker than a dialog: your yes reaches masume through the model. It is stronger than `confirm_writes = "off"`, which asks nothing and shows nothing. Use it where the client cannot be asked, and `write` everywhere else.
+
+`plan_write` works on every client. On one that shows a dialog it is still useful: the agent can read the plan before it decides to ask at all.
 
 ## Logging
 

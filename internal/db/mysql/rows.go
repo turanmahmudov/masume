@@ -73,6 +73,7 @@ func readMysqlForeignKey(row map[string]any) db.ForeignKey {
 		TargetSchema:  db.ReadAnyText(row["target_schema"]),
 		TargetTable:   db.ReadAnyText(row["target_table"]),
 		TargetColumns: splitCommaList(row["target_columns"]),
+		DeleteRule:    query.ParseDeleteRule(db.ReadAnyText(row["delete_rule"])),
 	}
 }
 

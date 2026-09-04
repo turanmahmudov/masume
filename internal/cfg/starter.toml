@@ -31,7 +31,9 @@
 # password_command     = "pass db/shop"   # or from what this command writes
 # env                  = "dev"        # dev test prod. prod colours the whole title bar
 # mode                 = "write"      # write read-only
-# confirm_writes       = "off"        # off delete write. unset: off on dev, delete on test, write on prod
+# confirm_writes       = "off"        # off delete write agent. unset: off on dev, delete on test, write on prod
+# write_plan           = "off"        # off count undo. measure a write before it runs
+# undo_rows            = 1000         # rows a plan reads to build an undo. 0 sets no limit
 # sslmode              = "prefer"     # disable allow prefer require verify-ca verify-full
 # statement_timeout_ms = 0            # 0 leaves the timeout to the server
 # keepalive_s          = 30           # seconds between two checks. 0 sends no keepalive

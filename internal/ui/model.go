@@ -434,6 +434,12 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case changesAppliedMsg:
 		return model.readChangesAnswer(held)
 
+	case writePlanBuiltMsg:
+		return model.readWritePlanAnswer(held)
+
+	case undoWrittenMsg:
+		return model.readUndoAnswer(held)
+
 	case historyReadMsg:
 		return model.readHistoryAnswer(held)
 

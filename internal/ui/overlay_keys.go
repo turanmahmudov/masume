@@ -449,7 +449,7 @@ func (model *Model) runOverlayAction(
 	}
 
 	switch overlay.Kind {
-	case app.OverlayConfirm:
+	case app.OverlayConfirm, app.OverlayWritePlan:
 		switch match.Action {
 		case ActionAnswerYes:
 			answer := overlay.Answers.Answer

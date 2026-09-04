@@ -51,6 +51,7 @@ var dialogGroups = map[string][]ActionID{
 		ActionFoldRow, ActionUnfoldRow,
 	},
 	"changes":      {ActionClose, ActionApplyChanges, ActionDiscardChanges},
+	"write-plan":   {ActionClose, ActionAnswerYes, ActionAnswerNo},
 	"value-filter": {ActionClose, ActionToggleValue, ActionKeepAllValues, ActionKeepOnlyValue},
 	"ai-chat": {
 		ActionClose, ActionInsertAiSQL, ActionStopAiReply, ActionNewAiChat,

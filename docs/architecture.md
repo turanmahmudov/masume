@@ -23,10 +23,11 @@ No front end owns a connection. Each one accesses a server through `internal/db`
 | `internal/present` | Layout at a given width, value formatting, and the ER diagram |
 | `internal/app` | The application state: screens, tabs, connections, chats |
 | `internal/ui` | Rendering: the theme, the keys, the screens and the panes |
-| `internal/agent` | The nine tools shared by the chat and the MCP server |
+| `internal/agent` | The ten tools shared by the chat and the MCP server |
 | `internal/ai` | One provider client each, for Anthropic and OpenAI |
 | `internal/mcp` | The JSON-RPC server, `list_profiles`, and the access policy |
 | `internal/load` | Reading a data file into an import: sampling, kinds, mapping, the dry run, the statements |
+| `internal/writeplan` | What a write does before it runs: the rows it lands on, what it cascades into, and the statements that undo it |
 | `internal/detect` | The databases running in a container on this machine, read from docker or podman |
 | `internal/headless` | `masume run`: one statement, one format, one exit code, no screen |
 | `internal/hist` | The SQLite file: history, saved queries, marks, open tabs |

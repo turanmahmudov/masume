@@ -13,7 +13,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/hist"
+	"github.com/turanmahmudov/masume/internal/query/language"
 	"github.com/turanmahmudov/masume/internal/query/statement"
+	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
 // One question of the chat, asked and answered. The run happens in a goroutine, and reports
@@ -173,6 +175,9 @@ func (model *Model) buildChatToolDeps(
 	tables := append([]db.TableRef{}, connection.Catalog.Tables...)
 	profileName := connection.Profile().Name
 	log := model.log
+	// The undo of the write the user allowed, carried from the question to the report of
+	// the run. The tools of one reply run one after the other, so one is enough.
+	held := &heldChatUndo{}
 
 	return agent.ToolDeps{
 		Session: session,
@@ -187,19 +192,42 @@ func (model *Model) buildChatToolDeps(
 			RowLimit: connection.Profile().PageSize,
 			AskToRun: func(
 				ctx context.Context, risk statement.WriteRisk, statements []string,
-			) string {
-				return askChatToRun(ctx, run, events, connection.Profile(), risk, statements)
+			) agent.RunPermission {
+				return askChatToRun(ctx, chatQuestion{
+					run: run, events: events, profile: connection.Profile(),
+					session: session, tables: tables, held: held,
+				}, risk, statements)
+			},
+			// The panel asks the user itself, so a plan of the chat carries no token.
+			MeasureWrite: func(
+				ctx context.Context, sql string,
+			) (agent.MeasuredWrite, bool) {
+				return measureChatWrite(ctx, chatQuestion{
+					profile: connection.Profile(), session: session, tables: tables,
+				}, sql)
 			},
 			// The statement gets a limit, because the panel holds the keyboard while it runs.
 			RunStatement: func(
 				ctx context.Context, sql string, rowLimit int,
-			) (db.QueryResult, error) {
-				return agent.RunStatementWithin(ctx, session, model.ai.StatementTimeout,
-					func(running context.Context) (db.QueryResult, error) {
-						return session.RunQuery(running, sql, rowLimit, nil)
-					})
+			) (agent.StatementAnswer, error) {
+				return runChatWrite(ctx, session, held, func(
+					running context.Context,
+				) (db.QueryResult, error) {
+					return agent.RunStatementWithin(
+						running, session, model.ai.StatementTimeout,
+						func(limited context.Context) (db.QueryResult, error) {
+							return session.RunQuery(limited, sql, rowLimit, nil)
+						})
+				})
 			},
 			ReportRun: func(report agent.StatementReport) {
+				if held.kept.IsHeld() {
+					events <- app.ChatEvent{
+						Run: run, Kind: app.ChatUndoKept,
+						Text: report.SQL, Undo: held.kept,
+					}
+				}
+				held.undo, held.kept = writeplan.UndoPlan{}, writeplan.Undo{}
 				_ = log.Record(hist.HistoryEntry{
 					ProfileName: profileName, SQL: report.SQL, RanAt: report.RanAt,
 					Elapsed: report.Elapsed, RowCount: report.RowCount,
@@ -210,33 +238,119 @@ func (model *Model) buildChatToolDeps(
 	}
 }
 
-// askChatToRun asks the user whether a statement may run, and waits for the answer. The panel
-// asks it, not a card: only one overlay is drawn at a time, and a card would cover the
-// conversation.
+// heldChatUndo carries the undo of a write from the question the user answered, through the
+// run that reads it, to the report of that run.
+type heldChatUndo struct {
+	undo writeplan.UndoPlan
+	kept writeplan.Undo
+}
+
+// runChatWrite runs the statement, and reads its undo inside the same transaction where the
+// plan of the write keeps one.
+func runChatWrite(
+	ctx context.Context, session db.Session, held *heldChatUndo,
+	run func(context.Context) (db.QueryResult, error),
+) (agent.StatementAnswer, error) {
+	result, undo, err := writeplan.RunWithUndo(ctx, session, held.undo, run)
+	if err != nil {
+		return agent.StatementAnswer{}, err
+	}
+	held.kept = undo
+	return agent.StatementAnswer{
+		Result: result, Undo: undo.Display, UndoReason: undo.Reason,
+	}, nil
+}
+
+// chatQuestion is what one question of the chat needs: where the answer goes, and what
+// measures the write it asks about.
+type chatQuestion struct {
+	run     int
+	events  chan app.ChatEvent
+	profile cfg.Profile
+	session db.Session
+	tables  []db.TableRef
+	held    *heldChatUndo
+}
+
+// refusedByUser is what the model is told where the user said no.
+const refusedByUser = "the user did not allow this statement to run; nothing ran"
+
+// askChatToRun measures the write, asks the user whether it may run, and waits for the
+// answer. The panel asks it, not a card: only one overlay is drawn at a time, and a card
+// would cover the conversation.
 func askChatToRun(
-	ctx context.Context, run int, events chan app.ChatEvent,
-	profile cfg.Profile, risk statement.WriteRisk, statements []string,
-) string {
+	ctx context.Context, question chatQuestion,
+	risk statement.WriteRisk, statements []string,
+) agent.RunPermission {
+	profile := question.profile
 	summary := statement.DescribeRisk(risk, len(statements)) + " on " + string(profile.Environment)
 	ai.LogEvent("> asking to run (" + summary + "): " + strings.Join(statements, "; "))
 
+	plan, measured := buildChatWritePlan(ctx, question, risk, statements)
+	pending := app.PendingRun{Summary: summary, SQL: strings.Join(statements, ";\n")}
+	if measured {
+		pending.Plan = writeplan.DescribeLines(plan)
+	}
+
 	allowed := make(chan bool, 1)
-	events <- app.ChatEvent{
-		Run: run, Kind: app.ChatRunAsked, Allowed: allowed,
-		Ask: app.PendingRun{Summary: summary, SQL: strings.Join(statements, ";\n")},
+	question.events <- app.ChatEvent{
+		Run: question.run, Kind: app.ChatRunAsked, Allowed: allowed, Ask: pending,
 	}
 
 	select {
 	case confirmed := <-allowed:
-		if confirmed {
-			ai.LogEvent("< run allowed")
-			return ""
+		if !confirmed {
+			ai.LogEvent("< run refused")
+			return agent.RunPermission{Refusal: refusedByUser}
 		}
-		ai.LogEvent("< run refused")
-		return "the user did not allow this statement to run; nothing ran"
+		ai.LogEvent("< run allowed")
+		if measured {
+			question.held.undo = plan.Undo
+		}
+		return agent.RunPermission{}
 	case <-ctx.Done():
-		return "the user did not allow this statement to run; nothing ran"
+		return agent.RunPermission{Refusal: refusedByUser}
 	}
+}
+
+// measureChatWrite measures one write for the plan_write tool of the chat.
+func measureChatWrite(
+	ctx context.Context, question chatQuestion, sql string,
+) (agent.MeasuredWrite, bool) {
+	statements := question.session.Language().SplitStatements(sql)
+	risk := language.ResolveBatchRisk(statements, question.session.Language())
+	plan, measured := buildChatWritePlan(ctx, question, risk, statements)
+	if !measured {
+		return agent.MeasuredWrite{}, false
+	}
+	return agent.MeasuredWrite{
+		Lines: writeplan.DescribeLines(plan),
+		Table: plan.Table.Schema + "." + plan.Table.Name,
+		Rows:  plan.Rows, HasRows: plan.HasRows,
+		Total: plan.Total, HasTotal: plan.HasTotal,
+		Columns:    plan.Columns,
+		UndoRows:   plan.Undo.Rows,
+		UndoReason: plan.Undo.Reason,
+	}, true
+}
+
+// buildChatWritePlan measures the write the chat asked to run, so the panel says what it
+// lands on before the user answers.
+func buildChatWritePlan(
+	ctx context.Context, question chatQuestion,
+	risk statement.WriteRisk, statements []string,
+) (writeplan.Plan, bool) {
+	profile := question.profile
+	if !writeplan.Measures(profile, question.session.Capabilities(),
+		risk, len(statements)) {
+		return writeplan.Plan{}, false
+	}
+	return writeplan.Build(ctx, question.session, writeplan.Request{
+		SQL: statements[0], Tables: question.tables, Mode: profile.WritePlan,
+		UndoRows: profile.UndoRows,
+		InTransaction: question.session.ReadTransactionState() ==
+			db.TransactionOpen,
+	})
 }
 
 // chatRun is everything one run of the chat needs.

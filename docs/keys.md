@@ -163,6 +163,7 @@ Matching is plain text substring matching, so `id` also matches `customer_id`. T
 | `toggle-autocommit` | `ctrl+o` |
 | `toggle-result` | `alt+d` |
 | `toggle-sidebar` | `alt+s` |
+| `undo-write` | `alt+u` |
 
 ## Grid
 

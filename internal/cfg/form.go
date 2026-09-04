@@ -24,8 +24,9 @@ func buildBlankProfile() Profile {
 		Name: "new-connection", Engine: core.DefaultEngine, Host: "127.0.0.1",
 		Port: core.ResolveDefaultPort(core.DefaultEngine), Auth: AuthPassword,
 		Environment: EnvironmentDev, AccessMode: AccessWrite, Autocommit: true,
-		ConfirmWrites: ConfirmOff, CommandTimeout: DefaultCommandTimeout,
-		PageSize: DefaultPageSize, Keepalive: DefaultKeepalive,
+		ConfirmWrites: ConfirmOff, WritePlan: PlanOff, UndoRows: DefaultUndoRows,
+		CommandTimeout: DefaultCommandTimeout,
+		PageSize:       DefaultPageSize, Keepalive: DefaultKeepalive,
 	}
 }
 

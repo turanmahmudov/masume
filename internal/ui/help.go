@@ -135,6 +135,7 @@ var HelpSections = []HelpSection{
 			{Scope: cfg.ScopeGrid, Actions: []ActionID{ActionReviewChanges}, Text: "review the staged changes"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionApplyChanges}, Text: "apply them, in the review overlay"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionDiscardChanges}, Text: "discard them, there"},
+			{Scope: cfg.ScopeGlobal, Actions: []ActionID{ActionUndoWrite}, Text: "undo the last write"},
 		},
 	},
 	{

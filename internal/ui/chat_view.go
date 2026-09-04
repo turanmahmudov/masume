@@ -532,6 +532,11 @@ func (model *Model) renderChatPending(pending app.PendingRun, content int) []str
 	lines := []string{"", filled.Render(" ") +
 		padStyledOn(paintText(theme.Error, ground, present.TruncateText("run this? it "+pending.Summary, content-2)),
 			content-1, ground)}
+	for _, line := range pending.Plan {
+		lines = append(lines, filled.Render(" ")+padStyledOn(
+			paintText(theme.Muted, ground, present.TruncateText(line, content-2)),
+			content-1, ground))
+	}
 	highlights := buildSQLLineHighlights(pending.SQL)
 	for at, line := range strings.Split(pending.SQL, "\n") {
 		lines = append(lines, filled.Render(" ")+

@@ -17,6 +17,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/db/engines"
+	"github.com/turanmahmudov/masume/internal/query"
 )
 
 // openFile opens a session on a fresh SQLite file that holds the schema given.
@@ -526,13 +527,18 @@ func TestPingTreatsABusyFileAsHealthy(t *testing.T) {
 }
 
 // The foreign keys of the file are read, because the tree follows them and a grid cell can
-// jump along one.
+// jump along one. A write plan names the relations a delete is followed into, so the rule
+// of each key comes back with it.
 func TestSessionListsTheRelationshipsOfTheFile(t *testing.T) {
 	session := openFile(t, `
 create table customers (id integer primary key, name text);
 create table orders (
   id integer primary key,
-  customer_id integer references customers (id)
+  customer_id integer references customers (id) on delete cascade
+);
+create table notes (
+  id integer primary key,
+  customer_id integer references customers (id) on delete restrict
 );
 `)
 
@@ -540,14 +546,15 @@ create table orders (
 	if err != nil {
 		t.Fatalf("the relationships answered %v", err)
 	}
-	found := false
+	rules := map[string]query.DeleteRule{}
 	for _, one := range held {
-		if one.Table == "orders" {
-			found = true
-		}
+		rules[one.Table] = one.DeleteRule
 	}
-	if !found {
-		t.Errorf("the key was not listed; the file answered %d of them", len(held))
+	if rules["orders"] != query.DeleteRuleCascade {
+		t.Errorf("the cascading key answered %q", rules["orders"])
+	}
+	if rules["notes"] != query.DeleteRuleRestrict {
+		t.Errorf("the refusing key answered %q", rules["notes"])
 	}
 }
 

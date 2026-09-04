@@ -41,6 +41,10 @@ type Dialect struct {
 	BuildPlaceholder func(position int) string
 	// CountExpression counts the rows of a read.
 	CountExpression string
+	// RowLockClause holds the rows a read returns until the transaction ends, so a write
+	// that follows the read finds them as they were. A server that locks the whole
+	// database for a write leaves it empty.
+	RowLockClause string
 	// QuoteTextLiteral writes a value as the server would read it, for a person to see.
 	QuoteTextLiteral func(text string) string
 	// CanCompareType is true if the server can compare this type with `=`.

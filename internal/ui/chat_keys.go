@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -366,6 +367,9 @@ func (model *Model) applyChatEvent(connection *app.Connection, event app.ChatEve
 	case app.ChatTableRead:
 		connection.Catalog.Details[present.BuildTableID(event.Table)] =
 			present.TableDetailState{Kind: present.DetailReady, Detail: event.Detail}
+	case app.ChatUndoKept:
+		connection.KeepUndo(event.Undo, event.Text, time.Now())
+		chat.Notice = model.describeWriteOutcome(event.Undo)
 	case app.ChatEnded:
 		chat.Usage = chat.Usage.Add(event.Usage)
 		if event.Problem != "" {

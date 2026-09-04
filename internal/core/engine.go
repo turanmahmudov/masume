@@ -71,6 +71,9 @@ type Capabilities struct {
 	SortsRead      bool
 	TruncatesTable bool
 	WritesDDL      bool
+	// True if a write can be read as the relation and the rows it lands on, so a plan can
+	// count them. Only a server that takes SQL answers this.
+	PlansWrites bool
 	// True if a connection can be opened read-only. TiDB cannot: it accepts the
 	// statement but does not apply it.
 	TakesReadOnlyMode bool
@@ -125,6 +128,7 @@ var postgresCapabilities = Capabilities{
 	SortsRead:           true,
 	TruncatesTable:      true,
 	WritesDDL:           true,
+	PlansWrites:         true,
 	TakesReadOnlyMode:   true,
 
 	AppliesChangesTogether: true,
@@ -247,6 +251,7 @@ var engineRegistry = map[Engine]EngineInfo{
 			// SQLite empties a table with a delete of every row.
 			TruncatesTable:         false,
 			WritesDDL:              true,
+			PlansWrites:            true,
 			TakesReadOnlyMode:      true,
 			AppliesChangesTogether: true,
 		},

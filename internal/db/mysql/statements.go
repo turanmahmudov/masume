@@ -41,8 +41,13 @@ const describeMysqlForeignKeysSQL = `
          group_concat(k.column_name order by k.ordinal_position) as columns,
          k.referenced_table_schema as target_schema,
          k.referenced_table_name   as target_table,
-         group_concat(k.referenced_column_name order by k.ordinal_position) as target_columns
+         group_concat(k.referenced_column_name order by k.ordinal_position) as target_columns,
+         min(r.delete_rule) as delete_rule
     from information_schema.key_column_usage k
+    join information_schema.referential_constraints r
+      on r.constraint_schema = k.constraint_schema
+     and r.constraint_name   = k.constraint_name
+     and r.table_name        = k.table_name
    where k.table_schema = ?
      and k.table_name = ?
      and k.referenced_table_name is not null
@@ -57,8 +62,13 @@ var listMysqlRelationshipsSQL = `
          group_concat(k.column_name order by k.ordinal_position) as columns,
          k.referenced_table_schema as target_schema,
          k.referenced_table_name   as target_table,
-         group_concat(k.referenced_column_name order by k.ordinal_position) as target_columns
+         group_concat(k.referenced_column_name order by k.ordinal_position) as target_columns,
+         min(r.delete_rule) as delete_rule
     from information_schema.key_column_usage k
+    join information_schema.referential_constraints r
+      on r.constraint_schema = k.constraint_schema
+     and r.constraint_name   = k.constraint_name
+     and r.table_name        = k.table_name
    where k.referenced_table_name is not null
      and lower(k.table_schema) not in ` + mysqlSystemSchemaList + `
    group by k.table_schema, k.table_name, k.constraint_name,
@@ -88,7 +98,8 @@ var listMysqlRoutinesSQL = `
 var listMysqlTriggersSQL = `
   select trigger_schema     as ` + "`schema`" + `,
          trigger_name       as name,
-         event_object_table as detail
+         event_object_table as detail,
+         lower(event_manipulation) as events
     from information_schema.triggers
    where lower(trigger_schema) not in ` + mysqlSystemSchemaList + `
    order by trigger_schema, trigger_name

@@ -332,7 +332,8 @@ func buildContainerProfile(held container) (cfg.Profile, bool) {
 		Name: name, Engine: engine, Host: host, Port: port,
 		Auth: cfg.AuthPassword, Environment: cfg.EnvironmentDev,
 		AccessMode: cfg.AccessWrite, SSLMode: resolveContainerSSLMode(engine),
-		Autocommit: true, ConfirmWrites: cfg.ConfirmOff,
+		Autocommit: true, ConfirmWrites: cfg.ConfirmOff, WritePlan: cfg.PlanOff,
+		UndoRows:       cfg.DefaultUndoRows,
 		CommandTimeout: cfg.DefaultCommandTimeout, PageSize: cfg.DefaultPageSize,
 		Keepalive: cfg.DefaultKeepalive, Description: describeContainer(held, name),
 	}

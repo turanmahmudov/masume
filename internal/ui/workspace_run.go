@@ -15,6 +15,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 	"github.com/turanmahmudov/masume/internal/query/language"
 	"github.com/turanmahmudov/masume/internal/query/statement"
+	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
 // runStatementAtCursor runs the selection, or the statement at the caret. A selection wins
@@ -99,9 +100,11 @@ func (model *Model) runTabRead(
 		[]string{read.Display}, connection.Profile().PageSize)
 
 	reads := []db.ComposedRead{read}
-	runID := model.startBatch(connection, tab, reads, connection.Profile().PageSize)
+	runID := model.startBatch(connection, tab, reads,
+		connection.Profile().PageSize, writeplan.UndoPlan{})
 	return model, runStatements(model.ActiveID(), tab.ID, runID, 0, connection.Session,
-		reads, connection.Profile().PageSize, model.log, connection.Profile().Name)
+		reads, connection.Profile().PageSize, writeplan.UndoPlan{},
+		model.log, connection.Profile().Name)
 }
 
 // execute runs the statements of the user. It asks for the values of every `:name` mark
@@ -189,22 +192,37 @@ func (model *Model) executeBound(
 		return model, nil
 	}
 
+	if writeplan.Measures(connection.Profile(), connection.Session.Capabilities(),
+		risk, len(reads)) {
+		return model.askWithWritePlan(connection, tab, kept[0], reads[0])
+	}
 	if db.NeedsConfirmation(connection.Profile().ConfirmWrites, risk) {
-		question := statement.BuildConfirmation(connection.Profile().Name,
-			string(connection.Profile().Environment), risk, kept)
-		connection.Overlay = app.Overlay{
-			Kind: app.OverlayConfirm, Title: " " + question.Title + " ", Body: question.Body,
-			Answers: app.OverlayAnswers{Answer: func(confirmed bool) app.AnswerCommand {
-				if !confirmed {
-					return nil
-				}
-				return carryAnswer(model.startRun(connection, tab, kept, reads))
-			}},
-		}
-		return model, nil
+		return model.askPlainWriteQuestion(connection, tab, kept, reads)
 	}
 
-	return model, model.startRun(connection, tab, kept, reads)
+	return model, model.startRun(connection, tab, kept, reads, writeplan.UndoPlan{})
+}
+
+// askPlainWriteQuestion asks whether the statements may run, without measuring them. It is
+// what a connection that plans no write asks, and what a write this client could not read
+// as one relation falls back to.
+func (model *Model) askPlainWriteQuestion(
+	connection *app.Connection, tab *app.Tab, kept []string, reads []db.ComposedRead,
+) (tea.Model, tea.Cmd) {
+	risk := language.ResolveBatchRisk(kept, connection.Session.Language())
+	question := statement.BuildConfirmation(connection.Profile().Name,
+		string(connection.Profile().Environment), risk, kept)
+	connection.Overlay = app.Overlay{
+		Kind: app.OverlayConfirm, Title: " " + question.Title + " ", Body: question.Body,
+		Answers: app.OverlayAnswers{Answer: func(confirmed bool) app.AnswerCommand {
+			if !confirmed {
+				return nil
+			}
+			return carryAnswer(model.startRun(
+				connection, tab, kept, reads, writeplan.UndoPlan{}))
+		}},
+	}
+	return model, nil
 }
 
 // replaceResults opens the entries of a run and takes off what belonged to the result they
@@ -226,9 +244,11 @@ func (model *Model) replaceResults(
 	tab.DiscardChanges()
 }
 
-// startRun opens one entry per statement and asks the server for each of them in order.
+// startRun opens one entry per statement and asks the server for each of them in order. A
+// planned write carries the undo it reads inside its own transaction.
 func (model *Model) startRun(
-	connection *app.Connection, tab *app.Tab, statements []string, reads []db.ComposedRead,
+	connection *app.Connection, tab *app.Tab, statements []string,
+	reads []db.ComposedRead, undo writeplan.UndoPlan,
 ) tea.Cmd {
 	pageSize := connection.Profile().PageSize
 	model.replaceResults(connection, tab, statements, pageSize)
@@ -239,19 +259,23 @@ func (model *Model) startRun(
 	tab.Focus = app.PaneResult
 	tab.Completion.Close()
 
-	runID := model.startBatch(connection, tab, reads, pageSize)
+	runID := model.startBatch(connection, tab, reads, pageSize, undo)
 	return runStatements(model.ActiveID(), tab.ID, runID, 0, connection.Session, reads,
-		pageSize, model.log, connection.Profile().Name)
+		pageSize, undo, model.log, connection.Profile().Name)
 }
 
 // startBatch opens a run of that tab and returns the number it is stamped with. The number
 // tells the answers of this run from the answers of the run it replaced.
 func (model *Model) startBatch(
 	connection *app.Connection, tab *app.Tab, reads []db.ComposedRead, rowLimit int,
+	undo writeplan.UndoPlan,
 ) int {
 	return model.runs.start(
 		batchKey{connectionID: model.ActiveID(), tabID: tab.ID},
-		&runBatch{reads: reads, rowLimit: rowLimit, profileName: connection.Profile().Name},
+		&runBatch{
+			reads: reads, rowLimit: rowLimit, undo: undo,
+			profileName: connection.Profile().Name,
+		},
 	)
 }
 
@@ -324,6 +348,12 @@ func (model *Model) readQueryAnswer(answered queryRanMsg) (tea.Model, tea.Cmd) {
 	}
 
 	tab.Results.Succeed(answered.Index, answered.Read, answered.Result)
+	// A planned write says what it left behind. The undo is kept for this write only, and
+	// the next one replaces it.
+	if answered.Undo.Table.Name != "" {
+		connection.KeepUndo(answered.Undo, answered.Read.Display, time.Now())
+		connection.Show(model.describeWriteOutcome(answered.Undo))
+	}
 	model.placeResultCursor(connection, tab, answered.Result.Columns)
 	tab.Target = model.resolveEditTarget(connection, tab)
 	// A row is written through the columns of its relation, and a relation opened without
@@ -360,7 +390,7 @@ func (model *Model) askNextStatement(
 	}
 	return runStatements(answered.ConnectionID, answered.TabID, answered.RunID,
 		answered.Index+1, connection.Session, batch.reads, batch.rowLimit,
-		model.log, batch.profileName)
+		batch.undo, model.log, batch.profileName)
 }
 
 // readTargetColumns asks the server for the columns a result would be written through, and

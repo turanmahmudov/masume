@@ -82,12 +82,19 @@ var (
 	targetKeyColumnsSQL = buildKeyColumnsSQL("confkey", "confrelid")
 )
 
+// deleteRuleSQL writes the rule of a foreign key as text, out of the letter the catalog
+// holds for it.
+const deleteRuleSQL = `case c.confdeltype
+           when 'c' then 'cascade' when 'n' then 'set null' when 'd' then 'set default'
+           when 'r' then 'restrict' else 'no action' end`
+
 var describeForeignKeysSQL = `
   select c.conname as name,
          ` + sourceKeyColumnsSQL + ` as columns,
          tn.nspname as target_schema,
          tc.relname as target_table,
-         ` + targetKeyColumnsSQL + ` as target_columns
+         ` + targetKeyColumnsSQL + ` as target_columns,
+         ` + deleteRuleSQL + ` as delete_rule
     from pg_constraint c
     join pg_class tc     on tc.oid = c.confrelid
     join pg_namespace tn on tn.oid = tc.relnamespace
@@ -103,7 +110,8 @@ var listRelationshipsSQL = `
          ` + sourceKeyColumnsSQL + ` as columns,
          tn.nspname as target_schema,
          tc.relname as target_table,
-         ` + targetKeyColumnsSQL + ` as target_columns
+         ` + targetKeyColumnsSQL + ` as target_columns,
+         ` + deleteRuleSQL + ` as delete_rule
     from pg_constraint c
     join pg_class sc     on sc.oid = c.conrelid
     join pg_namespace sn on sn.oid = sc.relnamespace
@@ -127,18 +135,27 @@ const listRolesSQL = `
    order by r.rolname
 `
 
+// triggerEventsSQL writes the writes a trigger runs for, out of the bits the catalog holds
+// for them. A trigger can name more than one.
+const triggerEventsSQL = `concat_ws(', ',
+           case when tg.tgtype & 4 > 0 then 'insert' end,
+           case when tg.tgtype & 8 > 0 then 'delete' end,
+           case when tg.tgtype & 16 > 0 then 'update' end,
+           case when tg.tgtype & 32 > 0 then 'truncate' end)`
+
 var listSchemaObjectsSQL = `
   select n.nspname as schema,
          p.proname  as name,
          'function' as kind,
          pg_get_function_result(p.oid) as detail,
-         p.oid::text as identity
+         p.oid::text as identity,
+         '' as events
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
    where ` + buildSystemSchemaFilter("n.nspname") + `
      and p.prokind in ('f', 'p')
   union all
-  select n.nspname, c.relname, 'sequence', '', c.oid::text
+  select n.nspname, c.relname, 'sequence', '', c.oid::text, ''
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace
    where c.relkind = 'S'
@@ -147,14 +164,16 @@ var listSchemaObjectsSQL = `
   select n.nspname, t.typname, 'type',
          case t.typtype when 'e' then 'enum' when 'c' then 'composite' when 'd' then 'domain'
               else 'type' end,
-         t.oid::text
+         t.oid::text,
+         ''
     from pg_type t
     join pg_namespace n on n.oid = t.typnamespace
    where ` + buildSystemSchemaFilter("n.nspname") + `
      and t.typtype in ('e', 'c', 'd')
      and not exists (select 1 from pg_class c where c.oid = t.typrelid and c.relkind <> 'c')
   union all
-  select n.nspname, tg.tgname, 'trigger', c.relname, tg.oid::text
+  select n.nspname, tg.tgname, 'trigger', c.relname, tg.oid::text,
+         ` + triggerEventsSQL + `
     from pg_trigger tg
     join pg_class c     on c.oid = tg.tgrelid
     join pg_namespace n on n.oid = c.relnamespace

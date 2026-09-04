@@ -90,6 +90,8 @@ masume has a built-in AI chat and an MCP server over stdio. The chat uses the cu
 
 **Query history and saved queries.** Open tabs are restored after a restart
 
+**Write plans:** before a write runs, masume counts the rows it lands on, names the columns it assigns, the relations it reaches through a trigger, and the ones a foreign key refuses it for. It also reads the rows the write changes, inside the transaction of that write, so `Alt+U` undoes it afterwards. The chat and an agent over MCP are measured the same way, and an agent is handed the undo with its result
+
 **Manual transactions:** disable autocommit, then begin, commit or roll back
 
 **Read-only profiles:** the session is set read-only on the server, so writes are impossible

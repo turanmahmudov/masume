@@ -30,7 +30,9 @@ mode     = "write"
 | `auth` | `password`, or `command` if `password_command` is set | `password`, `command` or `prompt` |
 | `env` | `dev` | `dev`, `test` or `prod`. `prod` colours the title bar red |
 | `mode` | `write` | `write` or `read-only` |
-| `confirm_writes` | `off` on dev, `delete` on test, `write` on prod | `off`, `delete` or `write` |
+| `confirm_writes` | `off` on dev, `delete` on test, `write` on prod | `off`, `delete`, `write` or `agent`. `agent` is for an agent client that cannot show a question, see [mcp.md](mcp.md#a-client-that-cannot-ask) |
+| `write_plan` | `off` on dev, `count` on test, `undo` on prod | `off`, `count` or `undo`. See [Measuring a write](#measuring-a-write) |
+| `undo_rows` | `1000` | Rows a write plan reads to build an undo. `0` sets no limit |
 | `sslmode` | `prefer`, or `require` for engines that only accept TLS | `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full` |
 | `statement_timeout_ms` | `0` | Time limit for one statement in milliseconds. `0` uses the server default |
 | `keepalive_s` | `30` | Seconds between two connection checks. `0` disables the keepalive |
@@ -175,6 +177,34 @@ The dry run reads the whole file and reaches no server, so its answer is the sam
 The rows are written in batches of 1000 inside one transaction, so an import that fails part way leaves the table as it was, and the reason stays on the card.
 
 Not yet: an upsert on a key, Parquet, and an encoding other than UTF-8.
+
+## Measuring a write
+
+`write_plan` measures one write before it runs and shows what it does, in place of the plain question. It applies to a single statement on PostgreSQL, MySQL and SQLite: the client reads the relation and the predicate out of the statement, so a write that joins a second relation, that names its target through an alias, or that runs beside other statements keeps the plain question.
+
+```
+╭─ write plan · shop-prod ──────────────────────────────────────────────╮
+│ delete from orders where status = 'open'                              │
+│                                                                       │
+│ rows      12,904 of 48,210 in orders · 26.8%  ▇▇▇░░░░░░░░░            │
+│ cascades  order_lines · on delete cascade · 4,201 rows                │
+│ blocked   order_notes · on delete restrict · 8 rows reference these   │
+│ undo      12,904 rows read with the write  Alt+U after it ran         │
+│ commit    the write and its undo run in one transaction               │
+│                                                                       │
+│ y run · n cancel · Esc cancel                                         │
+╰───────────────────────────────────────────────────────────────────────╯
+```
+
+The rows are counted on the server with the predicate of the write, not estimated. An update also lists the columns it assigns. `cascades` names the triggers this write runs and the foreign keys that follow a removed row into another relation. `blocked` names the foreign keys that reject the delete while a row of theirs references these rows, which is a write the server answers with an error.
+
+`write_plan = "undo"` also builds the statements that reverse the write: an update per row for an update, an insert per row for a delete or a truncate. `Alt+U` runs them, all of them or none, after a question that names what they undo. Only the last write of a connection keeps an undo, and a write the server refuses keeps none.
+
+The rows of the undo are read inside the transaction of the write, and the read holds them until that transaction ends. A second session that writes to one of them waits for the commit, so the undo covers exactly the rows the write changed, with the values it overwrote. On a server without transactions the write runs without an undo, and the card says so.
+
+There is no undo where the relation has no primary key, where the write assigns that key, where it is an insert, or where it lands on more rows than `undo_rows`. The card says which of these it is before the write runs. Where the undo cannot be read at all, nothing is written: the answer was given to a plan that promised one.
+
+The chat and the MCP server measure a write the same way: the panel draws the plan with its question, and a statement an agent ran answers with an `undo` list of the statements that reverse it.
 
 ## Without a screen
 

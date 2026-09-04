@@ -8,6 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/present"
+	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
 // HealthState says whether the server still responds.
@@ -162,6 +163,9 @@ type Connection struct {
 	// True while the user holds a transaction open by hand.
 	Autocommit bool
 
+	// The last write that was measured, held so it can be undone.
+	Undo *HeldUndo
+
 	// The overlay on top, which owns the keyboard while it is open.
 	Overlay Overlay
 	// The tree of this connection: which rows are folded, and where the cursor is.
@@ -178,6 +182,20 @@ type Connection struct {
 	treeAt     treeFingerprint
 	treeResult present.TreeResult
 	treeBuilt  bool
+}
+
+// HeldUndo is the undo of one write, and the write it reverses.
+type HeldUndo struct {
+	Undo  writeplan.Undo
+	SQL   string
+	RanAt time.Time
+}
+
+// KeepUndo holds the undo of the write that just ran. Only the last one is kept: an older
+// one restores rows the newer write has changed since. A write that kept no undo is held as
+// well, so the key that runs one can say why there is none.
+func (connection *Connection) KeepUndo(undo writeplan.Undo, sql string, now time.Time) {
+	connection.Undo = &HeldUndo{Undo: undo, SQL: sql, RanAt: now}
 }
 
 // TreeState holds the view state of the object tree, which is not application state.

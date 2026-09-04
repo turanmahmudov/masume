@@ -71,7 +71,8 @@ func (session *mysqlSession) ListSchemaObjects(ctx context.Context) ([]db.Schema
 		name := db.ReadAnyText(row["name"])
 		objects = append(objects, db.SchemaObject{
 			Schema: schema, Name: name, Kind: db.ObjectTrigger,
-			Detail: db.ReadAnyText(row["detail"]), Identity: schema + "." + name,
+			Detail: db.ReadAnyText(row["detail"]), Events: db.ReadAnyText(row["events"]),
+			Identity: schema + "." + name,
 		})
 	}
 	return objects, nil

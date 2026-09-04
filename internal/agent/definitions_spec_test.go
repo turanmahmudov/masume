@@ -118,9 +118,11 @@ func TestRunQueryStopsWhereTheUserSaysNo(t *testing.T) {
 
 	question := askedQuestion{}
 	deps := buildRefusingDeps(&recordingSession{}, &question)
-	deps.Runner.RunStatement = func(context.Context, string, int) (db.QueryResult, error) {
+	deps.Runner.RunStatement = func(
+		context.Context, string, int,
+	) (agent.StatementAnswer, error) {
 		ran = true
-		return db.QueryResult{}, nil
+		return agent.StatementAnswer{}, nil
 	}
 
 	answered := tool.Call(context.Background(), deps,
@@ -281,9 +283,11 @@ func buildAskingDeps(
 		Session: session,
 		Runner: agent.StatementRunner{
 			RowLimit: 100,
-			AskToRun: func(_ context.Context, risk statement.WriteRisk, _ []string) string {
+			AskToRun: func(
+				_ context.Context, risk statement.WriteRisk, _ []string,
+			) agent.RunPermission {
 				question.asked, question.weighed = true, risk
-				return refusal
+				return agent.RunPermission{Refusal: refusal}
 			},
 		},
 	}

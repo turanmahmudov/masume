@@ -484,8 +484,9 @@ var explainQuery = ToolDefinition{
 		risk := language.ResolveBatchRisk(statements, deps.Session.Language())
 		canAnalyze := risk == statement.RiskNone
 		if !canAnalyze {
-			if refusal := deps.Runner.AskToRun(ctx, risk, statements); refusal != "" {
-				return map[string]any{"error": refusal}
+			permission := deps.Runner.AskToRun(ctx, risk, statements)
+			if permission.Refusal != "" {
+				return map[string]any{"error": permission.Refusal}
 			}
 		}
 
@@ -558,6 +559,6 @@ var validateQuery = ToolDefinition{
 func Definitions() []ToolDefinition {
 	return []ToolDefinition{
 		listTables, describeTable, listIndexes, listConstraints, getTableDDL,
-		listRelationships, validateQuery, explainQuery, runQuery,
+		listRelationships, validateQuery, explainQuery, planWrite, runQuery,
 	}
 }

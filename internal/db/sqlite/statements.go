@@ -12,7 +12,8 @@ const listSqliteColumnsSQL = `
 `
 
 const listSqliteForeignKeysSQL = `
-  select id, "table" as target_table, "from" as column_name, "to" as target_column
+  select id, "table" as target_table, "from" as column_name, "to" as target_column,
+         on_delete as delete_rule
     from pragma_foreign_key_list(?, ?)
    order by id, seq
 `

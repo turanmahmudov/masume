@@ -68,6 +68,7 @@ func serveClient(ctx context.Context, deps AccessDeps, version string) int {
 	tools := BuildTools(ToolDeps{
 		AccessDeps: deps,
 		Asker:      asker,
+		Plans:      CreatePlanTokens(),
 		// The statements of the agent go into the same history the screens read, so the
 		// user can see later what ran.
 		RecordQuery: func(entry hist.HistoryEntry) { _ = history.Record(entry) },

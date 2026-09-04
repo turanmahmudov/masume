@@ -243,6 +243,10 @@ type SchemaObject struct {
 	Name   string
 	Kind   SchemaObjectKind
 	Detail string
+	// The writes a trigger runs for, as `insert`, `update`, `delete` or `truncate`, more
+	// than one of them separated by commas. Only a trigger has them, and only where the
+	// catalog of the server names them.
+	Events string
 	// A DDL lookup identifies a function by its argument types.
 	Identity string
 }
@@ -405,13 +409,15 @@ type Adapter interface {
 }
 
 // NeedsConfirmation is true where a statement of this risk needs a yes. A write without a
-// WHERE is confirmed wherever a delete is, and `off` confirms nothing. It sits here, and
-// not with the risk itself, so reading a statement stays free of what the user configured.
+// WHERE is confirmed wherever a delete is, and `off` confirms nothing. `agent` confirms
+// every write as `write` does; who may answer is decided by the caller that asks. It sits
+// here, and not with the risk itself, so reading a statement stays free of what the user
+// configured.
 func NeedsConfirmation(mode cfg.ConfirmWrites, risk statement.WriteRisk) bool {
 	if mode == cfg.ConfirmOff || risk == statement.RiskNone {
 		return false
 	}
-	return mode == cfg.ConfirmWrite ||
+	return mode == cfg.ConfirmWrite || mode == cfg.ConfirmAgent ||
 		risk == statement.RiskDelete || risk == statement.RiskEveryRow
 }
 

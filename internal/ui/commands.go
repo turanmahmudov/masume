@@ -18,6 +18,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 	"github.com/turanmahmudov/masume/internal/query/editor"
 	"github.com/turanmahmudov/masume/internal/query/statement"
+	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
 // The work that reaches a server runs off the draw loop. Each command returns one message,
@@ -67,6 +68,8 @@ type queryRanMsg struct {
 	Problem string
 	// The whole run is done once the last statement answered.
 	Last bool
+	// The undo of a planned write, read inside the transaction of that write.
+	Undo writeplan.Undo
 }
 
 // pageReadMsg returns the next page of rows.
@@ -344,20 +347,38 @@ func readTableDetail(connectionID int, session db.CatalogReader, table db.TableR
 // next, so a statement that failed stops the batch: the ones after it were written for a
 // state the server no longer holds.
 func runStatements(
-	connectionID, tabID, runID, index int, session db.QueryRunner, reads []db.ComposedRead,
-	rowLimit int, log *hist.Store, profileName string,
+	connectionID, tabID, runID, index int, session db.Session, reads []db.ComposedRead,
+	rowLimit int, undo writeplan.UndoPlan, log *hist.Store, profileName string,
 ) tea.Cmd {
 	if index < 0 || index >= len(reads) {
 		return nil
 	}
-	return runOneStatement(connectionID, tabID, runID, index, session, reads[index], rowLimit,
-		index == len(reads)-1, log, profileName)
+	return runOneStatement(runOneStatementDeps{
+		connectionID: connectionID, tabID: tabID, runID: runID, index: index,
+		session: session, read: reads[index], rowLimit: rowLimit, undo: undo,
+		last: index == len(reads)-1, log: log, profileName: profileName,
+	})
 }
 
-func runOneStatement(
-	connectionID, tabID, runID, index int, session db.QueryRunner, read db.ComposedRead,
-	rowLimit int, last bool, log *hist.Store, profileName string,
-) tea.Cmd {
+// runOneStatementDeps is what one statement of a run needs.
+type runOneStatementDeps struct {
+	connectionID int
+	tabID        int
+	runID        int
+	index        int
+	session      db.Session
+	read         db.ComposedRead
+	rowLimit     int
+	undo         writeplan.UndoPlan
+	last         bool
+	log          *hist.Store
+	profileName  string
+}
+
+func runOneStatement(deps runOneStatementDeps) tea.Cmd {
+	connectionID, tabID, runID, index := deps.connectionID, deps.tabID, deps.runID, deps.index
+	session, read, rowLimit := deps.session, deps.read, deps.rowLimit
+	log, profileName, last := deps.log, deps.profileName, deps.last
 	return func() tea.Msg {
 		ctx := context.Background()
 		startedAt := time.Now()
@@ -366,7 +387,11 @@ func runOneStatement(
 			Read: read, Last: last,
 		}
 
-		result, err := session.ReadPage(ctx, read, db.ReadWindow{Limit: rowLimit})
+		result, undo, err := writeplan.RunWithUndo(ctx, session, deps.undo,
+			func(running context.Context) (db.QueryResult, error) {
+				return session.ReadPage(running, read, db.ReadWindow{Limit: rowLimit})
+			})
+		answered.Undo = undo
 		entry := hist.HistoryEntry{
 			ProfileName: profileName, SQL: read.Display, RanAt: startedAt,
 			Elapsed: time.Since(startedAt),

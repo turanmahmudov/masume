@@ -5,6 +5,7 @@ import (
 
 	"github.com/turanmahmudov/masume/internal/app"
 	"github.com/turanmahmudov/masume/internal/db"
+	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
 // buildAnswer answers what one statement of a run reports back.
@@ -29,9 +30,9 @@ func TestReadQueryAnswerDropsTheAnswerOfAReplacedRun(t *testing.T) {
 	id := model.ActiveID()
 
 	tab.Results.Start([]string{"select 1"}, 200)
-	first := model.startBatch(connection, tab, []db.ComposedRead{{Text: "select 1"}}, 200)
+	first := model.startBatch(connection, tab, []db.ComposedRead{{Text: "select 1"}}, 200, writeplan.UndoPlan{})
 	tab.Results.Start([]string{"select 2"}, 200)
-	second := model.startBatch(connection, tab, []db.ComposedRead{{Text: "select 2"}}, 200)
+	second := model.startBatch(connection, tab, []db.ComposedRead{{Text: "select 2"}}, 200, writeplan.UndoPlan{})
 
 	model.readQueryAnswer(buildAnswer(id, tab.ID, first, "select 1"))
 
@@ -62,8 +63,8 @@ func TestStartBatchKeepsTheRunOfEveryTab(t *testing.T) {
 	second := &app.Tab{ID: first.ID + 1}
 	id := model.ActiveID()
 
-	firstRun := model.startBatch(connection, first, []db.ComposedRead{{Text: "select 1"}}, 200)
-	secondRun := model.startBatch(connection, second, []db.ComposedRead{{Text: "select 2"}}, 200)
+	firstRun := model.startBatch(connection, first, []db.ComposedRead{{Text: "select 1"}}, 200, writeplan.UndoPlan{})
+	secondRun := model.startBatch(connection, second, []db.ComposedRead{{Text: "select 2"}}, 200, writeplan.UndoPlan{})
 
 	if _, held := model.findBatch(id, first.ID, firstRun); !held {
 		t.Error("the run of the second tab took the place of the run of the first")
@@ -86,10 +87,10 @@ func TestReadQueryAnswerStopsTheRunOfAClosedTab(t *testing.T) {
 	tab := connection.Active()
 	id := model.ActiveID()
 
-	runID := model.startBatch(connection, tab, []db.ComposedRead{{Text: "select 1"}}, 200)
+	runID := model.startBatch(connection, tab, []db.ComposedRead{{Text: "select 1"}}, 200, writeplan.UndoPlan{})
 	closedID := tab.ID + 7
 	model.startBatch(connection, &app.Tab{ID: closedID},
-		[]db.ComposedRead{{Text: "select 2"}}, 200)
+		[]db.ComposedRead{{Text: "select 2"}}, 200, writeplan.UndoPlan{})
 
 	model.readQueryAnswer(buildAnswer(id, closedID, runID+1, "select 2"))
 

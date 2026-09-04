@@ -1,6 +1,6 @@
 # AI chat
 
-Each connection has its own chat. The chat reads the database through the same nine tools that the [MCP server](mcp.md) provides to an agent. The chat cannot access a database that is not connected.
+Each connection has its own chat. The chat reads the database through the same ten tools that the [MCP server](mcp.md) provides to an agent. The chat cannot access a database that is not connected.
 
 | Key | Opens |
 | --- | --- |
@@ -49,7 +49,7 @@ This is the complete list. No table and no column is named.
 | The dialect | `Dialect: PostgreSQL` |
 | The name of the connected database | `Connected database: shop` |
 | The names of the other databases on the connection, up to a limit | `Other databases this connection can also see, named only: analytics, staging` |
-| The nine tool definitions | The name, description and arguments of each tool |
+| The ten tool definitions | The name, description and arguments of each tool |
 | `ai_instructions` from the profile, if set | "every amount is in cents" |
 
 The model is told that no table or column has been named. It must call `list_tables` to find out what exists, and `describe_table` before it writes a query against a table it has not seen.
@@ -76,6 +76,7 @@ Every read is a tool call. Each call is shown in the panel as a step, so you can
 | `list_relationships` | The foreign keys into and out of a table |
 | `validate_query` | Whether a statement parses and its names resolve. It does not run the statement |
 | `explain_query` | The plan of a statement. Estimated, or measured if the model asks for analyze |
+| `plan_write` | What a write would do, measured without running it |
 | `run_query` | The rows returned by a statement |
 
 `run_query` is the only tool that can write, and the only tool that returns table data.
@@ -84,12 +85,14 @@ Every read is a tool call. Each call is shown in the panel as a step, so you can
 
 - Any database that is not connected. The chat runs on the one connection it belongs to.
 - Any row of any table, until `run_query` returns one.
-- The file system, the network, and the config file. The nine tools above are the complete interface.
+- The file system, the network, and the config file. The ten tools above are the complete interface.
 - A write on a profile opened `read-only`. masume sets the session read-only on the server at connect time, so the server itself refuses the write.
 
 ## Before it writes
 
 The chat asks for confirmation before it runs a statement that writes. The question appears in the chat panel, and the statement runs only after you answer yes.
+
+`write_plan` on the profile applies as well: the panel draws what the write lands on under the question, and `Alt+U` undoes it after it ran. See [configuration.md](configuration.md#measuring-a-write).
 
 `mode` and `confirm_writes` on the profile apply to the chat in the same way as to a statement typed in the editor. A profile opened `read-only` is set read-only on the server, so the chat cannot write to it at all.
 
