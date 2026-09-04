@@ -27,8 +27,8 @@ func createRowSink(format Format, out io.Writer) rowSink {
 	switch format {
 	case FormatCSV, FormatJSON:
 		return &streamingSink{
-			out:    out,
-			writer: result.CreateExportWriter(resolveExportFormat(format), result.DefaultCSVOptions()),
+			writer: result.CreateRowWriter(
+				resolveExportFormat(format), result.DefaultCSVOptions(), out),
 		}
 	case FormatMarkdown:
 		return &heldSink{out: out, write: result.BuildMarkdown}
@@ -37,7 +37,7 @@ func createRowSink(format Format, out io.Writer) rowSink {
 	}
 }
 
-// resolveExportFormat returns the export writer of the format.
+// resolveExportFormat returns the export format of a run format.
 func resolveExportFormat(format Format) result.ExportFormat {
 	if format == FormatCSV {
 		return result.ExportCSV
@@ -46,37 +46,16 @@ func resolveExportFormat(format Format) result.ExportFormat {
 }
 
 // streamingSink writes each batch as it arrives. CSV and JSON are written this way.
-type streamingSink struct {
-	out    io.Writer
-	writer result.ExportWriter
-	began  bool
-}
-
-func (sink *streamingSink) begin(columns []query.ResultColumn) error {
-	if sink.began {
-		return nil
-	}
-	sink.began = true
-	_, err := io.WriteString(sink.out, sink.writer.Begin(columns))
-	return err
-}
+type streamingSink struct{ writer result.RowWriter }
 
 func (sink *streamingSink) TakeRows(rows [][]any, columns []query.ResultColumn) error {
-	if err := sink.begin(columns); err != nil {
-		return err
-	}
-	_, err := io.WriteString(sink.out, sink.writer.WriteRows(rows, columns))
-	return err
+	return sink.writer.WriteRows(rows, columns)
 }
 
 // Finish writes the end of the document. A result of no rows still writes the shape of one:
 // a CSV of its header alone, and an empty JSON array.
 func (sink *streamingSink) Finish(columns []query.ResultColumn) error {
-	if err := sink.begin(columns); err != nil {
-		return err
-	}
-	_, err := io.WriteString(sink.out, sink.writer.End())
-	return err
+	return sink.writer.Close(columns)
 }
 
 // heldSink holds every row until the result is whole, because its format measures the widest

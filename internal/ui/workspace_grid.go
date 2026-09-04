@@ -1219,17 +1219,9 @@ func (model *Model) startExport(
 			_ = os.Remove(temporaryPath)
 		}
 
-		writer := result.CreateExportWriter(format, options)
-		wroteHeader := false
+		writer := result.CreateRowWriter(format, options, file)
 		writeBatch := func(rows [][]any, columns []db.ResultColumn) error {
-			if !wroteHeader {
-				if _, headerErr := file.WriteString(writer.Begin(columns)); headerErr != nil {
-					return headerErr
-				}
-				wroteHeader = true
-			}
-			_, rowErr := file.WriteString(writer.WriteRows(rows, columns))
-			return rowErr
+			return writer.WriteRows(rows, columns)
 		}
 
 		written := int64(len(loaded.Rows))
@@ -1251,17 +1243,11 @@ func (model *Model) startExport(
 				return fail(batchErr.Error())
 			}
 		}
-		// A read of no rows still writes a file that reads back: a JSON array that is
-		// empty, and a CSV of its header alone.
-		if !wroteHeader {
-			if _, headerErr := file.WriteString(writer.Begin(loaded.Columns)); headerErr != nil {
-				dropTemporary()
-				return fail(headerErr.Error())
-			}
-		}
-		if _, endErr := file.WriteString(writer.End()); endErr != nil {
+		// A read of no rows still writes a file that reads back: an empty JSON array,
+		// and a CSV of its header alone.
+		if closeErr := writer.Close(loaded.Columns); closeErr != nil {
 			dropTemporary()
-			return fail(endErr.Error())
+			return fail(closeErr.Error())
 		}
 		// The close is reported. A write can fail here and nowhere earlier, when the disk
 		// fills or a mount returns late, and the user would otherwise read that the export
