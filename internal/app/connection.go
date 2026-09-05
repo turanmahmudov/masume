@@ -362,12 +362,21 @@ func (connection *Connection) OpenObject(object db.SchemaObject) *Tab {
 	return connection.showTab(NewObjectTab(connection.nextTabID, object))
 }
 
+// closedTabDepth is the number of closed tabs a connection holds. Each one keeps the page it
+// read, so a session that opens and closes tabs all day would hold every page it ever drew.
+const closedTabDepth = 10
+
 // CloseTab closes the tab at that position. The last tab cannot be closed.
 func (connection *Connection) CloseTab(index int) {
 	if len(connection.Tabs) <= 1 || index < 0 || index >= len(connection.Tabs) {
 		return
 	}
 	connection.closed = append(connection.closed, connection.Tabs[index])
+	if len(connection.closed) > closedTabDepth {
+		copy(connection.closed, connection.closed[1:])
+		connection.closed[len(connection.closed)-1] = nil
+		connection.closed = connection.closed[:len(connection.closed)-1]
+	}
 	connection.Tabs = append(connection.Tabs[:index], connection.Tabs[index+1:]...)
 	connection.ActiveIndex = core.ClampIndex(connection.ActiveIndex, len(connection.Tabs))
 }
@@ -393,6 +402,7 @@ func (connection *Connection) ReopenTab() bool {
 		return false
 	}
 	tab := connection.closed[len(connection.closed)-1]
+	connection.closed[len(connection.closed)-1] = nil
 	connection.closed = connection.closed[:len(connection.closed)-1]
 	connection.showTab(tab)
 	return true

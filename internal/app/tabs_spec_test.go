@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 
@@ -138,6 +139,46 @@ func TestReopenTabAnswersNothingWhereNoneWasClosed(t *testing.T) {
 	connection := openConnection(t)
 	if connection.ReopenTab() {
 		t.Error("a tab came back although none was closed")
+	}
+}
+
+// A closed tab keeps the page it read, so a connection holds only the last few of them. A
+// session that opens and closes tabs all day would otherwise hold every page it ever drew.
+func TestCloseTabHoldsOnlyTheLastFewClosedTabs(t *testing.T) {
+	connection := openConnection(t)
+	for at := range 200 {
+		connection.OpenQueryTab(fmt.Sprintf("select %d", at))
+		connection.CloseTab(connection.ActiveIndex)
+	}
+
+	reopened := 0
+	for connection.ReopenTab() {
+		reopened++
+	}
+	if reopened != 10 {
+		t.Errorf("%d tabs came back, wanted the last 10", reopened)
+	}
+}
+
+// The tabs that come back are the ones closed last, in the order they were closed.
+func TestReopenTabWalksBackFromTheTabClosedLast(t *testing.T) {
+	connection := openConnection(t)
+	for at := range 20 {
+		connection.OpenQueryTab(fmt.Sprintf("select %d", at))
+		connection.CloseTab(connection.ActiveIndex)
+	}
+
+	for at := 19; at >= 10; at-- {
+		if !connection.ReopenTab() {
+			t.Fatalf("the tab holding %d did not come back", at)
+		}
+		wanted := fmt.Sprintf("select %d", at)
+		if held := connection.Active().Editor.Text; held != wanted {
+			t.Fatalf("the tab came back holding %q, wanted %q", held, wanted)
+		}
+	}
+	if connection.ReopenTab() {
+		t.Error("a tab came back although only the last 10 are held")
 	}
 }
 
