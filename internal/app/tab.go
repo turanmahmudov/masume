@@ -341,9 +341,22 @@ func (tab *Tab) StatementToExplain(session db.SessionInfo) string {
 	}
 	// The values of the placeholders are written first, and the rewrite of the tab is
 	// applied to the result.
-	shown := tab.InlineParameters(session, tab.StatementUnderCaret(session))
+	shown := tab.InlineParameters(session, tab.StatementToPlan(session))
 	return strings.TrimSpace(
 		tab.ComposeStatementRead(session, db.BoundText{Text: shown}).Display)
+}
+
+// StatementToPlan returns the statement the plan belongs to. A batch draws one result per
+// statement, so it takes the statement off the result on show.
+func (tab *Tab) StatementToPlan(session db.SessionInfo) string {
+	if len(tab.Results.Results()) < 2 {
+		return tab.StatementUnderCaret(session)
+	}
+	active := tab.Results.Active()
+	if active == nil || active.Source == "" {
+		return tab.StatementUnderCaret(session)
+	}
+	return active.Source
 }
 
 // StatementUnderCaret returns the selection, or the statement at the caret.
