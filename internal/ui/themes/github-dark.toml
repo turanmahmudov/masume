@@ -1,0 +1,38 @@
+# GitHub Dark, from the default dark theme of github/github-vscode-theme. The grounds are
+# its canvas ramp, the text is fg.default over the grey its comments take, and the marks
+# are its functional set: accent, done, severe, success, attention and danger.
+#
+# GitHub names no cyan, so the note colour is the blue its constants take, one step off
+# the accent.
+
+title = "GitHub Dark"
+appearance = "dark"
+
+[palette]
+blue = "#58a6ff"
+blue-light = "#79c0ff"
+purple = "#d2a8ff"
+orange = "#ffa657"
+yellow = "#d29922"
+green = "#3fb950"
+red = "#ff7b72"
+red-deep = "#f85149"
+
+[colors]
+background = "#0d1117"
+panel = "#161b22"
+header = "#21262d"
+zebra = "#1a2029"
+border = "#30363d"
+border_focus = "blue"
+text = "#e6edf3"
+muted = "#8b949e"
+faint = "#6e7681"
+accent = "blue"
+accent_alt = "purple"
+accent_warm = "orange"
+info = "blue-light"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "red-deep"

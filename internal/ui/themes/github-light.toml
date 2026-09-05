@@ -1,0 +1,38 @@
+# GitHub Light, from the default light theme of github/github-vscode-theme. The text is
+# fg.default over fg.muted, and the marks are its functional set: accent, done, severe,
+# success, attention and danger. The quietest text is a step under fg.muted, because this
+# needs three steps and the theme names two.
+#
+# GitHub names no cyan, so the note colour is the blue its constants take.
+
+title = "GitHub Light"
+appearance = "light"
+
+[palette]
+blue = "#0969da"
+blue-deep = "#0550ae"
+purple = "#8250df"
+orange = "#bc4c00"
+yellow = "#9a6700"
+green = "#1a7f37"
+red = "#cf222e"
+red-deep = "#a40e26"
+
+[colors]
+background = "#eaeef2"
+panel = "#f6f8fa"
+header = "#dde3ea"
+zebra = "#eef1f5"
+border = "#d0d7de"
+border_focus = "blue"
+text = "#1f2328"
+muted = "#656d76"
+faint = "#7d8590"
+accent = "blue"
+accent_alt = "purple"
+accent_warm = "orange"
+info = "blue-deep"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "red-deep"

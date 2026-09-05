@@ -1,0 +1,41 @@
+# One Dark, from the `colors.less` of atom/one-dark-syntax, converted from its HSL. The
+# theme names three greys and this needs three text steps, but mono-2 reads at 4.0 on the
+# pane and mono-3 at 2.3, so both are stepped toward mono-1 until each clears its floor.
+# Its second red, hue-5-2, reads at 3.0 and is stepped the same way.
+#
+# The grounds are the ones one-dark-ui draws its chrome in; the pane is the syntax
+# background, and the screen behind it is the step under that. The selection is the one
+# the theme names: mixing the pane and mono-1 leaves the text at 3.9 on it.
+
+title = "One Dark"
+appearance = "dark"
+
+[palette]
+blue = "#61afef"
+purple = "#c678dd"
+orange = "#d19a66"
+yellow = "#e5c07b"
+green = "#98c379"
+cyan = "#56b6c2"
+red = "#e06c75"
+red-deep = "#cf6357"
+
+[colors]
+background = "#21252b"
+panel = "#282c34"
+header = "#3a3f4b"
+zebra = "#2c313a"
+border = "#4b5263"
+selection = "#3e4451"
+border_focus = "blue"
+text = "#abb2bf"
+muted = "#9099a8"
+faint = "#70778a"
+accent = "blue"
+accent_alt = "purple"
+accent_warm = "orange"
+info = "cyan"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "red-deep"

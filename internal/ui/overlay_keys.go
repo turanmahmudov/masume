@@ -1338,10 +1338,14 @@ func (model *Model) scrollChatFromField(
 	return true
 }
 
-// resetOverlayCursor puts the cursor of a filtered list back on its first row.
+// resetOverlayCursor puts the cursor of a filtered list back on its first row. Every card
+// whose term keeps rows is named here: a cursor left where it stood points past the end of
+// what the term kept, and a card whose cursor points past its rows takes no answer at all.
 func (model *Model) resetOverlayCursor(connection *app.Connection, overlay *app.Overlay) {
 	switch overlay.Kind {
-	case app.OverlayHistory, app.OverlaySaved, app.OverlayPalette, app.OverlayHelp:
+	case app.OverlayHistory, app.OverlaySaved, app.OverlayPalette, app.OverlayHelp,
+		app.OverlayThemePicker, app.OverlayActionMenu, app.OverlayObjectMenu,
+		app.OverlayCopyMenu, app.OverlayAiChats:
 		overlay.List.Cursor, overlay.List.Offset, overlay.List.Rolled = 0, 0, false
 	}
 }

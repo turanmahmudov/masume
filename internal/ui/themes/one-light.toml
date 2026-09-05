@@ -1,0 +1,36 @@
+# One Light, from the `colors.less` of atom/one-light-syntax, converted from its HSL. Its
+# mono-3 reads at 2.5 on the pane, so the quietest text is stepped toward mono-1. The
+# orange, the green and the red sit under 4:1 as well, so each of those is stepped toward
+# black. The hue is the theme's; only the weight moved.
+
+title = "One Light"
+appearance = "light"
+
+[palette]
+blue = "#4078f2"
+purple = "#a626a4"
+orange = "#a86f00"
+yellow = "#986801"
+green = "#3f8b3e"
+cyan = "#0184bc"
+red = "#d1483c"
+red-deep = "#ca1243"
+
+[colors]
+background = "#eaeaeb"
+panel = "#fafafa"
+header = "#dfdfe1"
+zebra = "#f2f2f2"
+border = "#c9c9cc"
+border_focus = "blue"
+text = "#383a42"
+muted = "#696c77"
+faint = "#8c8d94"
+accent = "blue"
+accent_alt = "purple"
+accent_warm = "orange"
+info = "cyan"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "red-deep"

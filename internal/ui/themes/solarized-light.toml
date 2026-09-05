@@ -1,0 +1,46 @@
+# Solarized Light. Its base ramp is the theme, as it is in the dark variant, and the
+# three text steps mirror it: base02, base01 and base00, where the dark one takes base2,
+# base1 and base0. Solarized tunes its accents for base3 as a ground of text, not as the
+# ground of a pane, so the blue, the cyan, the green and the yellow are stepped toward
+# base03 until each of them reads on a pane. The other four are its own.
+#
+# A failure takes the magenta, which keeps it off the red a production mark takes. The
+# three grounds between base2 and base3 are steps of that ramp: Solarized names a pane
+# and a screen, and this needs a header and a zebra as well.
+
+title = "Solarized Light"
+appearance = "light"
+
+[palette]
+base3 = "#fdf6e3"
+base2 = "#eee8d5"
+base00 = "#657b83"
+base01 = "#586e75"
+base02 = "#073642"
+yellow = "#8a6800"
+orange = "#cb4b16"
+red = "#dc322f"
+magenta = "#d33682"
+violet = "#6c71c4"
+blue = "#1a7fbf"
+cyan = "#1c8078"
+green = "#6f8000"
+
+[colors]
+background = "base2"
+panel = "base3"
+header = "#e4dcc4"
+zebra = "#f7f0dc"
+border = "#d6cdb4"
+border_focus = "blue"
+text = "base02"
+muted = "base01"
+faint = "base00"
+accent = "blue"
+accent_alt = "violet"
+accent_warm = "orange"
+info = "cyan"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "magenta"

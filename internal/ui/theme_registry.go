@@ -26,7 +26,9 @@ const FallbackThemeName = "ayu-dark"
 // shippedThemeOrder is the order the picker lists the themes the app ships in.
 var shippedThemeOrder = []string{
 	"ayu-dark", "tokyonight", "catppuccin-mocha", "gruvbox-dark", "dracula", "nord",
-	"rose-pine", "solarized-dark", "catppuccin-latte", "gruvbox-light", "rose-pine-dawn",
+	"one-dark", "monokai", "github-dark", "rose-pine", "solarized-dark",
+	"catppuccin-latte", "github-light", "one-light", "gruvbox-light",
+	"solarized-light", "rose-pine-dawn",
 }
 
 // SystemThemeName is derived from the terminal, so no file may use this name.

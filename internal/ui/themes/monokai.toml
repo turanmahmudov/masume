@@ -1,0 +1,40 @@
+# Monokai, the set Sublime Text ships: the background, the foreground, the selection, the
+# line highlight and the six syntax colours are the ones of `Monokai.tmTheme`. The theme
+# names one grey, its comment, which is the quietest text here; the step between that and
+# the foreground is added, because this needs three and Monokai names two.
+#
+# It names one red as well, the pink its keywords take, and that pink is the accent here.
+# A failure and a production mark cannot be the accent, so the two reds below are stepped
+# off it toward its orange. The screen behind the pane is a step under the background.
+
+title = "Monokai"
+appearance = "dark"
+
+[palette]
+pink = "#f92672"
+purple = "#ae81ff"
+orange = "#fd971f"
+yellow = "#e6db74"
+green = "#a6e22e"
+cyan = "#66d9ef"
+red = "#fd6b53"
+red-deep = "#e2483c"
+
+[colors]
+background = "#1e1f1c"
+panel = "#272822"
+header = "#3e3d31"
+zebra = "#2e2f28"
+border = "#49483e"
+border_focus = "pink"
+text = "#f8f8f2"
+muted = "#a6a292"
+faint = "#75715e"
+accent = "pink"
+accent_alt = "purple"
+accent_warm = "orange"
+info = "cyan"
+success = "green"
+warning = "yellow"
+danger = "red"
+error = "red-deep"

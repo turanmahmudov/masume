@@ -100,7 +100,7 @@ masume has a built-in AI chat and an MCP server over stdio. The chat uses the cu
 
 **Read-only profiles:** the session is set read-only on the server, so writes are impossible
 
-**Eleven built-in themes,** or use the terminal colours. When the terminal theme changes, masume updates
+**Seventeen built-in themes,** or use the terminal colours. When the terminal theme changes, masume updates
 
 **AI is optional:** `[ai] enabled = false` disables all AI features and hides them from the interface
 

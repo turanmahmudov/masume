@@ -1,6 +1,10 @@
 # Themes
 
-Press `Alt+O` then `T` to see the built-in themes and select one. There are eleven: Tokyo Night, Catppuccin Mocha and Latte, Gruvbox Dark and Light, Rosé Pine and Dawn, Nord, Dracula, Ayu Dark and Solarized Dark.
+Press `Alt+O` then `T` to see the built-in themes and select one. There are seventeen.
+
+Dark: Ayu Dark, Tokyo Night, Catppuccin Mocha, Gruvbox Dark, Dracula, Nord, One Dark, Monokai, GitHub Dark, Rosé Pine, Solarized Dark.
+
+Light: Catppuccin Latte, GitHub Light, One Light, Gruvbox Light, Solarized Light, Rosé Pine Dawn.
 
 To set one in the config instead:
 
