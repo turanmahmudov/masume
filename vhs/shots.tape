@@ -20,7 +20,7 @@ Set Theme "ayu"
 Set TypingSpeed 25ms
 
 Hide
-Type "export XDG_CONFIG_HOME=$PWD/.demo/config XDG_STATE_HOME=$PWD/.demo/state" Enter
+Type "export XDG_CONFIG_HOME=$PWD/.demo/config XDG_STATE_HOME=$PWD/.demo/state MASUME_DEMO_PASSWORD=secret" Enter
 Type "clear" Enter
 Type "masume" Enter
 Sleep 2s

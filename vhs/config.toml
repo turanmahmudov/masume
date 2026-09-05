@@ -1,5 +1,6 @@
 # The config the demo recording runs with. It points at the postgres container in
-# compose.yaml, so the password here opens nothing else.
+# compose.yaml. No file masume reads holds a password, so the tapes export
+# MASUME_DEMO_PASSWORD and the profile below reads it.
 [ui]
 icons               = "plain"
 theme               = "ayu-dark"
@@ -47,13 +48,13 @@ banner      = "⚑"
 new-tab     = "+"
 
 [profile.shop]
-engine      = "postgres"
-host        = "127.0.0.1"
-port        = 55432
-database    = "shop"
-user        = "postgres"
-auth        = "password"
-password    = "secret"
-env         = "dev"
-mode        = "write"
-description = "the demo shop database"
+engine       = "postgres"
+host         = "127.0.0.1"
+port         = 55432
+database     = "shop"
+user         = "postgres"
+auth         = "password"
+password_env = "MASUME_DEMO_PASSWORD"
+env          = "dev"
+mode         = "write"
+description  = "the demo shop database"
