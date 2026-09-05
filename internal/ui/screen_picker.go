@@ -447,3 +447,18 @@ func (model *Model) readPasswordKey(key tea.Key) (tea.Model, tea.Cmd) {
 	}
 	return model, nil
 }
+
+// pasteIntoPassword writes what the terminal pasted into the password field.
+func (model *Model) pasteIntoPassword(written string) (tea.Model, tea.Cmd) {
+	if model.confirm != nil {
+		return model, nil
+	}
+	model.picker.password.Insert(flattenPaste(written))
+	return model, nil
+}
+
+// flattenPaste turns the breaks of a paste into spaces, because a field is one line.
+func flattenPaste(written string) string {
+	written = strings.ReplaceAll(strings.ReplaceAll(written, "\r\n", " "), "\r", " ")
+	return strings.ReplaceAll(written, "\n", " ")
+}

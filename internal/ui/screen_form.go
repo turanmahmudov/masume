@@ -211,10 +211,7 @@ func (model *Model) pasteIntoForm(written string) (tea.Model, tea.Cmd) {
 	if form == nil || model.confirm != nil {
 		return model, nil
 	}
-	// A field is one line, so the breaks of a paste are dropped rather than written.
-	written = strings.ReplaceAll(strings.ReplaceAll(written, "\r\n", " "), "\r", " ")
-	written = strings.ReplaceAll(written, "\n", " ")
-	form.Draft.Insert(written)
+	form.Draft.Insert(flattenPaste(written))
 	form.keepField()
 	return model, nil
 }

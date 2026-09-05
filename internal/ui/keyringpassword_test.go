@@ -205,3 +205,16 @@ func TestRemovingAConnectionRemovesItsStoredPassword(t *testing.T) {
 		t.Error("the keyring still holds the password of a connection that was removed")
 	}
 }
+
+func TestAPasteReachesThePasswordField(t *testing.T) {
+	useNoKeyring(t)
+	model := buildOfflineModel(t, 160, 48)
+	model.screen = ScreenPromptingPassword
+	model.picker.askPassword(buildPromptingProfile("shop"))
+
+	next, _ := model.Update(tea.PasteMsg{Content: "s3cret\n"})
+	typed := next.(*Model).picker.password.Text
+	if typed != "s3cret " {
+		t.Fatalf("the paste answers %q", typed)
+	}
+}
