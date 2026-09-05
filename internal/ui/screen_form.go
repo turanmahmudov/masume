@@ -211,7 +211,17 @@ func (model *Model) pasteIntoForm(written string) (tea.Model, tea.Cmd) {
 	if form == nil || model.confirm != nil {
 		return model, nil
 	}
-	form.Draft.Insert(flattenPaste(written))
+	pasted := flattenPaste(written)
+	// A pasted connection string fills the whole form, so it takes the place of the field
+	// rather than joining what the field already holds.
+	if _, isURL := cfg.ParseConnectionURL(strings.TrimSpace(pasted)); isURL {
+		form.Draft = app.NewEditorBuffer(
+			strings.TrimSpace(pasted), len(strings.TrimSpace(pasted)))
+		form.keepField()
+		form.openField()
+		return model, nil
+	}
+	form.Draft.Insert(pasted)
 	form.keepField()
 	return model, nil
 }

@@ -131,7 +131,7 @@ var overlayWidths = map[app.OverlayKind]int{
 	app.OverlayMessage:    72,
 	app.OverlayObjectMenu: 72,
 	app.OverlayActionMenu: 72,
-	app.OverlayCopyMenu:   64,
+	app.OverlayCopyMenu:   70,
 	app.OverlayRowDetail:  92,
 }
 
@@ -178,10 +178,9 @@ var overlayHeightShares = map[app.OverlayKind]int{
 
 // overlayHeightRows name the cards that keep one height, whatever the screen is.
 var overlayHeightRows = map[app.OverlayKind]int{
-	app.OverlayCopyMenu: 12,
-	app.OverlayMessage:  12,
-	app.OverlayConfirm:  16,
-	app.OverlayChoice:   16,
+	app.OverlayMessage: 12,
+	app.OverlayConfirm: 16,
+	app.OverlayChoice:  16,
 }
 
 // resolveOverlayHeight returns how tall one card draws: the share of the screen it is given,
@@ -196,6 +195,12 @@ func (model *Model) resolveOverlayHeight(
 	switch share, held := overlayHeightShares[kind]; {
 	case held:
 		asked = model.height * share / 100
+		// A card keeps no more rows than its list holds, so a short list leaves no
+		// empty band under it. The count is of the whole list and not of what a term
+		// kept, so the card does not grow and shrink while the user types.
+		if contentRows > 0 {
+			asked = min(asked, contentRows+present.CardChrome+hintRows)
+		}
 	default:
 		if rows, fixed := overlayHeightRows[kind]; fixed {
 			asked = rows
@@ -487,10 +492,11 @@ func (model *Model) recordCardBody() {
 }
 
 // The parts of a row every list of a card draws: the padding before the first one, the
-// column the scroll bar takes, and the width of the detail where the row has a trail.
+// column the scroll bar takes with a blank column before it, and the width of the detail
+// where the row has a trail.
 const (
 	rowPaddingLeft    = 1
-	rowScrollbarWidth = 1
+	rowScrollbarWidth = 2
 	detailBesideTrail = 8
 )
 
@@ -595,7 +601,7 @@ const (
 	menuChordWidth = 13
 	menuLabelWidth = 22
 	// The menus that carry no key of their own give the name the room instead.
-	copyLabelWidth   = 20
+	copyLabelWidth   = 22
 	objectLabelWidth = 24
 )
 
@@ -711,7 +717,7 @@ func (model *Model) describeHelpKeys(entry HelpEntry) string {
 }
 
 // helpPlaceholder is what the search line of the help asks for.
-const helpPlaceholder = "a key, or what it does"
+const helpPlaceholder = "search for a key, or for what it does"
 
 // scrollHelpByCursor moves the help, which scrolls without a cursor of its own and so keeps
 // how far it has scrolled where a list keeps its cursor. Without this a drag of its bar writes
@@ -802,7 +808,7 @@ func (model *Model) renderPalette(overlay app.Overlay, width int) string {
 		Kind: app.OverlayPalette, Title: " command palette ",
 		Filter: model.renderFilterFieldOf(overlay, width, "action", -1), Rows: rows,
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
-		ReportsNoMatch: true,
+		ReportsNoMatch: true, ContentRows: len(overlay.Palette) + 1,
 		Keys: model.sayKeys().say("type to filter").
 			bind(cfg.ScopeList, ActionChooseRow, "run").
 			bind(cfg.ScopeDialog, ActionClose, "close"),
@@ -843,7 +849,7 @@ func (model *Model) renderHistory(overlay app.Overlay, width int) string {
 		Filter: model.renderFilterFieldOf(
 			overlay, width, "search the statements", len(entries)),
 		Rows: rows, Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
-		ReportsNoMatch: true, Keys: keys,
+		ReportsNoMatch: true, Keys: keys, ContentRows: len(overlay.Entries) + 1,
 	})
 }
 
@@ -895,7 +901,7 @@ func (model *Model) renderSaved(overlay app.Overlay, width int) string {
 		Title:  " saved queries · " + present.FormatCount(int64(len(overlay.Saved))) + " ",
 		Filter: model.renderFilterFieldOf(overlay, width, "name", -1), Rows: rows,
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
-		ReportsNoMatch: true, Keys: keys,
+		ReportsNoMatch: true, Keys: keys, ContentRows: len(overlay.Saved) + 1,
 	})
 }
 
@@ -947,12 +953,12 @@ func (model *Model) renderMenu(overlay app.Overlay, width int) string {
 	} else if !strings.HasPrefix(title, " ") {
 		title = " " + title + " "
 	}
-	taken, placeholder := "runs it", "action"
+	taken, placeholder := "run", "filter the actions"
 	switch overlay.Kind {
 	case app.OverlayCopyMenu:
-		taken, placeholder = "copy", "what to copy"
+		taken, placeholder = "copy", "filter what to copy"
 	case app.OverlayObjectMenu:
-		taken = "writes the query into the editor"
+		taken = "run the action"
 	}
 	said := model.sayKeys().
 		bind(cfg.ScopeList, ActionChooseRow, taken).
@@ -962,6 +968,8 @@ func (model *Model) renderMenu(overlay app.Overlay, width int) string {
 		Filter: model.renderFilterFieldOf(overlay, width, placeholder, -1), Rows: rows,
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
 		ReportsNoMatch: true, Keys: said,
+		// The filter line stands over the rows and takes one of them.
+		ContentRows: len(overlay.Actions) + 1,
 	})
 }
 
@@ -1059,7 +1067,7 @@ func (model *Model) renderDiagram(overlay app.Overlay, width int) string {
 		lines = append(lines, model.styles.Ink().Render(present.TruncateText(line, room)))
 	}
 	return model.renderTextCard(overlay.Kind, overlay.Title, width, lines,
-		model.sayKeys().bind(cfg.ScopeDialog, ActionClose, "close").name("↑↓ ←→", "scroll"),
+		model.sayKeys().name("↑↓ ←→", "scroll").bind(cfg.ScopeDialog, ActionClose, "close"),
 		len(overlay.Lines), plainCard)
 }
 
@@ -1403,11 +1411,15 @@ func (model *Model) renderThemePicker(overlay app.Overlay, width int) string {
 		Filter: model.renderFilterFieldOf(overlay, width, "theme", len(choices)), Rows: rows,
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
 		ReportsNoMatch: true,
-		Keys: model.sayKeys().say("move to try one").
+		ContentRows:    len(model.styles.registry.ListThemeChoices()) + 1,
+		Keys: model.sayKeys().say("each theme is shown while the cursor is on it").
 			bind(cfg.ScopeList, ActionChooseRow, "select").
 			bind(cfg.ScopeDialog, ActionClose, "cancel"),
 	})
 }
+
+// narrowestActivityRows is the least rows the server activity keeps for its sessions.
+const narrowestActivityRows = 8
 
 // The columns of the dashboard: the meter of the connections, and the clock at the right of
 // a row of the blocking tree.
@@ -1461,6 +1473,10 @@ func (model *Model) renderActivity(
 		Rolled: overlay.List.Rolled, Width: width,
 		EmptyReport: "the server holds no other session",
 		Keys:        keys,
+		// A floor under the rows, so the card does not resize on every refresh while
+		// the sessions of a quiet server come and go.
+		ContentRows: max(len(rows), narrowestActivityRows) +
+			len(model.buildDashboardHeader(overlay, width)),
 	})
 }
 
@@ -1509,7 +1525,7 @@ func (model *Model) buildDashboardSummary(overlay app.Overlay, width int) string
 	reading := overlay.Server
 	if reading.HasLoad {
 		load := reading.Load
-		said += paintText(theme.Muted, theme.Panel, "conns ")
+		said += paintText(theme.Muted, theme.Panel, "connections ")
 		said += paintText(model.resolveLoadInk(load), theme.Panel,
 			strconv.FormatInt(load.Connections, 10)+"/"+
 				strconv.FormatInt(load.MaxConnections, 10))
@@ -1603,7 +1619,7 @@ func (model *Model) buildDashboardMeasures(overlay app.Overlay) []dashboardMeasu
 			ink = theme.Warning
 		}
 		measures = append(measures, dashboardMeasure{
-			label: "tmp files", value: present.FormatCount(load.TempFiles), ink: ink,
+			label: "temp files", value: present.FormatCount(load.TempFiles), ink: ink,
 		})
 	}
 	return measures
@@ -1803,7 +1819,8 @@ func (model *Model) renderExport(overlay app.Overlay, width int) string {
 		}
 
 		value := field.Value
-		written := model.styles.Muted().Render(present.TruncateText(value, valueWidth))
+		written := model.styles.Muted().Render(
+			present.TruncateText(describeFieldValue(field), valueWidth))
 		switch {
 		case len(field.Choices) > 0:
 			written = model.renderChoiceField(value, valueWidth, at,
@@ -1823,7 +1840,7 @@ func (model *Model) renderExport(overlay app.Overlay, width int) string {
 	lines = append(lines, model.styles.Error().Render(
 		present.TruncateText(FindExportProblem(overlay), width-4)))
 
-	keys := model.sayKeys().name("↑↓", "field").name("← →", "change").
+	keys := model.sayKeys().name("↑↓", "field").name("←→", "change").
 		bind(cfg.ScopeDialog, ActionWriteExport, "write").
 		bind(cfg.ScopeDialog, ActionClose, "cancel")
 	// The keys are cut rather than wrapped here, because the card keeps one row for them.
@@ -1841,7 +1858,7 @@ func (model *Model) renderExport(overlay app.Overlay, width int) string {
 }
 
 // exportLabelWidth is the column the mark and the name of a field of a form share.
-const exportLabelWidth = 12
+const exportLabelWidth = 18
 
 // fitFieldLabel holds the name of a field to the column it is given. A name too long for the
 // column keeps the words that fit, because the row draws one row of the label.
@@ -1855,13 +1872,12 @@ func fitFieldLabel(written string, width int) string {
 
 // promptHints name what each prompt does, which the field alone cannot show.
 var promptHints = map[app.PromptKind]string{
-	app.PromptSearch: "hides the rows on screen that hold nothing matching · " +
-		"the server is not asked",
-	app.PromptWhere:      "filters the result · your query is not changed",
-	app.PromptGoToColumn: "moves the cursor to the first column whose name matches",
+	app.PromptSearch:     "keeps the rows on screen that match · the server is not asked",
+	app.PromptWhere:      "filters the read · the query in the editor does not change",
+	app.PromptGoToColumn: "goes to the first column whose name matches",
 	app.PromptTabName:    "written as a comment on the first line of the query",
-	app.PromptFind:       "marks every match · F3 steps to the next",
-	app.PromptReplace:    "writes this in place of every match, in one step",
+	app.PromptFind:       "marks every match · F3 goes to the next one",
+	app.PromptReplace:    "replaces every match, in one step",
 }
 
 // drawsPromptBar is true for a prompt that opens a field at the foot of a pane. Only the one
@@ -1914,13 +1930,14 @@ func (model *Model) renderPromptBar(overlay app.Overlay, width int) []string {
 func (model *Model) renderPrompt(overlay app.Overlay, width int) string {
 	inner := width - 4
 	keys := model.sayKeys().
-		bind(cfg.ScopeList, ActionChooseRow, "applies").
+		bind(cfg.ScopeList, ActionChooseRow, "save").
 		bind(cfg.ScopeDialog, ActionClose, "cancel")
 	said := present.TruncateText(keys.buildText(), inner)
 	lines := []string{
 		model.renderField(overlay.Draft, inner, FieldLook{
 			Ground: model.styles.Theme.Header, Ink: model.styles.Theme.Text,
-			Focused: true, Placeholder: overlay.Title,
+			Focused: true, KeepsPlaceholder: true,
+			Placeholder: "a name for this query",
 		}),
 		model.styles.Muted().Render(present.TruncateText(overlay.Hint, inner)),
 	}

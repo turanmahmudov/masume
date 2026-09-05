@@ -62,7 +62,7 @@ func (model *Model) openTabMenu(connection *app.Connection) (tea.Model, tea.Cmd)
 		model.buildActionMenu(connection.Session.Capabilities(), cfg.ScopeGlobal, []menuEntry{
 			{ActionNewQueryTab, "New query tab", "beside this one", cfg.IconQuery, true},
 			{
-				ActionNameTab, "Rename tab", "written as a comment on the first line",
+				ActionNameTab, "Rename tab", "name this tab",
 				cfg.IconNote, tab.Kind == app.TabQuery,
 			},
 			{
@@ -70,7 +70,7 @@ func (model *Model) openTabMenu(connection *app.Connection) (tea.Model, tea.Cmd)
 				cfg.IconFavourites, tab.Kind == app.TabQuery,
 			},
 			{
-				ActionReopenTab, "Reopen the tab closed last", "",
+				ActionReopenTab, "Reopen the last closed tab", "",
 				cfg.IconRecent, connection.HasClosedTab(),
 			},
 			{
@@ -86,8 +86,8 @@ func (model *Model) openConnectionMenu(connection *app.Connection) (tea.Model, t
 		cfg.ScopeGlobal,
 		model.buildActionMenu(connection.Session.Capabilities(), cfg.ScopeGlobal, []menuEntry{
 			{ActionNewQueryTab, "New query tab", "on this connection", cfg.IconQuery, true},
-			{ActionRefreshObjects, "Refresh the objects", "read the catalog again", cfg.IconRecent, true},
-			{ActionShowActivity, "Server activity", "what the other connections are doing", cfg.IconRole, true},
+			{ActionRefreshObjects, "Refresh the object tree", "read the catalog again", cfg.IconRecent, true},
+			{ActionShowActivity, "Server activity", "the load, the locks and the other sessions", cfg.IconRole, true},
 			{
 				ActionToggleAutocommit, "Autocommit", "commit each statement on its own",
 				cfg.IconTrigger, true,
@@ -106,8 +106,8 @@ func (model *Model) openEditorMenu(
 		model.buildActionMenu(connection.Session.Capabilities(), cfg.ScopeEditor, []menuEntry{
 			{ActionRunAtCursor, "Run", "the selection, or the statement at the caret", cfg.IconQuery, written},
 			{ActionRunBatch, "Run every statement", "one result each", cfg.IconQuery, written},
-			{ActionExplain, "Explain", "how the server will read it", cfg.IconPlan, written},
-			{ActionFormatSQL, "Format", "lay the statement out again", cfg.IconNote, written},
+			{ActionExplain, "Explain", "how the server will run it", cfg.IconPlan, written},
+			{ActionFormatSQL, "Format", "one clause per line", cfg.IconNote, written},
 			{ActionCommentLines, "Comment lines", "the lines the selection covers", cfg.IconNote, written},
 			{ActionSelectAll, "Select all", "", cfg.IconColumn, written},
 			{ActionPasteText, "Paste", "what this client last copied", cfg.IconQuery, true},
@@ -133,6 +133,6 @@ func (model *Model) openColumnMenu(
 			{ActionFreezeColumns, "Freeze up to this column", "keep it on screen while the rest scroll", cfg.IconPrimaryKey, true},
 			{ActionGoToColumn, "Go to column…", "by name", cfg.IconRecent, true},
 			{ActionSearchColumns, "Search the columns", "", cfg.IconRecent, true},
-			{ActionToggleMasking, "Show masked values", "", cfg.IconNote, true},
+			{ActionToggleMasking, "Show or hide masked values", "", cfg.IconNote, true},
 		}))
 }

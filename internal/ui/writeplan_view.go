@@ -36,9 +36,10 @@ func (model *Model) renderWritePlan(overlay app.Overlay, width int) string {
 	yes, no := model.renderWritePlanAnswers()
 	lines = append(lines, "", yes+"  "+no)
 
+	// The two answers are drawn as chips over this line, so the line names the key that
+	// closes the card and leaves the answers to the chips.
 	keys := model.sayKeys().
 		bind(cfg.ScopeDialog, ActionAnswerYes, "run").
-		bind(cfg.ScopeDialog, ActionAnswerNo, "cancel").
 		bind(cfg.ScopeDialog, ActionClose, "cancel")
 	model.recordCardBody()
 	model.recordAnswerChips(
@@ -75,7 +76,7 @@ func (model *Model) renderWritePlanStatement(sql string, inner int) []string {
 	}
 	if len(wrapped) > shown {
 		lines = append(lines, padStyledOn(paintText(theme.Muted, theme.Panel,
-			"… "+present.FormatCountOf(int64(len(wrapped)-shown), "line", "lines")+" more"),
+			"… and "+present.FormatCountOf(int64(len(wrapped)-shown), "more line", "more lines")),
 			inner, theme.Panel))
 	}
 	return lines
@@ -176,7 +177,8 @@ func (model *Model) buildWritePlanUndoLine(plan writeplan.Plan) writePlanLine {
 		return row
 	}
 	row.trailer = paintText(theme.Muted, theme.Panel, "  "+
-		model.registry.FormatActionChords(cfg.ScopeGlobal, ActionUndoWrite)+" after it ran")
+		model.registry.FormatActionChords(cfg.ScopeGlobal, ActionUndoWrite)+
+		" undoes it after it ran")
 	return row
 }
 

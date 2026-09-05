@@ -329,7 +329,7 @@ var generateSelect = MenuAction{
 // carries the mark of a warning, so a menu is read by its marks as well as by its words.
 var tableActions = []MenuAction{
 	{
-		ID: ObjectErDiagram, Label: "ER diagram", Detail: "tables it relates to",
+		ID: ObjectErDiagram, Label: "ER diagram", Detail: "the tables it relates to",
 		Icon: cfg.IconForeignKey,
 	},
 	generateSelect,
@@ -341,15 +341,15 @@ var tableActions = []MenuAction{
 		ID: ObjectImportFile, Label: "Import a file…", Detail: "a CSV or a JSON file",
 		Icon: cfg.IconTable,
 	},
-	{ID: ObjectAddColumn, Label: "Add column…", Detail: "alter table", Icon: cfg.IconColumn},
-	{ID: ObjectCreateIndex, Label: "Create index…", Detail: "create index", Icon: cfg.IconIndex},
-	{ID: ObjectRenameTable, Label: "Rename table…", Detail: "alter table", Icon: cfg.IconTable},
+	{ID: ObjectAddColumn, Label: "Add column…", Detail: "ALTER TABLE into the editor", Icon: cfg.IconColumn},
+	{ID: ObjectCreateIndex, Label: "Create index…", Detail: "CREATE INDEX into the editor", Icon: cfg.IconIndex},
+	{ID: ObjectRenameTable, Label: "Rename table…", Detail: "ALTER TABLE into the editor", Icon: cfg.IconTable},
 	{
-		ID: ObjectTruncate, Label: "Truncate table", Detail: "removes every row",
+		ID: ObjectTruncate, Label: "Truncate table", Detail: "TRUNCATE into the editor",
 		Icon: cfg.IconNote, Destructive: true,
 	},
 	{
-		ID: ObjectDropRelation, Label: "Drop table", Detail: "removes the table",
+		ID: ObjectDropRelation, Label: "Drop table", Detail: "DROP TABLE into the editor",
 		Icon: cfg.IconNote, Destructive: true,
 	},
 }
@@ -357,14 +357,14 @@ var tableActions = []MenuAction{
 var viewActions = []MenuAction{
 	generateSelect,
 	{
-		ID: ObjectDropRelation, Label: "Drop view", Detail: "removes the view",
+		ID: ObjectDropRelation, Label: "Drop view", Detail: "DROP VIEW into the editor",
 		Icon: cfg.IconNote, Destructive: true,
 	},
 }
 
 var objectActions = []MenuAction{
 	{
-		ID: ObjectDropObject, Label: "Drop", Detail: "removes the object",
+		ID: ObjectDropObject, Label: "Drop", Detail: "DROP into the editor",
 		Icon: cfg.IconNote, Destructive: true,
 	},
 }
@@ -383,7 +383,7 @@ var schemaActions = []MenuAction{
 		Icon: cfg.IconView,
 	},
 	{
-		ID: ObjectDropSchema, Label: "Drop schema", Detail: "removes the schema",
+		ID: ObjectDropSchema, Label: "Drop schema", Detail: "DROP SCHEMA into the editor",
 		Icon: cfg.IconNote, Destructive: true,
 	},
 }

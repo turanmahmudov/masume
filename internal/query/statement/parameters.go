@@ -152,6 +152,17 @@ func BuildParameterForm(names []string, values map[string]any) string {
 	return "{\n" + strings.Join(lines, ",\n") + "\n}"
 }
 
+// FindFirstFormValue returns where the caret stands when the form opens: inside the value of
+// the first parameter, which is where the first character typed belongs. It returns 0 for a
+// form whose first value is not a written one.
+func FindFirstFormValue(written string) int {
+	at := strings.Index(written, ": ")
+	if at < 0 || at+2 >= len(written) || written[at+2] != '"' {
+		return 0
+	}
+	return at + 3
+}
+
 // ReadRowForm reads the form of a whole new row back. The names are the columns of the row,
 // so they keep the case they were written in. A value keeps its JSON type: a number stays a
 // number, and `null` stays a null.

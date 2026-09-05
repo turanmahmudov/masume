@@ -166,7 +166,7 @@ func (registry *ThemeRegistry) collectChain(name string) ([]cfg.ThemeDocument, [
 		document, known := registry.documents[next]
 		if !known {
 			problems = append(problems, fmt.Sprintf(
-				"theme %q is not one of the themes there are", next))
+				"there is no theme called %q", next))
 			break
 		}
 		chain = append(chain, document)

@@ -165,7 +165,7 @@ func TestAPasteFromTheTerminalReachesTheStatement(t *testing.T) {
 	}
 }
 
-func TestAPasteReachesNothingButTheStatement(t *testing.T) {
+func TestAPasteOutsideTheEditorLeavesTheStatementAlone(t *testing.T) {
 	model, _, tab := buildEditingModel(t, "", 0)
 	tab.Focus = app.PaneSidebar
 

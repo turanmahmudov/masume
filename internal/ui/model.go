@@ -134,7 +134,7 @@ func NewModel(
 	if loaded.Settings.Theme != "" {
 		reported, applied := styles.ApplyThemeByName(loaded.Settings.Theme)
 		if !applied {
-			found = append(found, "theme \""+loaded.Settings.Theme+"\" is not one there is")
+			found = append(found, "there is no theme called \""+loaded.Settings.Theme+"\"")
 		}
 		found = append(found, reported...)
 	}

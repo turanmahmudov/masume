@@ -44,8 +44,10 @@ type HintContext struct {
 	CanFetchMore   bool
 	CanCountRows   bool
 	Running        bool
-	QueryFailed    bool
-	TreeRow        *present.TreeRow
+	// True while the system schemas are hidden, so the key that shows them says so.
+	SystemSchemasHidden bool
+	QueryFailed         bool
+	TreeRow             *present.TreeRow
 }
 
 // buildHint returns the hint for an action. It returns nothing if the action has no key, or
@@ -138,7 +140,7 @@ func (registry *KeyRegistry) BuildPickerHints(hasSelection bool) []Hint {
 // BuildConnectingHints returns the keys while the client waits for a server. Escape is
 // written out because the root model reads it off the event, not the registry.
 func (registry *KeyRegistry) BuildConnectingHints(hasSelection bool) []Hint {
-	return addCopyOrQuit([]Hint{{Key: "Esc", Label: "stop waiting"}}, hasSelection)
+	return addCopyOrQuit([]Hint{{Key: "Esc", Label: "cancel"}}, hasSelection)
 }
 
 // BuildCardScreenHints returns the keys of a screen whose card names its own keys. The bar
@@ -166,7 +168,7 @@ func (registry *KeyRegistry) buildOpenHint(
 	case present.NodeTable, present.NodeObject:
 		return open("open")
 	case present.NodeColumn:
-		return open("insert the name")
+		return open("insert the column name")
 	case present.NodeSchema:
 		// A favourite schema is not the row its tables hang from, so opening it reveals
 		// that row.
@@ -190,17 +192,17 @@ func (registry *KeyRegistry) buildOpenHint(
 func describeFold(node present.TreeNode) string {
 	switch node.Kind {
 	case present.NodeTable:
-		return "columns"
+		return "fold the columns"
 	case present.NodeSchema:
-		return "tables"
+		return "fold the tables"
 	}
-	return "contents"
+	return "fold the contents"
 }
 
 // buildTreeHints returns the keys the row under the cursor returns. Each kind of row returns
 // a different set.
 func (registry *KeyRegistry) buildTreeHints(
-	capabilities core.Capabilities, row *present.TreeRow,
+	capabilities core.Capabilities, row *present.TreeRow, systemSchemasHidden bool,
 ) []Hint {
 	keys := hintList{}
 
@@ -208,7 +210,7 @@ func (registry *KeyRegistry) buildTreeHints(
 		keys.add(registry.buildOpenHint(capabilities, *row))
 		if row.Node.Kind == present.NodeTable {
 			keys.add(registry.buildHint(
-				capabilities, cfg.ScopeTree, ActionOpenInNewTab, "open again"))
+				capabilities, cfg.ScopeTree, ActionOpenInNewTab, "open in a new tab"))
 		}
 		if row.Node.Kind == present.NodeTable || row.Node.Kind == present.NodeColumn {
 			keys.add(registry.buildHint(
@@ -231,17 +233,22 @@ func (registry *KeyRegistry) buildTreeHints(
 	}
 
 	keys.add(registry.buildHint(capabilities, cfg.ScopeTree, ActionFilterTree, "filter"))
+	systemSchemas := "hide system schemas"
+	if systemSchemasHidden {
+		systemSchemas = "show system schemas"
+	}
 	keys.add(registry.buildHint(
-		capabilities, cfg.ScopeTree, ActionToggleSystemSchemas, "system schemas"))
+		capabilities, cfg.ScopeTree, ActionToggleSystemSchemas, systemSchemas))
 	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionRefreshObjects, "refresh"))
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionToggleSidebar, "hide"))
+	keys.add(registry.buildHint(
+		capabilities, cfg.ScopeGlobal, ActionToggleSidebar, "hide the explorer"))
 	return keys.build()
 }
 
 func (registry *KeyRegistry) buildEditorHints(capabilities core.Capabilities) []Hint {
 	keys := hintList{}
 	keys.add(registry.buildHint(
-		capabilities, cfg.ScopeGlobal, ActionRunAtCursor, "run cursor or selection"))
+		capabilities, cfg.ScopeGlobal, ActionRunAtCursor, "run the statement"))
 	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionRunBatch, "run all"))
 	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionExplain, "explain"))
 	// One key opens the field that finds, and the field itself offers to replace, so the
@@ -323,7 +330,7 @@ func (registry *KeyRegistry) buildViewHints(
 	}
 	label := "the " + string(target)
 	if target == app.ViewData {
-		label = "back to the data"
+		label = "back to the rows"
 	}
 	return []Hint{{Key: strconv.Itoa(position + 1), Label: label}, scroll}
 }
@@ -368,19 +375,20 @@ func (registry *KeyRegistry) BuildHints(context HintContext) []Hint {
 		return closeBar(keys.build())
 	}
 
+	if context.Pane == app.PaneSidebar {
+		return closeBar(registry.buildTreeHints(
+			capabilities, context.TreeRow, context.SystemSchemasHidden))
+	}
+	if context.Pane == app.PaneEditor {
+		return closeBar(registry.buildEditorHints(capabilities))
+	}
+
 	// After a failure: run again once it is fixed. The key that asks the model why it
 	// failed stands on the border of the editor, so the bar leaves it to the editor.
 	if context.QueryFailed {
 		keys := hintList{}
 		keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionRunAtCursor, "run"))
 		return closeBar(keys.build())
-	}
-
-	if context.Pane == app.PaneSidebar {
-		return closeBar(registry.buildTreeHints(capabilities, context.TreeRow))
-	}
-	if context.Pane == app.PaneEditor {
-		return closeBar(registry.buildEditorHints(capabilities))
 	}
 
 	// Sorting and filtering act on rows, so a view without rows offers other keys.
@@ -402,15 +410,15 @@ func (registry *KeyRegistry) BuildHints(context HintContext) []Hint {
 
 	if context.FilterSteps > 1 {
 		keys.add(registry.buildHint(
-			capabilities, cfg.ScopeGrid, ActionPopFilter, "drop the last"))
+			capabilities, cfg.ScopeGrid, ActionPopFilter, "drop the last filter"))
 	}
 	if context.Rewritten {
 		keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionClearRewrites, "clear"))
 		keys.add(registry.buildHint(
-			capabilities, cfg.ScopeGlobal, ActionRevealSQL, "into the editor"))
+			capabilities, cfg.ScopeGlobal, ActionRevealSQL, "edit as a query"))
 	} else if context.TabKind == app.TabTable {
 		keys.add(registry.buildHint(
-			capabilities, cfg.ScopeGlobal, ActionRevealSQL, "as a query"))
+			capabilities, cfg.ScopeGlobal, ActionRevealSQL, "edit as a query"))
 	}
 	keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionGoToColumn, "go to column"))
 	keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionFreezeColumns, "freeze"))
@@ -418,7 +426,7 @@ func (registry *KeyRegistry) BuildHints(context HintContext) []Hint {
 		keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionNextPage, "more rows"))
 	}
 	if context.CanCountRows {
-		keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionCountRows, "total"))
+		keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionCountRows, "count rows"))
 	}
 	if context.Staged > 0 {
 		keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionReviewChanges,

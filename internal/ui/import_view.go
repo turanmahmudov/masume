@@ -40,7 +40,7 @@ func (model *Model) renderImportPicker(overlay app.Overlay, width int) string {
 	}
 
 	keys := model.sayKeys().name("↑↓", "file").
-		name("→", "open the directory").name("←", "the one above").
+		name("→", "open the directory").name("←", "go up").
 		name("Enter", "choose").name("Esc", "cancel")
 	said := present.TruncateText(keys.buildText(), width-4)
 	model.recordCardBody()
@@ -66,7 +66,8 @@ func (model *Model) renderImportForm(overlay app.Overlay, width int) string {
 		}
 
 		value := field.Value
-		written := model.styles.Muted().Render(present.TruncateText(value, valueWidth))
+		written := model.styles.Muted().Render(
+			present.TruncateText(describeFieldValue(field), valueWidth))
 		switch {
 		case len(field.Choices) > 0:
 			written = model.renderChoiceField(value, valueWidth, at,
@@ -90,8 +91,8 @@ func (model *Model) renderImportForm(overlay app.Overlay, width int) string {
 	lines = append(lines, model.styles.Error().Render(
 		present.TruncateText(said, width-4)))
 
-	keys := model.sayKeys().name("↑↓", "field").name("← →", "change").
-		name("Enter", describeImportStep(overlay.Import)).
+	keys := model.sayKeys().name("↑↓", "field").name("←→", "change").
+		name("Enter", describeImportStep(overlay)).
 		bind(cfg.ScopeDialog, ActionClose, "cancel")
 	keyRow := present.TruncateText(keys.buildText(), width-4)
 	model.recordCardBody()
@@ -104,10 +105,15 @@ func (model *Model) renderImportForm(overlay app.Overlay, width int) string {
 	return model.renderCard(buildImportTitle(overlay.Import), width, lines, plainCard)
 }
 
-// describeImportStep describes the next step of the import.
-func describeImportStep(held app.ImportRequest) string {
+// describeImportStep describes what Enter does on the row under the cursor. The row that
+// holds the path opens the file picker again, whatever stage the form stands at.
+func describeImportStep(overlay app.Overlay) string {
+	held := overlay.Import
 	if held.Running {
 		return "reading…"
+	}
+	if readFieldKey(overlay) == "path" {
+		return "choose another file"
 	}
 	if held.Stage == app.ImportFile {
 		return "read the file"

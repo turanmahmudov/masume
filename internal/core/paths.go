@@ -28,6 +28,16 @@ func HomeDirectory() string {
 	return home
 }
 
+// ShortenHomePath returns the path with the home directory written as `~`, which is what a
+// card shows.
+func ShortenHomePath(path string) string {
+	home := HomeDirectory()
+	if home == "" || !strings.HasPrefix(path, home) {
+		return path
+	}
+	return "~" + path[len(home):]
+}
+
 // ExpandHomePath expands a leading `~`. A config file and a path the user types both
 // accept it.
 func ExpandHomePath(path string) string {

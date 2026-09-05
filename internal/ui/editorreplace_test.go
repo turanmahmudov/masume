@@ -60,7 +60,7 @@ func TestTheFindFieldWillNotTurnIntoReplaceWithNothingTyped(t *testing.T) {
 		t.Error("the replace field opened, and nothing was typed to look for")
 	}
 	if connection.Notice == nil ||
-		!strings.Contains(connection.Notice.Text, "type what to look for first") {
+		!strings.Contains(connection.Notice.Text, "type what to find first") {
 		t.Error("it did not say that a term has to be typed first")
 	}
 }

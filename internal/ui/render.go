@@ -423,6 +423,7 @@ func (model *Model) renderWorkspaceStatusBar() string {
 		CanCountRows: tab.Results.CanCountRows() &&
 			(active == nil || !active.HasTotalRows),
 		Running: running, QueryFailed: failed, TreeRow: treeRow,
+		SystemSchemasHidden: connection.Tree.HideSystemSchemas,
 	})
 
 	// The sort and the filter are in the banner above the grid, and a failed query is

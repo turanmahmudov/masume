@@ -49,8 +49,8 @@ func resolveChatFieldRows(buffer *app.EditorBuffer) int {
 }
 
 // chatOpening is what the panel says before the first question, with the questions it offers.
-var chatOpening = "Ask about this database, for a query, or for a figure. A question about " +
-	"the data runs a statement, once you have allowed it."
+var chatOpening = "Ask about this database, for a query, or for a number. " +
+	"A question about the data runs a statement, and asks first."
 
 // chatExamples are example questions, one line each, so a narrow panel keeps them whole.
 var chatExamples = []string{
@@ -323,9 +323,6 @@ func resolveChatOffset(chat *app.Chat, rows, room int) int {
 	return core.ClampWithin(chat.Offset, highest)
 }
 
-// chatLogLabel opens the line that says where the traffic of the chat is written.
-const chatLogLabel = "logged to "
-
 // renderChatOpening draws what the panel says before the first question.
 func (model *Model) renderChatOpening(content, room int) []string {
 	theme := model.styles.Theme
@@ -337,25 +334,25 @@ func (model *Model) renderChatOpening(content, room int) []string {
 	for _, asked := range chatExamples {
 		lines = append(lines, paintText(theme.Info, nil, "  "+asked))
 	}
-	// The line opens with "logged to ", so the path takes what is left of the width.
-	lines = append(lines, "", model.styles.Faint().Render(
-		chatLogLabel+present.TruncateText(
-			describeAiLogPath(), max(content-len(chatLogLabel), 1))))
+	// A provider without a key answers nothing, so the panel says so before the first
+	// question rather than after it.
+	if !ai.HasCredentials(model.ai, model.aiProvider) {
+		lines = append(lines, "")
+		for _, line := range present.WrapWords(
+			ai.DescribeMissingKey(model.ai, model.aiProvider), content) {
+			lines = append(lines, model.styles.Error().Render(line))
+		}
+	}
 	for len(lines) < room {
 		lines = append(lines, "")
 	}
 	return lines[:room]
 }
 
-// describeAiLogPath returns where the traffic of the chat is written, with `~` for the home
+// describeAiLog names the file the traffic of the chat is written to, with `~` for the home
 // directory of the user.
-func describeAiLogPath() string {
-	path := ai.ResolveLogPath()
-	home := core.HomeDirectory()
-	if home != "" && strings.HasPrefix(path, home) {
-		return "~" + path[len(home):]
-	}
-	return path
+func describeAiLog() string {
+	return "logged to " + core.ShortenHomePath(ai.ResolveLogPath())
 }
 
 // renderChatTurns draws every turn of the conversation, one row per line, and returns the row
@@ -506,16 +503,21 @@ func (model *Model) renderChatBelow(
 		lines = append(lines, paintOn(theme.Header, " ")+row)
 	}
 
+	// The faint line under the field says the most recent thing there is to say. With
+	// nothing said and nothing spent yet, it names the file the traffic is written to.
 	notice := chat.Notice
 	if notice == "" {
 		notice = chat.DescribeUsage()
+	}
+	if notice == "" {
+		notice = describeAiLog()
 	}
 	return append(lines, model.styles.Faint().Render(
 		present.TruncateText(notice, content))), answersRow
 }
 
 // chatPlaceholder is what the field says while nothing is typed into it.
-const chatPlaceholder = "› ask for a query, a count, or about this database"
+const chatPlaceholder = "› ask about this database, or for a query"
 
 // The two answers to a statement the chat wants to run.
 const (
@@ -572,7 +574,7 @@ func (model *Model) describeChatKeys(chat *app.Chat) *KeyLine {
 		bindPair(cfg.ScopeDialog, ActionScrollBack, ActionScrollForward, "page", "/").
 		// The field returns the arrows itself, so the registry cannot move these either.
 		name("↑↓", "scroll").
-		bind(cfg.ScopeDialog, ActionInsertAiSQL, "into editor").
+		bind(cfg.ScopeDialog, ActionInsertAiSQL, "into the editor").
 		bind(cfg.ScopeDialog, ActionNewAiChat, "new").
 		bind(cfg.ScopeDialog, ActionShowAiChats, "chats").
 		bind(cfg.ScopeDialog, ActionClose, "close")
@@ -616,7 +618,7 @@ func (model *Model) renderAiChats(
 		Filter: model.renderFilterFieldOf(
 			overlay, width, "search the conversations", len(held)),
 		Rows: rows, Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Width: width,
-		ReportsNoMatch: true, Keys: keys,
+		ReportsNoMatch: true, Keys: keys, ContentRows: len(chat.Conversations) + 1,
 	})
 }
 

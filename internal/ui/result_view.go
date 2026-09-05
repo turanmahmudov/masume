@@ -417,7 +417,7 @@ func (model *Model) renderGrid(
 		return model.renderEmptyState(width, height, "no result yet", []Hint{
 			{
 				Key:   model.registry.FormatActionChords(cfg.ScopeTree, ActionOpenNode),
-				Label: "open the table the cursor is on",
+				Label: "open what the cursor is on in the object tree",
 			},
 			{
 				Key:   model.registry.FormatActionChords(cfg.ScopeGlobal, ActionRunAtCursor),
@@ -1158,7 +1158,7 @@ func (model *Model) renderPlan(
 	theme := model.styles.Theme
 	said := "the raw plan"
 	if tab.RawPlan {
-		said = "back to the tree"
+		said = "the plan tree"
 	}
 	keys := model.sayKeys().
 		bindCompact(cfg.ScopePlan, ActionToggleRawPlan, said).

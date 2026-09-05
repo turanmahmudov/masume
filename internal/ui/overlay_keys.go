@@ -479,7 +479,7 @@ func (model *Model) runOverlayAction(
 		// The card stays open and says what it did.
 		if match.Action == ActionCopyValue {
 			written := present.FormatForViewer(overlay.Cell.Value, overlay.Cell.Column.DataType)
-			overlay.Notice = "copied to clipboard"
+			overlay.Notice = "copied"
 			return true, model, model.keepOnClipboard(written)
 		}
 
@@ -693,7 +693,7 @@ func (model *Model) chooseOverlayRow(
 		}
 		statement := overlay.Sessions[overlay.List.Cursor].Query
 		if strings.TrimSpace(statement) == "" {
-			connection.Show("that session is running no statement")
+			connection.Show("that session runs no statement")
 			return model, nil
 		}
 		connection.Overlay = app.Overlay{}
@@ -771,7 +771,7 @@ func (model *Model) readStopBackendAnswer(answered stoppedBackendMsg) (tea.Model
 	case answered.Stopped:
 		connection.Show(done + " was stopped")
 	default:
-		connection.Show("the server holds no session " + named + " any more")
+		connection.Show("the server no longer holds session " + named)
 	}
 	return model, nil
 }
@@ -894,7 +894,7 @@ func (model *Model) answerPrompt(
 
 	case app.PromptReplace:
 		if tab.Find.Term == "" {
-			connection.Show("look for something first")
+			connection.Show("type what to find first")
 			return model, nil
 		}
 		tab.Find.Replacement = written
@@ -1263,6 +1263,37 @@ func (model *Model) readOverlayField(
 	}
 	if overlay.Kind == app.OverlayImport {
 		ReadImportField(overlay, buffer.Text)
+	}
+	return model, nil
+}
+
+// takesLineBreaks is true for a card whose field holds more than one line. A field of one
+// line takes a paste with its breaks turned into spaces.
+func takesLineBreaks(overlay app.Overlay) bool {
+	switch overlay.Kind {
+	case app.OverlayCellEdit, app.OverlayAiChat, app.OverlayParameters:
+		return true
+	}
+	return false
+}
+
+// pasteIntoOverlay writes what the terminal pasted into the field of the card on show.
+func (model *Model) pasteIntoOverlay(
+	connection *app.Connection, overlay *app.Overlay, written string,
+) (tea.Model, tea.Cmd) {
+	if takesLineBreaks(*overlay) {
+		written = strings.ReplaceAll(
+			strings.ReplaceAll(written, "\r\n", "\n"), "\r", "\n")
+	} else {
+		written = flattenPaste(written)
+	}
+	overlay.Draft.Insert(written)
+	model.resetOverlayCursor(connection, overlay)
+	if overlay.Kind == app.OverlayExport {
+		ReadExportField(overlay, overlay.Draft.Text)
+	}
+	if overlay.Kind == app.OverlayImport {
+		ReadImportField(overlay, overlay.Draft.Text)
 	}
 	return model, nil
 }

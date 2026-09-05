@@ -184,7 +184,7 @@ func describeUndoQuestion(held app.HeldUndo) string {
 	}
 	if len(held.Undo.Display) > 1 {
 		written += "\n… and " + present.FormatCountOf(
-			int64(len(held.Undo.Display)-1), "statement", "statements") + " more"
+			int64(len(held.Undo.Display)-1), "more statement", "more statements")
 	}
 	return written
 }
@@ -226,7 +226,7 @@ func (model *Model) readUndoAnswer(answered undoWrittenMsg) (tea.Model, tea.Cmd)
 
 	connection.Undo = nil
 	connection.Overlay = app.Overlay{}
-	connection.Show("undone, " +
+	connection.Show("the write was undone, " +
 		present.FormatCountOf(int64(answered.Rows), "row", "rows"))
 
 	tab := connection.Active()

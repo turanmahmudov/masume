@@ -391,17 +391,31 @@ func TestBuildImportTargetReadsWhatEachColumnTakes(t *testing.T) {
 
 // The card names the next step, so a person reads the step and not the key alone.
 func TestDescribeImportStepNamesTheNextStep(t *testing.T) {
-	held := app.ImportRequest{Stage: app.ImportFile}
-	if describeImportStep(held) != "read the file" {
-		t.Errorf("the first step reads %q", describeImportStep(held))
+	overlay := app.Overlay{
+		Kind: app.OverlayImport, Field: 1,
+		Import: app.ImportRequest{Stage: app.ImportFile},
 	}
-	held.Stage = app.ImportMapping
-	if describeImportStep(held) != "review" {
-		t.Errorf("the second step reads %q", describeImportStep(held))
+	if describeImportStep(overlay) != "read the file" {
+		t.Errorf("the first step reads %q", describeImportStep(overlay))
 	}
-	held.Running = true
-	if !strings.Contains(describeImportStep(held), "…") {
-		t.Errorf("a step that is running reads %q", describeImportStep(held))
+	overlay.Import.Stage = app.ImportMapping
+	if describeImportStep(overlay) != "review" {
+		t.Errorf("the second step reads %q", describeImportStep(overlay))
+	}
+	overlay.Import.Running = true
+	if !strings.Contains(describeImportStep(overlay), "…") {
+		t.Errorf("a step that is running reads %q", describeImportStep(overlay))
+	}
+}
+
+// The row that holds the path opens the picker again, so the card says so there.
+func TestDescribeImportStepNamesThePickerOnThePathRow(t *testing.T) {
+	overlay := app.Overlay{
+		Kind: app.OverlayImport, Field: 0,
+		Import: app.ImportRequest{Stage: app.ImportMapping},
+	}
+	if describeImportStep(overlay) != "choose another file" {
+		t.Errorf("the path row reads %q", describeImportStep(overlay))
 	}
 }
 

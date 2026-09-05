@@ -155,7 +155,13 @@ func (model *Model) submitChatQuestion(
 	connection.Overlay.Draft = app.NewEditorBuffer("", 0)
 	// The jump ends, because the next turn is the one about to be written.
 	chat.Notice, chat.HasTurn, chat.Follow = "", false, true
-	return model.sendChatMessage(connection, tab, asked)
+	held, command := model.sendChatMessage(connection, tab, asked)
+	// A send that never reached the provider keeps the question in the field, so it can
+	// be sent again once the fault is fixed.
+	if !chat.IsStreaming() && connection.Overlay.Kind == app.OverlayAiChat {
+		connection.Overlay.Draft = app.NewEditorBuffer(asked, len(asked))
+	}
+	return held, command
 }
 
 // insertAiSQL puts the statement of the last reply into the editor.

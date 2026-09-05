@@ -12,8 +12,8 @@ func TestBuildCellEditorOpensAFieldSixRowsTall(t *testing.T) {
 	if overlay.Draft == nil || overlay.Draft.Text != "one line" {
 		t.Fatalf("the field holds %+v", overlay.Draft)
 	}
-	if overlay.Draft.Caret != 0 {
-		t.Errorf("the caret stands at %d, wanted the first cell", overlay.Draft.Caret)
+	if overlay.Draft.Caret != len("one line") {
+		t.Errorf("the caret stands at %d, wanted the end of the value", overlay.Draft.Caret)
 	}
 	if overlay.ContentRows != minCellEditorRows {
 		t.Errorf("the card gives %d rows, wanted %d", overlay.ContentRows, minCellEditorRows)

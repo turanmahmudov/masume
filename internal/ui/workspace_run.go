@@ -161,7 +161,7 @@ func (model *Model) buildRuns(
 		held := reads
 		connection.Overlay = app.Overlay{
 			Kind: app.OverlayParameters, Names: names,
-			Draft:       app.NewEditorBuffer(written, 0),
+			Draft:       app.NewEditorBuffer(written, statement.FindFirstFormValue(written)),
 			ContentRows: strings.Count(written, "\n") + 1,
 			Answers: app.OverlayAnswers{Values: func(given map[string]any) app.AnswerCommand {
 				tab.Parameters = statement.ResolveParameterValues(names, given)
@@ -515,7 +515,7 @@ func (model *Model) fetchMore(
 	connection *app.Connection, tab *app.Tab,
 ) (tea.Model, tea.Cmd) {
 	if tab.Results.Active() == nil || !tab.Results.CanFetchMore() {
-		connection.Show("every row of this result is already read")
+		connection.Show("every row is already loaded")
 		return model, nil
 	}
 	return model, model.readMoreRows(connection, tab)
@@ -979,7 +979,7 @@ const stagedElsewhereMessage = "work is staged against another statement of this
 	"show that one again to apply it, or discard the work"
 
 // applyingMessage is what the bar says where the staged work is already with the server.
-const applyingMessage = "the staged work is being written; wait for it to answer"
+const applyingMessage = "the staged changes are being written; wait for the server"
 
 // describeStageRefusal returns why a change could not be staged.
 func describeStageRefusal(tab *app.Tab) string {

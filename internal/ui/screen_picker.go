@@ -11,6 +11,7 @@ import (
 
 	"github.com/turanmahmudov/masume/internal/app"
 	"github.com/turanmahmudov/masume/internal/cfg"
+	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
@@ -24,6 +25,8 @@ const (
 	narrowestPasswordCard = 32
 	pickerNameWidth       = 24
 	pickerEnvWidth        = 4
+	// The mark of a connection that is already open, and the blank after it.
+	pickerOpenWidth = 2
 	// `ro`, or two spaces for a connection that can be written to.
 	pickerModeWidth = 2
 	// `project`, and the blank after it. The column stands empty where no connection
@@ -120,6 +123,38 @@ func clamp(index, count int) int {
 	return index
 }
 
+// pickerProblemRows is how many faults of the config the picker names before it counts
+// the rest.
+const pickerProblemRows = 3
+
+// describePickerProblems returns the lines the picker draws for the faults of the config,
+// with a blank line over them. A run with none draws nothing.
+func describePickerProblems(problems []string) []string {
+	if len(problems) == 0 {
+		return nil
+	}
+	lines := []string{""}
+	for at, problem := range problems {
+		if at == pickerProblemRows {
+			lines = append(lines, present.FormatCountOf(
+				int64(len(problems)-at), "more problem", "more problems"))
+			break
+		}
+		lines = append(lines, problem)
+	}
+	return lines
+}
+
+// isProfileOpen is true where a connection on this profile is already open.
+func (model *Model) isProfileOpen(name string) bool {
+	for _, connection := range model.connections.all() {
+		if connection.Profile().Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // pickedProfile returns the profile the cursor stands on.
 func (model *Model) pickedProfile() (cfg.Profile, bool) {
 	return model.picker.pick(model.profiles)
@@ -139,19 +174,21 @@ func (model *Model) renderPicker() string {
 	}) {
 		sourceWidth = pickerSourceWidth
 	}
-	targetWidth := max(cardWidth-pickerChrome-pickerNameWidth-pickerEnvWidth-
-		pickerModeWidth-sourceWidth-pickerGap*3, 12)
+	targetWidth := max(cardWidth-pickerChrome-pickerOpenWidth-pickerNameWidth-
+		pickerEnvWidth-pickerModeWidth-sourceWidth-pickerGap*3, 12)
 
 	lines := []string{}
 	if len(model.profiles) == 0 {
-		lines = append(lines, model.styles.Muted().Render(
-			"No connections found in ~/.config/masume/config.toml"))
+		lines = append(lines, model.styles.Muted().Render(present.TruncateText(
+			"no connection in "+core.ShortenHomePath(cfg.ResolveConfigPath()),
+			cardWidth-4)))
 	}
 
 	// Where the rows land on the screen, so a press opens the row it looks like. The card
 	// stands in the middle of everything under the title bar, with a blank row inside its
 	// border.
-	cardRows := len(model.profiles) + pickerCardChrome
+	cardRows := len(model.profiles) + pickerCardChrome +
+		len(describePickerProblems(model.problems))
 	if model.picker.problem != "" {
 		cardRows += 2
 	}
@@ -197,8 +234,14 @@ func (model *Model) renderPicker() string {
 			nameStyle, envStyle, modeStyle, targetStyle = ink, ink, ink, ink
 		}
 
+		open := " "
+		if model.isProfileOpen(profile.Name) {
+			open = model.icons.Icon(cfg.IconDot)
+		}
+
 		// One line, not five columns, which would share the width and cut every name short.
-		written := nameStyle.Render(name+" ") + envStyle.Render(environment+" ") +
+		written := modeStyle.Render(present.FitText(open, pickerOpenWidth)) +
+			nameStyle.Render(name+" ") + envStyle.Render(environment+" ") +
 			modeStyle.Render(mode+" ")
 		if sourceWidth > 0 {
 			written += modeStyle.Render(present.FitText(source, sourceWidth))
@@ -210,6 +253,12 @@ func (model *Model) renderPicker() string {
 	if model.picker.problem != "" {
 		lines = append(lines, "", model.styles.Error().Render(
 			present.TruncateText(model.picker.problem, cardWidth-4)))
+	}
+	// A config file the client could not read leaves the list empty, so the card says what
+	// the file got wrong rather than letting the empty list stand for it.
+	for _, problem := range describePickerProblems(model.problems) {
+		lines = append(lines, model.styles.Error().Render(
+			present.TruncateText(problem, cardWidth-4)))
 	}
 
 	keys := model.sayKeys().
@@ -226,7 +275,8 @@ func (model *Model) renderPicker() string {
 			present.TruncateText("project file "+model.project.Path, cardWidth-4)))
 	}
 	if model.connections.count() > 0 {
-		lines = append(lines, model.styles.Muted().Render("Esc back to the open connection"))
+		lines = append(lines, model.styles.Muted().Render(
+			model.icons.Icon(cfg.IconDot)+" already open · Esc goes back to it"))
 	}
 
 	return model.renderCard(" connections ", cardWidth, lines, plainCard)

@@ -256,7 +256,7 @@ func (model *Model) runGlobalAction(
 		return model.requestCloseTab(connection)
 	case ActionReopenTab:
 		if !connection.ReopenTab() {
-			connection.Show("no tab was closed lately")
+			connection.Show("no tab was closed yet")
 		}
 	case ActionPreviousTab:
 		connection.StepTab(-1)
@@ -393,10 +393,10 @@ func (model *Model) startNaming(
 ) (tea.Model, tea.Cmd) {
 	switch tab.Kind {
 	case app.TabTable:
-		connection.Show("a table tab is named by its table")
+		connection.Show("a table tab takes the name of its table")
 		return model, nil
 	case app.TabObject:
-		connection.Show("this tab is named by the " + string(tab.Object.Kind) + " it shows")
+		connection.Show("this tab takes the name of the " + string(tab.Object.Kind) + " it shows")
 		return model, nil
 	}
 
@@ -480,7 +480,7 @@ func (model *Model) requestCloseTab(connection *app.Connection) (tea.Model, tea.
 				Detail: "applies " + one + ", then closes the tab"},
 			{Key: "d",
 				ID: "discard", Label: "discard and close",
-				Detail: "throws " + one + " away", Destructive: true},
+				Detail: "discards " + one, Destructive: true},
 			{Key: "c",
 				ID: "cancel", Label: "keep the tab", Detail: "changes nothing"},
 		},
@@ -522,20 +522,21 @@ func (model *Model) requestCloseConnection(connection *app.Connection) (tea.Mode
 
 	body := strconv.Itoa(len(connection.Tabs)) + " tabs are open on " +
 		connection.Profile().Name + "."
+	holds := " They hold "
 	if len(connection.Tabs) == 1 {
 		body = "One tab is open on " + connection.Profile().Name + "."
+		holds = " It holds "
 	}
 	// Closing drops the staged work of every tab, so the question names it.
+	question := " Close the connection and every tab?"
 	if staged > 0 {
-		body += " They hold " + present.DescribeStagedChanges(staged) + "."
-		if len(connection.Tabs) == 1 {
-			body = strings.Replace(body, " They hold ", " It holds ", 1)
-		}
+		body += holds + present.DescribeStagedChanges(staged) + "."
+		question = " Close the connection? Every tab closes, and the staged changes go."
 	}
 	connection.Overlay = app.Overlay{
 		Kind:  app.OverlayConfirm,
 		Title: " close connection ",
-		Body:  body + " Close the connection and all of them?",
+		Body:  body + question,
 		Answers: app.OverlayAnswers{Answer: func(confirmed bool) app.AnswerCommand {
 			if !confirmed {
 				return nil
@@ -622,7 +623,7 @@ func (model *Model) revealSQL(
 	if !tab.EditorVisible() {
 		opened := connection.OpenQueryTab(tab.EffectiveSQL(connection.Session))
 		opened.Focus = app.PaneEditor
-		connection.Show("this read is a query now")
+		connection.Show("the read is now a query in the editor")
 		return model, nil
 	}
 
@@ -632,7 +633,7 @@ func (model *Model) revealSQL(
 	tab.Sort, tab.Filter = nil, nil
 	tab.Focus = app.PaneEditor
 	if rewritten {
-		connection.Show("the rewrite is in your query now")
+		connection.Show("the sort and the filters are now in the query")
 		return model, nil
 	}
 	connection.Show("editing the query of this tab")
@@ -821,7 +822,7 @@ func (model *Model) startFinding(
 	// Replace writes over the matches of the term the reader last looked for, so without one
 	// there is nothing to replace. Saying so here saves them typing a replacement first.
 	if kind == app.PromptReplace && tab.Find.Term == "" {
-		connection.Show("look for something first, with the key that finds in the statement")
+		connection.Show("find something in the statement first")
 		return model, nil
 	}
 
@@ -850,7 +851,7 @@ func (model *Model) turnFindIntoReplace(
 ) (tea.Model, tea.Cmd) {
 	term := overlay.Draft.Text
 	if term == "" {
-		connection.Show("type what to look for first")
+		connection.Show("type what to find first")
 		return model, nil
 	}
 	tab.Find.Term = term
@@ -865,7 +866,7 @@ func (model *Model) stepMatch(
 ) (tea.Model, tea.Cmd) {
 	term := tab.Find.Term
 	if term == "" {
-		connection.Show("there is nothing to look for yet")
+		connection.Show("type what to find first")
 		return model, nil
 	}
 	found := tab.Editor.FindMatches(term)
@@ -977,7 +978,7 @@ func (model *Model) redoEdit(connection *app.Connection, tab *app.Tab) tea.Cmd {
 // system clipboard, and a paste it makes arrives as a paste of its own.
 func (model *Model) pasteIntoEditor(connection *app.Connection, tab *app.Tab) tea.Cmd {
 	if model.clipboard == "" {
-		connection.Show("nothing was copied here yet, so use the paste key of your terminal")
+		connection.Show("nothing was copied in this client yet; use the paste key of the terminal")
 		return nil
 	}
 	tab.Editor.Insert(model.clipboard)
@@ -1333,7 +1334,7 @@ func (model *Model) requestDiscardChanges(
 }
 
 // readPaste writes what the terminal pasted into the field that holds the caret: the
-// statement of the editor, or the field of the connection form.
+// statement of the editor, the field of a card on show, or the field of a form.
 func (model *Model) readPaste(written string) (tea.Model, tea.Cmd) {
 	if written == "" {
 		return model, nil
@@ -1345,8 +1346,14 @@ func (model *Model) readPaste(written string) (tea.Model, tea.Cmd) {
 		return model.pasteIntoPassword(written)
 	}
 	connection := model.Active()
-	if model.screen != ScreenWorking || connection == nil || connection.Overlay.IsOpen() {
+	if model.screen != ScreenWorking || connection == nil {
 		return model, nil
+	}
+	if overlay := &connection.Overlay; overlay.IsOpen() {
+		if overlay.Draft == nil {
+			return model, nil
+		}
+		return model.pasteIntoOverlay(connection, overlay, written)
 	}
 	tab := connection.Active()
 	if tab == nil || tab.Focus != app.PaneEditor || !tab.EditorVisible() {

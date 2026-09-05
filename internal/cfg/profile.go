@@ -196,9 +196,18 @@ type ProfileProblem struct {
 // secretProblemPrefix marks a problem of a `[secret]` store rather than of a profile.
 const secretProblemPrefix = "secret."
 
+// FileProblemPrefix marks a problem of the config file itself, which loses every profile
+// in it rather than one.
+const FileProblemPrefix = "file."
+
 // Describe returns the problem as one line, naming what it is about. A store and a profile
 // read the same way and are reported the same way, so the line says which of the two it is.
 func (problem ProfileProblem) Describe() string {
+	// The reason stands first, because the line is cut where a card is narrow and the
+	// path is the half a reader can lose.
+	if name, isFile := strings.CutPrefix(problem.Name, FileProblemPrefix); isFile {
+		return fmt.Sprintf("%s · %s", problem.Reason, name)
+	}
 	if name, isStore := strings.CutPrefix(problem.Name, secretProblemPrefix); isStore {
 		return fmt.Sprintf("skipped secret store %q: %s", name, problem.Reason)
 	}

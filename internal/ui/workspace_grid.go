@@ -463,9 +463,9 @@ func (model *Model) runGridAction(
 	case ActionToggleMasking:
 		tab.Unmasked = !tab.Unmasked
 		if tab.Unmasked {
-			connection.Show("the hidden columns are shown")
+			connection.Show("the masked columns are shown")
 		} else {
-			connection.Show("the columns that hold a secret are hidden again")
+			connection.Show("the masked columns are hidden again")
 		}
 
 	case ActionViewCell:
@@ -493,11 +493,11 @@ func (model *Model) runGridAction(
 		return model.reviewChanges(connection, tab)
 	case ActionUndoChange:
 		if !tab.UndoChange() {
-			connection.Show("nothing to take back")
+			connection.Show("there is nothing to undo")
 		}
 	case ActionRedoChange:
 		if !tab.RedoChange() {
-			connection.Show("nothing to put back on")
+			connection.Show("there is nothing to redo")
 		}
 	case ActionFollowForeignKey:
 		return model.followForeignKey(connection, tab, shape)
@@ -546,7 +546,7 @@ func (model *Model) runPlanAction(
 		if tab.ViewData.Kind != app.DataPlan {
 			return model, nil
 		}
-		connection.Show("the plan is on the clipboard")
+		connection.Show("plan copied")
 		return model, model.keepOnClipboard(tab.ViewData.Plan.Raw)
 	case ActionAiCheckPlan:
 		return model.askAiToCheckPlan(connection, tab)
@@ -748,7 +748,7 @@ func buildCellEditor(overlay app.Overlay, initial string) app.Overlay {
 		}
 		return overlay
 	}
-	overlay.Draft = app.NewEditorBuffer(initial, 0)
+	overlay.Draft = app.NewEditorBuffer(initial, len(initial))
 	overlay.ContentRows = max(strings.Count(initial, "\n")+1, minCellEditorRows)
 	return overlay
 }

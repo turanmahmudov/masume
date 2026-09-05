@@ -404,7 +404,7 @@ func (model *Model) copyDocumentValue(
 	if !held {
 		return nil
 	}
-	connection.Show("the value is on the clipboard")
+	connection.Show("value copied")
 	return model.keepOnClipboard(written)
 }
 
@@ -434,7 +434,7 @@ func (model *Model) copyDocumentPath(
 		return nil
 	}
 	written := strings.Join(keys, ".")
-	connection.Show("the field name is on the clipboard")
+	connection.Show("field name copied")
 	return model.keepOnClipboard(written)
 }
 

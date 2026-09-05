@@ -100,7 +100,7 @@ func ReadThemeDocuments(themesPath string) ([]ThemeDocument, []string) {
 // themes of the user are kept.
 func buildDefaultConfig(path, reason string, themes []ThemeDocument, themeProblems []string) LoadedConfig {
 	return LoadedConfig{
-		Problems:      []ProfileProblem{{Name: path, Reason: reason}},
+		Problems:      []ProfileProblem{{Name: FileProblemPrefix + path, Reason: reason}},
 		Settings:      DefaultUISettings(),
 		Keys:          DefaultKeySettings(),
 		Ai:            DefaultAiConfig(),

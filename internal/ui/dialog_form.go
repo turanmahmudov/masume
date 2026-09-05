@@ -12,6 +12,15 @@ type DialogField struct {
 	Choices []string
 }
 
+// describeFieldValue returns the value a row shows while the cursor is elsewhere. A field
+// that is empty says so, because an empty row and a row of blanks read the same.
+func describeFieldValue(field DialogField) string {
+	if field.Value == "" && len(field.Choices) == 0 {
+		return "(empty)"
+	}
+	return field.Value
+}
+
 // The two answers a yes-or-no field steps through.
 var yesOrNo = []string{"yes", "no"}
 

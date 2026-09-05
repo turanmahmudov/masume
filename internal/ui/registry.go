@@ -431,7 +431,7 @@ func (registry *KeyRegistry) FormatActionChords(scope cfg.KeyScope, id ActionID)
 		seen[label] = true
 		written = append(written, label)
 	}
-	return strings.Join(written, "  ")
+	return strings.Join(written, " / ")
 }
 
 // FormatActionChord writes the first chord of an action, in full, for a column of a list.

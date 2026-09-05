@@ -76,13 +76,13 @@ func DescribeUndo(undo UndoPlan) string {
 	if !undo.Kept {
 		return "none · " + undo.Reason
 	}
-	return present.FormatCountOf(undo.Rows, "row", "rows") + " read with the write"
+	return present.FormatCountOf(undo.Rows, "row", "rows") + " kept before the write"
 }
 
 // DescribeCommit returns how the write is committed.
 func DescribeCommit(plan Plan) string {
 	if plan.InTransaction {
-		return "joins the transaction you hold open"
+		return "joins the open transaction"
 	}
 	if plan.Undo.Kept {
 		return "the write and its undo run in one transaction"

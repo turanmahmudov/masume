@@ -122,7 +122,7 @@ func TestThePlanCardSaysWhatTheWriteDoes(t *testing.T) {
 
 	drawn := stripStyles(model.renderWritePlan(connection.Overlay, 100))
 	for _, said := range []string{
-		"3 of 12 in orders", "status", "t_order_audit", "1 row read", "run", "cancel",
+		"3 of 12 in orders", "status", "t_order_audit", "1 row kept", "run", "cancel",
 	} {
 		if !strings.Contains(drawn, said) {
 			t.Errorf("the card says nothing of %q:\n%s", said, drawn)

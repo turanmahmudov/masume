@@ -75,9 +75,10 @@ func buildMappingFields(held app.ImportRequest) []DialogField {
 	return fields
 }
 
-// describeSourceColumn names one column of the file and what it holds.
+// describeSourceColumn names one column of the file and what it holds. The arrow points at
+// the column of the table the row writes into, which the value beside it names.
 func describeSourceColumn(column load.SourceColumn) string {
-	return column.Name + " " + string(column.Kind)
+	return column.Name + " " + string(column.Kind) + " →"
 }
 
 // describeImportTable returns the table the rows are written into.

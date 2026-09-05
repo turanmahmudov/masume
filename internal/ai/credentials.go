@@ -22,8 +22,9 @@ func DescribeMissingKey(config cfg.AiConfig, id cfg.AiProviderID) string {
 	settings := config.Providers[id]
 	table := "[ai.providers." + string(id) + "]"
 	if settings.APIKeyEnv != "" {
-		return settings.APIKeyEnv + " carries no key; set it, or write api_key under " + table
+		return "no API key: " + settings.APIKeyEnv + " is empty. Set it, or set api_key " +
+			"under " + table + " in the config file."
 	}
-	return "write api_key under " + table + " in the config file, or api_key_env naming the " +
-		"variable that carries it"
+	return "no API key: set api_key under " + table + " in the config file, or set " +
+		"api_key_env to the name of the environment variable that holds the key."
 }

@@ -2,13 +2,13 @@ package ui
 
 import (
 	"context"
-	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/turanmahmudov/masume/internal/app"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/load"
+	"github.com/turanmahmudov/masume/internal/present"
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
@@ -51,7 +51,7 @@ func (model *Model) openImport(
 	connection *app.Connection, table db.TableRef, creating bool,
 ) (tea.Model, tea.Cmd) {
 	if !connection.Session.Capabilities().WritesDDL {
-		connection.Show("this server has no import")
+		connection.Show("this server cannot import a file")
 		return model, nil
 	}
 
@@ -360,7 +360,7 @@ func (model *Model) readImportRun(answered importRanMsg) (tea.Model, tea.Cmd) {
 	creating := connection.Overlay.Kind == app.OverlayImport &&
 		connection.Overlay.Import.Plan.CreatesTable
 	connection.Overlay = app.Overlay{}
-	connection.Show(strconv.Itoa(answered.Written) + " rows were written")
+	connection.Show("wrote " + present.FormatCountOf(int64(answered.Written), "row", "rows"))
 	if creating {
 		return model, readCatalog(id, connection.Session, quietCatalogRead)
 	}
