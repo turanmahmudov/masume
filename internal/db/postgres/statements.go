@@ -199,6 +199,7 @@ const listConstraintsSQL = `
          pg_get_constraintdef(c.oid) as definition
     from pg_constraint c
    where c.conrelid = $1::regclass
+     and c.contype <> 'n'
    order by c.contype, c.conname
 `
 
