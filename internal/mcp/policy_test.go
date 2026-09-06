@@ -153,6 +153,15 @@ func TestListOpenProfiles(t *testing.T) {
 	if len(open) != 2 || open[0].Name != "one" || open[1].Name != "three" {
 		t.Errorf("the open profiles are %v", open)
 	}
+
+	// A server started for one profile reaches that profile alone, so `--check` reports
+	// that profile alone.
+	scoped := deps
+	scoped.ScopedProfile = "three"
+	open = ListOpenProfiles(scoped)
+	if len(open) != 1 || open[0].Name != "three" {
+		t.Errorf("the scoped server opens %v, wanted three alone", open)
+	}
 }
 
 func TestFindUnreachableReason(t *testing.T) {

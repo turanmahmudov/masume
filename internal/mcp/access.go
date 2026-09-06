@@ -34,10 +34,13 @@ type AccessDeps struct {
 }
 
 // ListOpenProfiles returns the profiles the config opens to an agent, in the order of the
-// picker.
+// picker. A server started for one profile opens that profile alone.
 func ListOpenProfiles(deps AccessDeps) []cfg.Profile {
 	open := []cfg.Profile{}
 	for _, profile := range deps.Profiles {
+		if deps.ScopedProfile != "" && profile.Name != deps.ScopedProfile {
+			continue
+		}
 		if ResolveProfileAccess(deps.Config, profile) != cfg.McpOff {
 			open = append(open, profile)
 		}
