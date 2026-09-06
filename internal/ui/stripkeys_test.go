@@ -135,6 +135,31 @@ func TestAPressOnTheTreeBorderOpensTheFilter(t *testing.T) {
 	}
 }
 
+// A second search starts empty. The text of the first one stays applied to the tree, so
+// without this the second search reads as the two searches joined.
+func TestOpeningTheTreeFilterClearsTheTextOfTheLastSearch(t *testing.T) {
+	model := buildLoadedModel(t, 2, 4, 6, 3)
+	connection := model.Active()
+	model.render()
+
+	held, found := findCardButton(model, ActionFilterTree)
+	if !found {
+		t.Fatal("the tree border recorded no key that opens the filter")
+	}
+	model.readMouse(tea.MouseClickMsg{X: held.from, Y: held.row, Button: tea.MouseLeft})
+	model.readTreeFilterKey(connection, tea.Key{Code: 't', Text: "table_0001"})
+	model.readTreeFilterKey(connection, tea.Key{Code: tea.KeyEnter})
+	if connection.Tree.Filter != "table_0001" {
+		t.Fatalf("the filter holds %q after Enter", connection.Tree.Filter)
+	}
+
+	model.readMouse(tea.MouseClickMsg{X: held.from, Y: held.row, Button: tea.MouseLeft})
+	if connection.Tree.Filter != "" {
+		t.Errorf("the second search starts on %q, wanted an empty field",
+			connection.Tree.Filter)
+	}
+}
+
 // The connection form names its keys, and a press on one runs it as the key does.
 func TestAPressOnAKeyOfTheConnectionFormRunsIt(t *testing.T) {
 	model := buildOfflineModel(t, 120, 40)

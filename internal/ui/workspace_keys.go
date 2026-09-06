@@ -1103,6 +1103,8 @@ func (model *Model) runTreeAction(
 	case ActionFilterTree:
 		row, found := model.treeRowAt(connection, rows)
 		connection.Tree.Filtering = true
+		connection.Tree.Filter = ""
+		connection.Tree.Cursor = 0
 		connection.Tree.FilterScope = ""
 		if found {
 			connection.Tree.FilterScope = resolveFilterScope(row)
