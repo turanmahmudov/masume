@@ -146,6 +146,17 @@ func FindKeywordsAnywhere(tokens []CodeToken, keywords []string) []KeywordHit {
 	return collectKeywordHits(tokens, keywords, true)
 }
 
+// HoldsCode is true where the text holds something to run. A text of comments and blanks
+// alone holds no statement.
+func HoldsCode(sql string, flavour SyntaxFlavour) bool {
+	for _, token := range Tokenize(sql, flavour) {
+		if token.Kind != TokenComment {
+			return true
+		}
+	}
+	return false
+}
+
 // FindTopLevelKeywords reads the statement, for a caller with only one question.
 func FindTopLevelKeywords(sql string, keywords []string, flavour SyntaxFlavour) []KeywordHit {
 	return FindKeywordsIn(ReadCodeTokens(sql, flavour), keywords)

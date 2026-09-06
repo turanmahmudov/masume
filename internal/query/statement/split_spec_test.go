@@ -41,6 +41,14 @@ func TestSplitStatementsEndsAStatementOnlyAtARealSemicolon(t *testing.T) {
 		{"only space", "   \n  ", syntax.FlavourStandard, nil},
 		{"only semicolons", ";;;", syntax.FlavourStandard, nil},
 
+		// A comment holds nothing to run, so it is no statement.
+		{"only a line comment", "-- a note\n", syntax.FlavourStandard, nil},
+		{"only a block comment", "/* a note */", syntax.FlavourStandard, nil},
+		{"a comment after the last statement", "select 1;\n-- a note",
+			syntax.FlavourStandard, []string{"select 1"}},
+		{"a comment before the statement", "-- a note\nselect 1",
+			syntax.FlavourStandard, []string{"-- a note\nselect 1"}},
+
 		// A semicolon that is text, not the end of a statement.
 		{"a semicolon in a string", "select ';'", syntax.FlavourStandard,
 			[]string{"select ';'"}},

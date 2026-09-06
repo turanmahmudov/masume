@@ -383,7 +383,7 @@ func TestRunWritesThePlanAsJSON(t *testing.T) {
 func TestRunReportsATextWithNoStatement(t *testing.T) {
 	profile := buildDatabase(t, cfg.AccessWrite)
 
-	for _, written := range []string{"", "   ", "\n\n"} {
+	for _, written := range []string{"", "   ", "\n\n", "-- a note", "/* a note */"} {
 		code, _, reported := runOptions(t, headless.Options{
 			Profile: profile, Statement: written,
 		})

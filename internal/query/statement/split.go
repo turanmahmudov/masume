@@ -29,7 +29,7 @@ func SplitStatementRanges(sql string, flavour syntax.SyntaxFlavour) []StatementR
 		slice := sql[from:to]
 		leading := len(slice) - len(strings.TrimLeft(slice, " \t\r\n\v\f"))
 		text := strings.TrimSpace(slice)
-		if text != "" {
+		if text != "" && syntax.HoldsCode(text, flavour) {
 			ranges = append(ranges, StatementRange{
 				Text: text, Start: from + leading, End: from + leading + len(text),
 			})
