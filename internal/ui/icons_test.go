@@ -68,9 +68,35 @@ func TestTheCopyMenuKeepsNoGlyphColumn(t *testing.T) {
 	frame := strings.Split(model.render(), "\n")
 
 	block := model.layout.overlayRows
+	// The first row is the selected one, and it carries the mark of the selection.
 	text := cutRowText(frame[block.top], block.from, block.to)
-	if !strings.HasPrefix(strings.TrimLeft(text, " "), "Cell") {
+	text = strings.TrimLeft(text, " "+model.icons.Icon(cfg.IconPrompt))
+	if !strings.HasPrefix(text, "Cell") {
 		t.Errorf("the first row of the copy menu reads %q", strings.TrimSpace(text))
+	}
+}
+
+// The row the palette will run carries a mark, so a reader sees which one Enter takes even
+// where the terminal draws no colour.
+func TestThePaletteMarksTheSelectedRow(t *testing.T) {
+	model := buildLoadedModel(t, 1, 3, 8, 3)
+	connection := model.Active()
+	connection.Overlay = app.Overlay{
+		Kind: app.OverlayPalette, Title: " command palette ",
+		Draft: app.NewEditorBuffer("", 0), Palette: model.buildPaletteActions(connection),
+	}
+	connection.Overlay.List.Cursor = 1
+	frame := strings.Split(model.render(), "\n")
+
+	block := model.layout.overlayRows
+	mark := model.icons.Icon(cfg.IconPrompt)
+	first := cutRowText(frame[block.top], block.from, block.to)
+	second := cutRowText(frame[block.top+1], block.from, block.to)
+	if strings.Contains(first, mark) {
+		t.Errorf("a row that is not selected carries the mark: %q", first)
+	}
+	if !strings.HasPrefix(strings.TrimLeft(second, " "), mark) {
+		t.Errorf("the selected row reads %q, wanted the mark %q", second, mark)
 	}
 }
 

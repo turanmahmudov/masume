@@ -544,7 +544,13 @@ func (model *Model) renderListRow(row ListRowSpec) string {
 		return paintText(ink, ground, text)
 	}
 
-	written := paintOn(ground, strings.Repeat(" ", rowPaddingLeft))
+	// The selected row carries a mark of its own, so the list reads on a terminal that
+	// draws no colour.
+	mark := strings.Repeat(" ", rowPaddingLeft)
+	if row.Selected {
+		mark = present.FitText(model.icons.Icon(cfg.IconPrompt), rowPaddingLeft)
+	}
+	written := paint(labelInk, mark)
 	if row.LeadWidth > 0 {
 		written += paint(quiet, present.FitText(row.Lead, row.LeadWidth))
 	}
