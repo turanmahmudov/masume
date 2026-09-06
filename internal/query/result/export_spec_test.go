@@ -277,8 +277,9 @@ func TestJSONExportWritesADriverListAsAnArray(t *testing.T) {
 	columns := []query.ResultColumn{
 		{Name: "tags", DataType: "text[]"},
 		{Name: "empty", DataType: "text[]"},
+		{Name: "price", DataType: "numeric"},
 	}
-	rows := [][]any{{[]string{"a", "b"}, []string{}}}
+	rows := [][]any{{[]string{"a", "b"}, []string{}, decimalCell{"9.90"}}}
 
 	writer := result.CreateExportWriter(result.ExportJSON, result.DefaultCSVOptions())
 	written := writer.Begin(columns) + writer.WriteRows(rows, columns) + writer.End()
@@ -294,7 +295,18 @@ func TestJSONExportWritesADriverListAsAnArray(t *testing.T) {
 	if empty, isList := read[0]["empty"].([]any); !isList || len(empty) != 0 {
 		t.Errorf("the empty list reads back as %#v, wanted an empty array", read[0]["empty"])
 	}
+	// A number the driver returns as a value of its own keeps its text, and with it the
+	// trailing zeros the server sent.
+	if read[0]["price"] != "9.90" {
+		t.Errorf("the number reads back as %#v, wanted the text 9.90", read[0]["price"])
+	}
 }
+
+// decimalCell stands for the decimal a driver returns: a value of its own that writes
+// itself as text.
+type decimalCell struct{ written string }
+
+func (cell decimalCell) String() string { return cell.written }
 
 // A document from MongoDB reaches the writer as canonical extended JSON, and the file
 // holds the values it wraps.

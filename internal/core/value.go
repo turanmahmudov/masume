@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -101,6 +102,17 @@ var documentTypes = map[string]bool{
 // IsDocumentType is true for a column type that holds a document.
 func IsDocumentType(dataType string) bool {
 	return documentTypes[dataType]
+}
+
+// IsListValue is true where the driver returned a list of values, such as a Postgres
+// array. Bytes are no list: they are written as their own text.
+func IsListValue(value any) bool {
+	switch value.(type) {
+	case nil, string, []byte:
+		return false
+	}
+	kind := reflect.TypeOf(value).Kind()
+	return kind == reflect.Slice || kind == reflect.Array
 }
 
 // IsStructuredValue is true if the driver returned the value as a structure: a JSON
