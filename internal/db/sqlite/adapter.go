@@ -22,6 +22,9 @@ import (
 // mainSchema is the database every SQLite file holds. A bare name is looked up here.
 const mainSchema = "main"
 
+// memoryDatabase is the SQLite database that is never written to a file.
+const memoryDatabase = ":memory:"
+
 // sqliteBusyTimeout is how long a statement waits for another process to release the
 // file.
 const sqliteBusyTimeout = 5 * time.Second
@@ -413,20 +416,23 @@ func (adapter *sqliteAdapter) Connect(
 	ctx context.Context, profile cfg.Profile, _ string,
 ) (db.Session, error) {
 	path := core.ExpandHomePath(profile.Database)
-	// The driver creates a missing file, so a wrong path would open an empty database.
-	if _, err := os.Stat(path); err != nil {
-		reason := err
-		if errors.Is(err, fs.ErrNotExist) {
-			reason = errors.New("there is no database file at this path")
+	inMemory := path == memoryDatabase
+	if !inMemory {
+		// The driver creates a missing file, so a wrong path would open an empty database.
+		if _, err := os.Stat(path); err != nil {
+			reason := err
+			if errors.Is(err, fs.ErrNotExist) {
+				reason = errors.New("there is no database file at this path")
+			}
+			return nil, db.WrapDatabaseMessage(db.BuildConnectMessage(profile, reason), err)
 		}
-		return nil, db.WrapDatabaseMessage(db.BuildConnectMessage(profile, reason), err)
 	}
 
 	readOnly := profile.AccessMode == cfg.AccessReadOnly
 	settings := []string{
 		"_pragma=busy_timeout(" + strconv.FormatInt(sqliteBusyTimeout.Milliseconds(), 10) + ")",
 	}
-	if readOnly {
+	if readOnly && !inMemory {
 		settings = append(settings, "mode=ro")
 	} else {
 		// SQLite checks foreign keys only if the connection asks for it, so a write that

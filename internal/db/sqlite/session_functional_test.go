@@ -601,3 +601,27 @@ insert into orders (customer) values ('ada');`)
 		t.Errorf("the state reads %q after the set", state)
 	}
 }
+
+func TestAdapterOpensTheMemoryDatabase(t *testing.T) {
+	profile := cfg.Profile{
+		Name: "memory", Engine: core.EngineSqlite, Database: ":memory:",
+		AccessMode: cfg.AccessWrite, PageSize: 100,
+	}
+	ctx := context.Background()
+	session, err := engines.CreateAdapters().Open(ctx, profile, "")
+	if err != nil {
+		t.Fatalf("the memory database answered %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	if _, err := session.RunQuery(ctx, "create table t (id integer)", readEverything, nil); err != nil {
+		t.Fatalf("the write answered %v", err)
+	}
+	answered, err := session.RunQuery(ctx, "select count(*) from t", readEverything, nil)
+	if err != nil {
+		t.Fatalf("the read answered %v", err)
+	}
+	if len(answered.Rows) != 1 {
+		t.Fatalf("the read gave %d rows, wanted 1", len(answered.Rows))
+	}
+}
