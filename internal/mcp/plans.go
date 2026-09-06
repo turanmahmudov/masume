@@ -51,7 +51,8 @@ func (tokens *PlanTokens) Issue(profile, sql string) string {
 }
 
 // Take is true where the token was issued for this write on this connection and has not
-// been used. Every token is taken one time, so an agent cannot run one plan twice.
+// been used. Every token is taken one time, so an agent cannot run one plan twice. A token
+// brought back for another write stays usable for the write it was issued for.
 func (tokens *PlanTokens) Take(token, profile, sql string) bool {
 	if tokens == nil || token == "" {
 		return false
@@ -63,10 +64,10 @@ func (tokens *PlanTokens) Take(token, profile, sql string) bool {
 	if !issued {
 		return false
 	}
-	delete(tokens.issued, token)
 	if held.profile != profile || !matchesStatement(held.sql, sql) {
 		return false
 	}
+	delete(tokens.issued, token)
 	return tokens.now().Sub(held.at) <= planTokenLife
 }
 

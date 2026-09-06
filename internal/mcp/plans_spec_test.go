@@ -48,6 +48,20 @@ func TestATokenRunsNothingElse(t *testing.T) {
 	}
 }
 
+// A refused attempt takes nothing, so the write the user read still runs.
+func TestARefusedAttemptKeepsTheToken(t *testing.T) {
+	tokens := mcp.CreatePlanTokens()
+	written := "delete from orders where id = 1"
+	token := tokens.Issue("shop", written)
+
+	if tokens.Take(token, "shop", "delete from orders where id = 2") {
+		t.Fatal("the token ran another statement")
+	}
+	if !tokens.Take(token, "shop", written) {
+		t.Error("the token no longer runs the write it was issued for")
+	}
+}
+
 func TestATokenRunsOneWriteOnly(t *testing.T) {
 	tokens := mcp.CreatePlanTokens()
 	written := "delete from orders where id = 1"
