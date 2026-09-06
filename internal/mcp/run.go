@@ -29,13 +29,13 @@ func RunServer(argv []string, version string) int {
 
 	loaded := cfg.LoadConfigForWorkingDirectory(configPath)
 	for _, problem := range loaded.Project.Problems {
-		fmt.Fprintln(os.Stderr, problem)
+		reportConfigLine(problem)
 	}
 	for _, problem := range loaded.Problems {
-		fmt.Fprintln(os.Stderr, problem.Describe())
+		reportConfigLine(problem.Describe())
 	}
 	for _, warning := range loaded.Warnings {
-		fmt.Fprintln(os.Stderr, warning.DescribeWarning())
+		reportConfigLine(warning.DescribeWarning())
 	}
 
 	scoped, check, argumentErr := ReadServerArguments(argv)
@@ -162,6 +162,12 @@ func describeServing(deps AccessDeps) string {
 		names = append(names, profile.Name)
 	}
 	return "serving " + strings.Join(names, ", ")
+}
+
+// reportConfigLine writes one line about the config file, under the same prefix as every
+// other line of the server.
+func reportConfigLine(written string) {
+	fmt.Fprintf(os.Stderr, "%s mcp: %s\n", serverName, written)
 }
 
 // describeStartedProfiles returns the first line of the log of the server.
