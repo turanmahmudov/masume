@@ -36,6 +36,7 @@ func TestParseArgumentsReadsATargetAndAProfileName(t *testing.T) {
 		{[]string{"--profile", "shop-prod"}, "", "shop-prod"},
 		{[]string{"--profile=shop-prod"}, "", "shop-prod"},
 		{[]string{"-p", "shop-prod"}, "", "shop-prod"},
+		{[]string{"-p=shop-prod"}, "", "shop-prod"},
 	} {
 		held, err := parseArguments(one.argv)
 		if err != nil {

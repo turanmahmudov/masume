@@ -33,7 +33,7 @@ type invocation struct {
 func parseArguments(argv []string) (invocation, error) {
 	held := invocation{}
 	for at := 0; at < len(argv); at++ {
-		argument := argv[at]
+		argument := expandShortFlag(argv[at])
 		switch {
 		case argument == "--profile" || argument == "-p":
 			if at+1 >= len(argv) || strings.HasPrefix(argv[at+1], "-") {

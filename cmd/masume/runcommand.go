@@ -56,6 +56,22 @@ type runInvocation struct {
 	help     bool
 }
 
+// shortFlagNames are the short flags that take a value, and the long flag of each.
+var shortFlagNames = map[string]string{
+	"-p": "--profile", "-e": "--execute", "-l": "--limit", "-f": "--format",
+}
+
+// expandShortFlag returns a short flag written with its value attached, such as `-f=csv`,
+// as the long form. Every other argument is returned as it stands.
+func expandShortFlag(argument string) string {
+	name, value, attached := strings.Cut(argument, "=")
+	long, isShort := shortFlagNames[name]
+	if !attached || !isShort {
+		return argument
+	}
+	return long + "=" + value
+}
+
 // readFlagText returns the value written after the equals sign of a flag.
 func readFlagText(argument, prefix string) (string, error) {
 	written := strings.TrimSpace(strings.TrimPrefix(argument, prefix))
@@ -91,7 +107,7 @@ func parseRunArguments(argv []string) (runInvocation, error) {
 	positional := []string{}
 
 	for at := 0; at < len(argv); at++ {
-		argument := argv[at]
+		argument := expandShortFlag(argv[at])
 		var value string
 		var err error
 

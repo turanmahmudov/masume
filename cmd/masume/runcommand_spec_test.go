@@ -44,6 +44,9 @@ func TestParseRunArgumentsReadsEveryFlag(t *testing.T) {
 			"--param", "day=2026-09-02", "--explain"},
 		{"--profile=shop", "--format=json", "--execute=daily.sql", "--limit=500",
 			"--param=day=2026-09-02", "--explain"},
+		// A short flag takes its value attached, the way the long form does.
+		{"-p=shop", "-f=json", "-e=daily.sql", "-l=500",
+			"--param=day=2026-09-02", "--explain"},
 	} {
 		held, err := parseRunArguments(argv)
 		if err != nil {
