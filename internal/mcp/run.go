@@ -22,7 +22,12 @@ const serverName = "masume"
 // RunServer serves an agent until the client closes the stream, and returns the exit code of
 // the process.
 func RunServer(argv []string, version string) int {
-	loaded := cfg.LoadConfigForWorkingDirectory(cfg.ResolveConfigPath())
+	configPath := cfg.ResolveConfigPath()
+	if _, err := cfg.EnsureConfigFile(configPath); err != nil {
+		fmt.Fprintf(os.Stderr, "%s mcp: config: %s\n", serverName, err.Error())
+	}
+
+	loaded := cfg.LoadConfigForWorkingDirectory(configPath)
 	for _, problem := range loaded.Project.Problems {
 		fmt.Fprintln(os.Stderr, problem)
 	}
