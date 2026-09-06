@@ -200,7 +200,7 @@ func writeOneRead(
 		options.report("%s", db.DescribeError(err))
 		return CodeStatement
 	}
-	if len(answered.Columns) == 0 {
+	if len(answered.Columns) == 0 && !answered.HoldsResultSet {
 		// The output stream holds the document alone, so this goes to the error stream.
 		options.report("%s", describeChange(answered))
 		return CodeOK

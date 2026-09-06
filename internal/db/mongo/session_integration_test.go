@@ -60,6 +60,24 @@ func TestServerRunsACallAndAnswersTheDocuments(t *testing.T) {
 
 // The shell writes a document with bare keys and single quotes, and a user pastes one in
 // as it stands.
+// A find that matched nothing answers a result set with no column, so an export writes an
+// empty document and not the report of a change.
+func TestServerReadsAFindThatMatchedNothing(t *testing.T) {
+	session := openOrders(t)
+
+	answered, err := session.RunQuery(context.Background(),
+		`db.orders.find({customer: "nobody"})`, dbtest.ReadEverything, nil)
+	if err != nil {
+		t.Fatalf("the call answered %v", err)
+	}
+	if len(answered.Rows) != 0 {
+		t.Fatalf("the call gave %d rows, wanted none", len(answered.Rows))
+	}
+	if !answered.HoldsResultSet {
+		t.Error("the result of a find is not marked as a result set")
+	}
+}
+
 func TestServerReadsTheDocumentTheShellWrites(t *testing.T) {
 	session := openOrders(t)
 

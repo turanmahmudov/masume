@@ -119,11 +119,14 @@ type ConstraintDetail struct {
 // QueryResult is what a statement answered.
 type QueryResult struct {
 	// Empty for a statement with no result set, which is not the same as no rows.
-	Columns   []ResultColumn
-	Rows      [][]any
-	Elapsed   time.Duration
-	Truncated bool
-	Command   string
+	Columns []ResultColumn
+	// HoldsResultSet marks a read whose result names no column. A MongoDB collection
+	// holds no schema, so a find that matched nothing names none.
+	HoldsResultSet bool
+	Rows           [][]any
+	Elapsed        time.Duration
+	Truncated      bool
+	Command        string
 	// DDL changes no rows and reports nothing.
 	Affected    int64
 	HasAffected bool

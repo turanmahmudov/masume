@@ -409,7 +409,8 @@ func (session *mongoSession) readFind(
 	answered := BuildDocumentResult(documents, 0, parsed.ReadMethod())
 	return db.BuildCappedResult(db.CappedRead{
 		Rows: answered.Rows, RowLimit: rowLimit, Columns: answered.Columns,
-		Command: parsed.ReadMethod(),
+		HoldsResultSet: answered.HoldsResultSet,
+		Command:        parsed.ReadMethod(),
 	}), nil
 }
 
@@ -431,7 +432,8 @@ func (session *mongoSession) readAggregate(
 	answered := BuildDocumentResult(documents, 0, "aggregate")
 	return db.BuildCappedResult(db.CappedRead{
 		Rows: answered.Rows, RowLimit: rowLimit, Columns: answered.Columns,
-		Command: "aggregate",
+		HoldsResultSet: answered.HoldsResultSet,
+		Command:        "aggregate",
 	}), nil
 }
 
@@ -764,7 +766,8 @@ func (session *mongoSession) ReadPage(
 	answered := BuildDocumentResult(documents, time.Since(startedAt), "find")
 	return db.BuildCappedResult(db.CappedRead{
 		Rows: answered.Rows, RowLimit: window.Limit, Columns: answered.Columns,
-		Elapsed: time.Since(startedAt), Command: "find",
+		HoldsResultSet: answered.HoldsResultSet,
+		Elapsed:        time.Since(startedAt), Command: "find",
 	}), nil
 }
 

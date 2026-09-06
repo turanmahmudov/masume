@@ -211,7 +211,7 @@ func BuildDocumentResult(
 	columns := BuildDocumentColumns(documents)
 	return db.QueryResult{
 		Columns: columns, Rows: BuildDocumentRows(documents, columns),
-		Elapsed: elapsed, Command: command,
+		Elapsed: elapsed, Command: command, HoldsResultSet: true,
 	}
 }
 

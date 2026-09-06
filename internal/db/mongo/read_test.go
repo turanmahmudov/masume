@@ -13,6 +13,18 @@ import (
 
 var ordersCollection = db.TableRef{Schema: "shop", Name: "orders", Kind: db.RelationTable}
 
+// A find that matched nothing is still a read, so the run writes an empty result and not
+// the report of a statement that changed something.
+func TestBuildDocumentResultHoldsAResultSetWithNoDocument(t *testing.T) {
+	answered := BuildDocumentResult(nil, 0, "find")
+	if len(answered.Columns) != 0 {
+		t.Errorf("the result holds %d columns, wanted none", len(answered.Columns))
+	}
+	if !answered.HoldsResultSet {
+		t.Error("the result of a find is not marked as a result set")
+	}
+}
+
 // A collection keeps no schema, so the columns are what the documents hold. A field one
 // document has and another has not still reads as one column.
 func TestBuildDocumentResultAnswersTheFieldsOfEveryDocument(t *testing.T) {

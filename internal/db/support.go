@@ -161,6 +161,8 @@ type CappedRead struct {
 	Command     string
 	Affected    int64
 	HasAffected bool
+	// HoldsResultSet marks a read whose result names no column.
+	HoldsResultSet bool
 }
 
 // BuildCappedResult drops the extra row, and reports it as truncated.
@@ -174,6 +176,7 @@ func BuildCappedResult(read CappedRead) QueryResult {
 	return QueryResult{
 		Columns: read.Columns, Rows: rows, Elapsed: read.Elapsed, Truncated: truncated,
 		Command: read.Command, Affected: read.Affected, HasAffected: read.HasAffected,
+		HoldsResultSet: read.HoldsResultSet,
 	}
 }
 
