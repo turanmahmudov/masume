@@ -163,6 +163,7 @@ func buildRunner(
 			permission, undo := askAgentToRun(
 				ctx, deps, profile, connection, token, risk, statements)
 			held.undo = undo
+			held.writes = risk != statement.RiskNone
 			return permission
 		},
 		MeasureWrite: func(ctx context.Context, sql string) (agent.MeasuredWrite, bool) {
@@ -171,6 +172,9 @@ func buildRunner(
 		RunStatement: func(
 			ctx context.Context, sql string, rowLimit int,
 		) (agent.StatementAnswer, error) {
+			if !held.writes {
+				return runRead(ctx, session, deps, sql, rowLimit)
+			}
 			return runWriteWithUndo(ctx, session, held.undo, func(
 				running context.Context,
 			) (db.QueryResult, error) {
@@ -202,7 +206,26 @@ func buildRunner(
 // the profile, with the same question the screens use. The client of the agent shows the
 // question if it can. If it cannot, the statement does not run.
 // plannedWrite carries the undo of one write from the question to the run.
-type plannedWrite struct{ undo writeplan.UndoPlan }
+type plannedWrite struct {
+	undo writeplan.UndoPlan
+	// writes is false for a read, which has nothing to undo.
+	writes bool
+}
+
+// runRead runs a statement that changes nothing. It answers with no undo, because there is
+// nothing to take back.
+func runRead(
+	ctx context.Context, session db.Session, deps ToolDeps, sql string, rowLimit int,
+) (agent.StatementAnswer, error) {
+	result, err := agent.RunStatementWithin(ctx, session, deps.Config.Timeout,
+		func(limited context.Context) (db.QueryResult, error) {
+			return session.RunQuery(limited, sql, rowLimit, nil)
+		})
+	if err != nil {
+		return agent.StatementAnswer{}, err
+	}
+	return agent.StatementAnswer{Result: result}, nil
+}
 
 // runWriteWithUndo runs the statement, and reads its undo inside the same transaction where
 // the plan of the write keeps one.
