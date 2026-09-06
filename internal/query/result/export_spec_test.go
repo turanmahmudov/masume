@@ -271,6 +271,30 @@ func TestJSONExportEmbedsADocumentRatherThanEscapingIt(t *testing.T) {
 	}
 }
 
+// A Postgres `text[]` reaches the writer as a list, and the file holds a JSON array.
+func TestJSONExportWritesADriverListAsAnArray(t *testing.T) {
+	columns := []query.ResultColumn{
+		{Name: "tags", DataType: "text[]"},
+		{Name: "empty", DataType: "text[]"},
+	}
+	rows := [][]any{{[]string{"a", "b"}, []string{}}}
+
+	writer := result.CreateExportWriter(result.ExportJSON, result.DefaultCSVOptions())
+	written := writer.Begin(columns) + writer.WriteRows(rows, columns) + writer.End()
+
+	var read []map[string]any
+	if err := json.Unmarshal([]byte(written), &read); err != nil {
+		t.Fatalf("the file does not read as JSON: %v\n%s", err, written)
+	}
+	held, isList := read[0]["tags"].([]any)
+	if !isList || len(held) != 2 {
+		t.Errorf("the list reads back as %#v, wanted two items", read[0]["tags"])
+	}
+	if empty, isList := read[0]["empty"].([]any); !isList || len(empty) != 0 {
+		t.Errorf("the empty list reads back as %#v, wanted an empty array", read[0]["empty"])
+	}
+}
+
 // A document column whose value is no document keeps its text, rather than making the
 // file unreadable.
 func TestJSONExportKeepsAValueThatIsNoDocument(t *testing.T) {

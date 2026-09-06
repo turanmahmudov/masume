@@ -156,8 +156,9 @@ func castToJSONValue(value any, dataType string) any {
 		return nil
 	}
 	// A column that holds a document is written as that document, not as the text of
-	// one, so a reader of the file does not have to unescape it first.
-	if core.IsDocumentType(dataType) {
+	// one, so a reader of the file does not have to unescape it first. A list the driver
+	// gave as a structure is written the same way.
+	if core.IsDocumentType(dataType) || core.IsStructuredValue(value) {
 		if embedded, isJSON := embedJSONDocument(value, dataType); isJSON {
 			return embedded
 		}
