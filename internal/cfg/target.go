@@ -14,15 +14,12 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// Reads one connection target given on the command line, so the client opens a database
-// without a profile in the config file first. Three forms are read: a URL, a keyword DSN,
-// and the path of a database file.
+// Connection targets are URLs, keyword DSNs, or database file paths.
 
-// CommandLineProfileName is the name of a profile built from a target that names no
-// database to take a name from.
+// CommandLineProfileName is the fallback profile name for a target without a database name.
 const CommandLineProfileName = "command-line"
 
-// defaultTargetHost is the host of a URL that names none, for example `postgres:///shop`.
+// defaultTargetHost is the fallback host for a URL such as `postgres:///shop`.
 const defaultTargetHost = "127.0.0.1"
 
 // TargetError is a connection target the client cannot read.
@@ -40,13 +37,12 @@ var databaseFileExtensions = []string{".db", ".db3", ".sqlite", ".sqlite3"}
 // memoryDatabase is the SQLite database that is never written to a file.
 const memoryDatabase = ":memory:"
 
-// keywordAliases give the profile key each keyword of a DSN sets.
+// keywordAliases are the profile keys for DSN keywords.
 var keywordAliases = map[string]string{
 	"host": "host", "hostaddr": "host", "port": "port",
 	"dbname": "database", "database": "database",
 	"user": "user", "password": "password", "sslmode": "sslmode",
-	// `engine` is not a keyword of a PostgreSQL connection string. The keywords carry
-	// nothing about which server they are for.
+	// `engine` is a masume extension to PostgreSQL connection keywords.
 	"engine": "engine",
 }
 
@@ -57,7 +53,7 @@ const highestPort = 65535
 func readPortNumber(written string) (int, error) {
 	port, err := strconv.Atoi(written)
 	if err != nil || port <= 0 || port > highestPort {
-		return 0, failTarget("%q is not a port", written)
+		return 0, failTarget("invalid port %q; use an integer from 1 to 65535", written)
 	}
 	return port, nil
 }
@@ -76,12 +72,11 @@ func buildTargetProfile(engine core.Engine) Profile {
 	}
 }
 
-// BuildProfileFromTarget reads one connection target: a URL, a keyword DSN, or the path of
-// a database file. The profile it returns is not in the config file.
+// BuildProfileFromTarget parses a URL, keyword DSN, or database path into an unsaved profile.
 func BuildProfileFromTarget(text string) (Profile, error) {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
-		return Profile{}, failTarget("a connection target cannot be empty")
+		return Profile{}, failTarget("the connection target is empty")
 	}
 
 	var built Profile
@@ -102,8 +97,7 @@ func BuildProfileFromTarget(text string) (Profile, error) {
 	return built, nil
 }
 
-// describeKnownSchemes returns the URL schemes a target can use, for the error of one that
-// uses another.
+// describeKnownSchemes returns the supported URL schemes.
 func describeKnownSchemes() string {
 	names := make([]string, 0, len(urlSchemes))
 	for scheme := range urlSchemes {
@@ -124,8 +118,7 @@ func resolveDefaultDatabase(engine core.Engine, user string) string {
 	return ""
 }
 
-// readTargetSSLMode returns the SSL mode of a URL: the one its query names, or the default
-// of its engine.
+// readTargetSSLMode returns the URL SSL mode or the engine default.
 func readTargetSSLMode(parsed *url.URL, engine core.Engine) (core.SSLMode, error) {
 	written := ""
 	for _, key := range sslKeys {
@@ -149,22 +142,22 @@ func buildProfileFromURL(text string) (Profile, error) {
 	parsed, err := url.Parse(text)
 	if err != nil {
 		return Profile{}, failTarget(
-			"the connection URL cannot be read; a password in it has to be escaped, " +
-				"so a %% is written %%25 and a / is written %%2F")
+			"invalid connection URL; escape special characters in passwords: " +
+				"use %%25 for %% and %%2F for /")
 	}
 
 	engine, known := urlSchemes[strings.ToLower(parsed.Scheme)]
 	if !known {
-		return Profile{}, failTarget("%q is not a scheme this command reads, which are %s",
+		return Profile{}, failTarget("unsupported URL scheme %q; use one of %s",
 			parsed.Scheme, describeKnownSchemes())
 	}
 
 	built := buildTargetProfile(engine)
-	// A URL puts an IPv6 address in brackets. Every other reader needs it without them.
+	// Connection hosts use IPv6 addresses without brackets.
 	built.Host = strings.Trim(parsed.Hostname(), "[]")
 	if strings.Contains(built.Host, ",") {
 		return Profile{}, failTarget(
-			"the URL names more than one host, and this client opens one")
+			"multiple hosts are unsupported; use one host in the URL")
 	}
 	if built.Host == "" {
 		built.Host = defaultTargetHost
@@ -184,16 +177,16 @@ func buildProfileFromURL(text string) (Profile, error) {
 	}
 
 	built.Database = strings.TrimPrefix(parsed.Path, "/")
-	// A URL names one database, so a path of several parts is a URL of something else.
+	// The database path has one segment.
 	if strings.Contains(built.Database, "/") {
 		return Profile{}, failTarget(
-			"%q names more than one database", built.Database)
+			"invalid database path %q; use one path segment", built.Database)
 	}
 	if built.Database == "" {
 		built.Database = resolveDefaultDatabase(engine, built.User)
 	}
 	if built.Database == "" {
-		return Profile{}, failTarget("the URL names no database")
+		return Profile{}, failTarget("the URL database is missing")
 	}
 
 	if built.SSLMode, err = readTargetSSLMode(parsed, engine); err != nil {
@@ -202,8 +195,7 @@ func buildProfileFromURL(text string) (Profile, error) {
 	return built, nil
 }
 
-// holdsKeywordPairs is true for a target written as `key=value` pairs, whose first pair
-// always names a keyword this command knows.
+// holdsKeywordPairs is true for `key=value` pairs with a supported first keyword.
 func holdsKeywordPairs(text string) bool {
 	pairs, err := splitKeywordPairs(text)
 	if err != nil || len(pairs) == 0 {
@@ -213,8 +205,7 @@ func holdsKeywordPairs(text string) bool {
 	return known
 }
 
-// splitKeywordPairs splits a DSN into its pairs. A value can be quoted with single quotes
-// and can hold a space, and a backslash escapes the character after it.
+// splitKeywordPairs parses DSN pairs. Single-quoted values allow spaces and backslash escapes.
 func splitKeywordPairs(text string) ([][2]string, error) {
 	pairs := [][2]string{}
 	runes := []rune(text)
@@ -233,7 +224,7 @@ func splitKeywordPairs(text string) ([][2]string, error) {
 			at++
 		}
 		if at >= len(runes) || runes[at] != '=' {
-			return nil, failTarget("%q sets no value", key.String())
+			return nil, failTarget("missing = after keyword %q", key.String())
 		}
 		at++
 
@@ -261,15 +252,14 @@ func splitKeywordPairs(text string) ([][2]string, error) {
 			at++
 		}
 		if quoted {
-			return nil, failTarget("a quoted value is not closed")
+			return nil, failTarget("missing closing quote in the connection string")
 		}
 		pairs = append(pairs, [2]string{key.String(), value.String()})
 	}
 	return pairs, nil
 }
 
-// readKeywordEngine returns the engine a connection string names, or the default where it
-// names none.
+// readKeywordEngine returns the connection string engine or the default engine.
 func readKeywordEngine(pairs [][2]string) (core.Engine, error) {
 	for _, pair := range pairs {
 		if !strings.EqualFold(pair[0], "engine") {
@@ -277,7 +267,7 @@ func readKeywordEngine(pairs [][2]string) (core.Engine, error) {
 		}
 		engine, known := core.FindEngine(pair[1])
 		if !known {
-			return "", failTarget("%q is not an engine this client opens", pair[1])
+			return "", failTarget("unsupported engine %q", pair[1])
 		}
 		return engine, nil
 	}
@@ -291,7 +281,7 @@ func buildProfileFromKeywords(text string) (Profile, error) {
 		return Profile{}, err
 	}
 
-	// The port and the SSL mode take the default of the engine, so it is read first.
+	// The engine provides the default port and SSL mode.
 	engine, err := readKeywordEngine(pairs)
 	if err != nil {
 		return Profile{}, err
@@ -302,7 +292,7 @@ func buildProfileFromKeywords(text string) (Profile, error) {
 		key, known := keywordAliases[strings.ToLower(pair[0])]
 		if !known {
 			return Profile{}, failTarget(
-				"%q is not a keyword this command reads", pair[0])
+				"unsupported connection keyword %q", pair[0])
 		}
 		value := pair[1]
 		switch key {
@@ -339,13 +329,12 @@ func buildProfileFromKeywords(text string) (Profile, error) {
 		built.Database = built.User
 	}
 	if built.Database == "" {
-		return Profile{}, failTarget("the connection string names no database")
+		return Profile{}, failTarget("the connection string database is missing")
 	}
 	return built, nil
 }
 
-// holdsDatabaseFile is true for a path the client opens as a SQLite database: a file that
-// is there already, or a name with an extension a database file uses.
+// holdsDatabaseFile is true for a SQLite header, a database extension, or :memory:.
 func holdsDatabaseFile(path string) bool {
 	if path == memoryDatabase {
 		return true
@@ -353,14 +342,14 @@ func holdsDatabaseFile(path string) bool {
 	if slices.Contains(databaseFileExtensions, strings.ToLower(filepath.Ext(path))) {
 		return true
 	}
-	// Without this `masume README.md` opens a document as a database.
+	// Files without a database extension require a SQLite header.
 	return holdsSqliteHeader(core.ExpandHomePath(path))
 }
 
-// sqliteHeader opens every SQLite file, including the zero byte at its end.
+// sqliteHeader is the SQLite file signature, including the final zero byte.
 var sqliteHeader = []byte("SQLite format 3\x00")
 
-// holdsSqliteHeader is true where the file opens with the mark every SQLite file carries.
+// holdsSqliteHeader is true if the file starts with the SQLite signature.
 func holdsSqliteHeader(path string) bool {
 	held, err := os.Open(path)
 	if err != nil {
@@ -378,15 +367,14 @@ func holdsSqliteHeader(path string) bool {
 func buildProfileFromFilePath(path string) (Profile, error) {
 	if !holdsDatabaseFile(path) {
 		return Profile{}, failTarget(
-			"%s is not a URL, a connection string, or a database file that is there", path)
+			"unrecognized target %s; use a URL, keyword DSN, or SQLite database path", path)
 	}
 	built := buildTargetProfile(core.EngineSqlite)
 	built.Database = path
 	return built, nil
 }
 
-// buildTargetProfileName returns the name the picker lists the target under: the name of
-// the database, or the name of the file without its extension.
+// buildTargetProfileName returns the database name or the file name without its extension.
 func buildTargetProfileName(profile Profile) string {
 	if !core.OpensFile(profile.Engine) {
 		if profile.Database == "" {
@@ -405,7 +393,7 @@ func buildTargetProfileName(profile Profile) string {
 	return name
 }
 
-// ResolveUniqueProfileName returns a name no profile in the list holds.
+// ResolveUniqueProfileName returns an unused profile name.
 func ResolveUniqueProfileName(profiles []Profile, wanted string) string {
 	held := func(name string) bool {
 		return slices.ContainsFunc(profiles, func(profile Profile) bool {

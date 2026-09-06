@@ -6,15 +6,13 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// One stream of rows. The client and a run without a screen both write a result through this
-// one interface, so neither carries the begin, rows and end of a format itself.
+// Shared streaming result output for interactive and headless clients.
 
 // RowWriter writes the rows of one result to a stream.
 type RowWriter interface {
 	// WriteRows writes one batch. The columns are the same for every batch of a result.
 	WriteRows(rows [][]any, columns []query.ResultColumn) error
-	// Close writes the end of the file. A result of no rows still writes a file that reads
-	// back: an empty JSON array, and a CSV of its header alone.
+	// Close completes output, including an empty JSON array or an optional CSV header for empty results.
 	Close(columns []query.ResultColumn) error
 }
 

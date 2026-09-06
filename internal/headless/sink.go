@@ -11,14 +11,13 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/result"
 )
 
-// Where the rows of a result go. The rows are handed over as they arrive and never held
-// twice.
+// Result writers for streaming and buffered output formats.
 
 // rowSink takes the rows of one result and writes them in one format.
 type rowSink interface {
 	// TakeRows takes one batch. The columns are the same for every batch of a result.
 	TakeRows(rows [][]any, columns []query.ResultColumn) error
-	// Finish writes what is left, and the shape of a result that held no rows at all.
+	// Finish completes the output, including empty results.
 	Finish(columns []query.ResultColumn) error
 }
 
@@ -52,14 +51,12 @@ func (sink *streamingSink) TakeRows(rows [][]any, columns []query.ResultColumn) 
 	return sink.writer.WriteRows(rows, columns)
 }
 
-// Finish writes the end of the document. A result of no rows still writes the shape of one:
-// a CSV of its header alone, and an empty JSON array.
+// Finish completes the document. Empty results produce a CSV header or an empty JSON array.
 func (sink *streamingSink) Finish(columns []query.ResultColumn) error {
 	return sink.writer.Close(columns)
 }
 
-// heldSink holds every row until the result is whole, because its format measures the widest
-// cell of a column before it writes the first one.
+// heldSink buffers all rows for formats with aligned columns.
 type heldSink struct {
 	out   io.Writer
 	write func(columns []query.ResultColumn, rows [][]any) string
@@ -76,8 +73,7 @@ func (sink *heldSink) Finish(columns []query.ResultColumn) error {
 	return err
 }
 
-// buildPlainTable writes the rows as a table of spaces, with each column as wide as its
-// widest cell.
+// buildPlainTable writes a space-aligned table using the widest cell in each column.
 func buildPlainTable(columns []query.ResultColumn, rows [][]any) string {
 	widths := make([]int, len(columns))
 	for at, column := range columns {

@@ -11,23 +11,14 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// A transaction of the user, held open across several statements. It needs a replica set
-// or a sharded cluster: a standalone server has none, and says so rather than pretending.
-//
-// The server allows only reads and writes of documents inside one. A catalog read, an
-// index build and an explain are all refused there, so those calls run outside the
-// transaction and never join it.
-//
-// Any operation the server refuses aborts the transaction, and every later call returns
-// that it was aborted. The state is marked failed at that point, so the user is told to
-// roll back rather than meeting the same refusal again.
+// User transactions span statements and require a replica set or sharded cluster.
+// Catalog reads, index operations, and query plans run outside user transactions. Server errors mark the transaction as failed.
 
 // transactionHolder holds the transaction of one session.
 type transactionHolder struct {
-	// held is what the frame reads and a statement records.
+	// The shared transaction state.
 	held db.TransactionMark
-	// queue lets one call at a time onto the session of a transaction, because a server
-	// session takes one call at a time and the screens read on their own goroutines.
+	// The queue serializes transaction session calls.
 	queue *db.CallQueue
 	// guard holds the swap of the open session.
 	guard  sync.Mutex
@@ -38,7 +29,7 @@ func newTransactionHolder() *transactionHolder {
 	return &transactionHolder{queue: db.NewCallQueue()}
 }
 
-// readOpened returns the session of the open transaction, or nothing where none is open.
+// readOpened returns the open transaction session, or nil.
 func (holder *transactionHolder) readOpened() *mongo.Session {
 	holder.guard.Lock()
 	defer holder.guard.Unlock()
@@ -59,8 +50,7 @@ func (session *mongoSession) ReadTransactionState() db.TransactionState {
 	return session.transaction.held.ReadState()
 }
 
-// holdSession waits for its turn and returns the context every call runs in: the one of
-// the open transaction, or the one the caller gave where none is open.
+// holdSession reserves the session and adds the open transaction to the context, if present.
 func (session *mongoSession) holdSession(
 	ctx context.Context,
 ) (context.Context, func(), error) {
@@ -75,16 +65,13 @@ func (session *mongoSession) holdSession(
 	return mongo.NewSessionContext(ctx, opened), giveBack, nil
 }
 
-// IsServerError is true where the server refused a call, rather than this client refusing
-// to send one.
+// IsServerError is true for a MongoDB server error.
 func IsServerError(err error) bool {
 	var reported mongo.ServerError
 	return errors.As(err, &reported)
 }
 
-// noteServerFailure records that the transaction is over where the server refused a call
-// inside it. Every operation the server refuses aborts the transaction, and a statement
-// this client would not send never reached it.
+// noteServerFailure marks an open transaction as failed after a server error.
 func (session *mongoSession) noteServerFailure(err error) error {
 	if err != nil && IsServerError(err) {
 		session.transaction.held.MarkFailed()
@@ -96,8 +83,8 @@ func (session *mongoSession) noteServerFailure(err error) error {
 func (session *mongoSession) BeginTransaction(ctx context.Context) error {
 	if !session.holdsTransactions {
 		return db.NewUnsupportedError(
-			"hold a transaction: one needs a replica set or a sharded cluster, " +
-				"and this server is standalone")
+			"support transactions: transactions require a replica set or sharded cluster; " +
+				"this server is standalone")
 	}
 	giveBack, waitErr := session.transaction.queue.Take(ctx)
 	if waitErr != nil {
@@ -124,19 +111,16 @@ func (session *mongoSession) BeginTransaction(ctx context.Context) error {
 	return nil
 }
 
-// commitAttempts is how many times a commit whose result the server could not report is
-// sent again. A commit is safe to repeat: the server applies the work once.
+// commitAttempts is the maximum commit attempts for unknown results. MongoDB commit retries do not repeat transaction writes.
 const commitAttempts = 3
 
-// CommitTransaction applies the work of the transaction. The transaction is over whatever
-// the server returns, so a commit it refused still leaves the session free.
+// CommitTransaction commits the transaction and releases the session, including after a commit error.
 func (session *mongoSession) CommitTransaction(ctx context.Context) error {
 	return session.endTransaction(ctx, func(opened *mongo.Session) error {
 		var err error
 		for range commitAttempts {
 			err = opened.CommitTransaction(ctx)
-			// The server could not report whether the work landed, which is a reason
-			// to ask again rather than to tell the user it failed.
+			// Unknown commit results permit another commit attempt.
 			if err == nil || !isUnknownCommitResult(err) || ctx.Err() != nil {
 				return err
 			}
@@ -149,7 +133,7 @@ func (session *mongoSession) CommitTransaction(ctx context.Context) error {
 // report, such as one a step-down interrupted.
 const unknownCommitResult = "UnknownTransactionCommitResult"
 
-// isUnknownCommitResult is true where the commit may or may not have landed.
+// isUnknownCommitResult is true if the commit outcome is unknown.
 func isUnknownCommitResult(err error) bool {
 	var labeled mongo.LabeledError
 	return errors.As(err, &labeled) && labeled.HasErrorLabel(unknownCommitResult)
@@ -199,8 +183,7 @@ func isAlreadyAborted(err error) bool {
 	return errors.As(err, &reported) && reported.HasErrorCode(noSuchTransaction)
 }
 
-// changeRun holds the transaction one set of staged changes runs in: the one the user
-// opened, or one this run opens for itself.
+// changeRun is the transaction context for a staged batch, with an optional transaction owned by the batch.
 type changeRun struct {
 	session *mongoSession
 	// inside is the context every change runs in.
@@ -209,7 +192,7 @@ type changeRun struct {
 	owned *mongo.Session
 }
 
-// begin opens a transaction for this run alone, so the whole set lands or none of it does.
+// begin opens a transaction owned by the staged batch.
 func (run *changeRun) begin(ctx context.Context) error {
 	started, err := run.session.client.StartSession()
 	if err != nil {
@@ -245,9 +228,7 @@ func (run *changeRun) end(ctx context.Context) {
 	}
 }
 
-// ApplyChanges applies the staged work of the grid. It joins the transaction of the user
-// where one is open. Where none is, it opens one of its own so the whole set lands or none
-// of it does, and a standalone server that holds no transaction applies them in order.
+// ApplyChanges uses an existing or new transaction if supported. Standalone servers apply changes in order without a transaction.
 func (session *mongoSession) ApplyChanges(ctx context.Context, changes []db.Change) error {
 	bound, giveBack, err := session.holdSession(ctx)
 	if err != nil {
@@ -273,8 +254,7 @@ func (session *mongoSession) ApplyChanges(ctx context.Context, changes []db.Chan
 	})
 }
 
-// applyEachChange applies the changes in order, for a server that holds no transaction.
-// A failure leaves the changes before it applied, and the message says which one failed.
+// applyEachChange applies changes in order without a transaction. An error leaves earlier changes applied and includes the failed change.
 func (session *mongoSession) applyEachChange(ctx context.Context, changes []db.Change) error {
 	for _, change := range changes {
 		if err := session.applyChange(ctx, change); err != nil {
@@ -303,14 +283,12 @@ func (session *mongoSession) applyChange(ctx context.Context, change db.Change) 
 	case WriteDelete:
 		_, applyErr = collection.DeleteOne(ctx, command.Filter)
 	default:
-		return db.NewDatabaseError("this change names no command")
+		return db.NewDatabaseError("the change command is missing")
 	}
 	return db.WrapDatabaseError(applyErr)
 }
 
-// deploymentHoldsTransactions is true where the server the connection reached holds a
-// transaction: a replica set names itself, and a router of a sharded cluster says what it
-// is. A standalone server returns neither.
+// deploymentHoldsTransactions detects a replica set or sharded cluster from the server hello response.
 func deploymentHoldsTransactions(hello bson.D) bool {
 	for _, field := range hello {
 		switch field.Key {

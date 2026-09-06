@@ -723,7 +723,7 @@ func (model *Model) describeHelpKeys(entry HelpEntry) string {
 }
 
 // helpPlaceholder is what the search line of the help asks for.
-const helpPlaceholder = "search for a key, or for what it does"
+const helpPlaceholder = "search keys or actions"
 
 // scrollHelpByCursor moves the help, which scrolls without a cursor of its own and so keeps
 // how far it has scrolled where a list keeps its cursor. Without this a drag of its bar writes
@@ -749,7 +749,7 @@ func (model *Model) renderHelp(overlay app.Overlay, width int) string {
 			Cursor: overlay.List.Cursor, Offset: overlay.List.Cursor, Width: width,
 			Scrolls: scrollHelpByCursor,
 			Keys: model.sayKeys().
-				say(present.FormatCount(int64(len(found)))+" of the keys").
+				say(present.FormatCount(int64(len(found)))+" matching entries").
 				bind(cfg.ScopeDialog, ActionClose, "close"),
 		})
 	}
@@ -847,8 +847,8 @@ func (model *Model) renderHistory(overlay app.Overlay, width int) string {
 	}
 
 	keys := model.sayKeys().
-		bind(cfg.ScopeList, ActionChooseRow, "into this tab").
-		bind(cfg.ScopeDialog, ActionOpenInNewTab, "into a new tab").
+		bind(cfg.ScopeList, ActionChooseRow, "load in this tab").
+		bind(cfg.ScopeDialog, ActionOpenInNewTab, "load in a new tab").
 		bind(cfg.ScopeDialog, ActionClose, "close")
 	return model.renderListCard(ListCard{
 		Kind: app.OverlayHistory, Title: " query history ",
@@ -1094,7 +1094,7 @@ func (model *Model) renderCellViewer(overlay app.Overlay, width int) string {
 	named := overlay.Cell.Column.DataType
 	// A JSON value is drawn indented, so the footer says so.
 	if present.IsJSONType(overlay.Cell.Column.DataType) {
-		named += " · prettified"
+		named += " · formatted"
 	}
 	keys := model.sayKeys().say(overlay.Notice).say(named).say(counted).
 		bind(cfg.ScopeDialog, ActionCopyValue, "copy").
@@ -1137,7 +1137,7 @@ func (model *Model) renderParameters(overlay app.Overlay, width int) string {
 func (model *Model) buildParameterKeys(overlay app.Overlay) *KeyLine {
 	return model.sayKeys().say(overlay.Notice).
 		bind(cfg.ScopeDialog, ActionRunWithValues, "run").
-		bind(cfg.ScopeDialog, ActionPrettifyJSON, "prettify JSON").
+		bind(cfg.ScopeDialog, ActionPrettifyJSON, "format JSON").
 		bind(cfg.ScopeDialog, ActionClose, "cancel")
 }
 
@@ -1177,11 +1177,11 @@ func (model *Model) buildCellEditorKeys(overlay app.Overlay) *KeyLine {
 	keys := model.sayKeys().say(overlay.Notice)
 	switch {
 	case picking:
-		keys.name("↑↓", "pick").bind(cfg.ScopeList, ActionChooseRow, "save")
+		keys.name("↑↓", "pick").bind(cfg.ScopeList, ActionChooseRow, "stage")
 	default:
-		keys.bind(cfg.ScopeDialog, ActionSaveCell, "save")
+		keys.bind(cfg.ScopeDialog, ActionSaveCell, "stage")
 		if present.IsJSONType(overlay.Cell.Column.DataType) {
-			keys.bind(cfg.ScopeDialog, ActionPrettifyJSON, "prettify JSON")
+			keys.bind(cfg.ScopeDialog, ActionPrettifyJSON, "format JSON")
 		}
 	}
 	return keys.
@@ -1323,7 +1323,7 @@ func (model *Model) renderChanges(overlay app.Overlay, width int) string {
 	lines := []string{}
 
 	if len(overlay.Changes) == 0 {
-		lines = append(lines, model.styles.Muted().Render("nothing staged"))
+		lines = append(lines, model.styles.Muted().Render("no staged changes"))
 	}
 	// Each change takes three rows, on a ground that steps with it, so one change is
 	// read apart from the next.
@@ -1344,7 +1344,7 @@ func (model *Model) renderChanges(overlay app.Overlay, width int) string {
 		}{
 			{" ", change.Description, theme.Text},
 			{"   ", change.Display, theme.Muted},
-			{"   ", "binds: " + strings.Join(written, ", "), theme.Muted},
+			{"   ", "parameters: " + strings.Join(written, ", "), theme.Muted},
 		} {
 			drawn := present.TruncateText(
 				row.indent+core.CollapseWhitespace(row.text), inner)
@@ -1358,7 +1358,7 @@ func (model *Model) renderChanges(overlay app.Overlay, width int) string {
 		bind(cfg.ScopeDialog, ActionDiscardChanges, "discard").
 		bind(cfg.ScopeDialog, ActionClose, "close")
 	return model.renderTextCard(overlay.Kind,
-		" pending changes · "+present.FormatCount(int64(len(overlay.Changes)))+" ",
+		" staged changes · "+present.FormatCount(int64(len(overlay.Changes)))+" ",
 		width, lines, keys, max(len(overlay.Changes)*rowsPerChange, 1), destructiveCard)
 }
 
@@ -1418,7 +1418,7 @@ func (model *Model) renderThemePicker(overlay app.Overlay, width int) string {
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
 		ReportsNoMatch: true,
 		ContentRows:    len(model.styles.registry.ListThemeChoices()) + 1,
-		Keys: model.sayKeys().say("each theme is shown while the cursor is on it").
+		Keys: model.sayKeys().say("preview the selected theme").
 			bind(cfg.ScopeList, ActionChooseRow, "select").
 			bind(cfg.ScopeDialog, ActionClose, "cancel"),
 	})
@@ -1477,7 +1477,7 @@ func (model *Model) renderActivity(
 		Rows:   rows,
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset,
 		Rolled: overlay.List.Rolled, Width: width,
-		EmptyReport: "the server holds no other session",
+		EmptyReport: "no other sessions on the server",
 		Keys:        keys,
 		// A floor under the rows, so the card does not resize on every refresh while
 		// the sessions of a quiet server come and go.
@@ -1493,7 +1493,7 @@ func buildDashboardTitle(profile cfg.Profile) string {
 	if profile.Environment != "" {
 		said += " · " + string(profile.Environment)
 	}
-	return said + " · refreshing " + core.FormatLargestUnit(dashboardRefreshWait)
+	return said + " · refresh every " + core.FormatLargestUnit(dashboardRefreshWait)
 }
 
 // renderServerUptime returns how long the server has been up, for the right of the title.
@@ -1847,7 +1847,7 @@ func (model *Model) renderExport(overlay app.Overlay, width int) string {
 		present.TruncateText(FindExportProblem(overlay), width-4)))
 
 	keys := model.sayKeys().name("↑↓", "field").name("←→", "change").
-		bind(cfg.ScopeDialog, ActionWriteExport, "write").
+		bind(cfg.ScopeDialog, ActionWriteExport, "export").
 		bind(cfg.ScopeDialog, ActionClose, "cancel")
 	// The keys are cut rather than wrapped here, because the card keeps one row for them.
 	said := present.TruncateText(keys.buildText(), width-4)
@@ -1878,8 +1878,8 @@ func fitFieldLabel(written string, width int) string {
 
 // promptHints name what each prompt does, which the field alone cannot show.
 var promptHints = map[app.PromptKind]string{
-	app.PromptSearch:     "keeps the rows on screen that match · the server is not asked",
-	app.PromptWhere:      "filters the read · the query in the editor does not change",
+	app.PromptSearch:     "filters loaded rows · no server query",
+	app.PromptWhere:      "filters query results · the editor query stays unchanged",
 	app.PromptGoToColumn: "goes to the first column whose name matches",
 	app.PromptTabName:    "written as a comment on the first line of the query",
 	app.PromptFind:       "marks every match · F3 goes to the next one",

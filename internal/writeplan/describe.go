@@ -8,8 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// The plan as plain text, for a caller that draws no card: the chat panel, and the
-// question an agent client asks its user.
+// Plain text write plans for chat and agent confirmations.
 
 // The labels of the plan, which the card and the text both write.
 const (
@@ -21,7 +20,7 @@ const (
 	LabelCommit   = "commit"
 )
 
-// DescribeRows returns the rows the write matches, and the rows the relation holds.
+// DescribeRows returns matching and total row counts.
 func DescribeRows(plan Plan) string {
 	if !plan.HasRows {
 		return "not counted · " + plan.RowsReason
@@ -40,8 +39,7 @@ func DescribeRows(plan Plan) string {
 	return written
 }
 
-// DescribeColumns returns the columns an update assigns, and nothing for a write that
-// names no column of its own.
+// DescribeColumns returns assigned columns for an update.
 func DescribeColumns(plan Plan) (string, bool) {
 	if plan.Kind != statement.WriteUpdate {
 		return "", false
@@ -49,7 +47,7 @@ func DescribeColumns(plan Plan) (string, bool) {
 	return strings.Join(plan.Columns, ", "), true
 }
 
-// DescribeCascade returns one relation the write reaches through the server.
+// DescribeCascade describes a trigger or foreign key effect.
 func DescribeCascade(cascade Cascade) string {
 	written := cascade.Reason
 	if cascade.Table != "" {
@@ -61,31 +59,31 @@ func DescribeCascade(cascade Cascade) string {
 	return written
 }
 
-// DescribeBlocker returns one relation that blocks the write.
+// DescribeBlocker describes a table with references that may block the write.
 func DescribeBlocker(blocker Cascade) string {
 	written := blocker.Table + " · " + blocker.Reason
 	if !blocker.HasRows {
-		return written + " · its rows were not counted"
+		return written + " · referencing rows not counted"
 	}
 	return written + " · " + present.FormatCountOf(blocker.Rows, "row", "rows") +
-		" reference these"
+		" reference matching rows"
 }
 
-// DescribeUndo returns what the undo of the write will hold.
+// DescribeUndo describes the original rows available for undo.
 func DescribeUndo(undo UndoPlan) string {
 	if !undo.Kept {
 		return "none · " + undo.Reason
 	}
-	return present.FormatCountOf(undo.Rows, "row", "rows") + " kept before the write"
+	return present.FormatCountOf(undo.Rows, "row", "rows") + " to capture before the write"
 }
 
 // DescribeCommit returns how the write is committed.
 func DescribeCommit(plan Plan) string {
 	if plan.InTransaction {
-		return "joins the open transaction"
+		return "uses the open transaction"
 	}
 	if plan.Undo.Kept {
-		return "the write and its undo run in one transaction"
+		return "the write and undo capture use one transaction"
 	}
 	return "autocommit"
 }

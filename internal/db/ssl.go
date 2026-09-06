@@ -1,5 +1,4 @@
-// The TLS a driver is handed. The modes themselves are named in core, because a
-// profile carries one before any driver is chosen.
+// TLS configuration for database drivers. Core defines the profile SSL modes.
 package db
 
 import (
@@ -9,14 +8,13 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// BuildPolicyTLS returns how a connection of this policy is encrypted, and nothing where
-// the profile names no mode, which connects in the clear.
+// BuildPolicyTLS returns TLS settings for the policy, or nil for unset and disabled policies.
 func BuildPolicyTLS(policy core.SSLPolicy, host string) *tls.Config {
 	if policy == core.PolicyUnset || policy == core.PolicyOff {
 		return nil
 	}
 	if !core.VerifiesCertificate(policy) {
-		// `prefer` and `require` encrypt and check nothing.
+		// Prefer and require encrypt without certificate verification.
 		return &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}
 	}
 	if policy == core.PolicyVerifyFull {
@@ -25,9 +23,7 @@ func BuildPolicyTLS(policy core.SSLPolicy, host string) *tls.Config {
 	return BuildAuthorityOnlyTLS()
 }
 
-// BuildAuthorityOnlyTLS checks the chain against the roots of the machine and leaves
-// the name alone, because a server behind a tunnel returns on a name no certificate
-// holds. The standard verification is turned off and run again here without the name.
+// BuildAuthorityOnlyTLS verifies certificate chains against system roots without hostname verification.
 func BuildAuthorityOnlyTLS() *tls.Config {
 	return &tls.Config{
 		MinVersion:         tls.VersionTLS12,

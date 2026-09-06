@@ -13,35 +13,35 @@ import (
 	"github.com/turanmahmudov/masume/internal/headless"
 )
 
-// Reads `masume run`: the connection, the statement and the format. The run itself is in
-// internal/headless, which draws nothing and returns the exit code.
+// Parse masume run arguments. internal/headless runs the statements and returns an exit code.
 
 // runUsage is what `masume run --help` writes.
-const runUsage = `masume run - run one statement and write the result
+const runUsage = `masume run - run statements and write results
 
 usage:
   masume run [TARGET] STATEMENT
   masume run [TARGET] -e FILE
 
-  TARGET                 a URL, a connection string, or a database file. With none,
-                         --profile or $DATABASE_URL names the connection
-  -p, --profile NAME     a profile of the config file, or of the .masume.toml of
-                         the working directory
+  TARGET                 a supported URL, keyword connection string, or existing SQLite file
+  -p, --profile NAME     a user or project profile; without a target or profile, use $DATABASE_URL
   -e, --execute FILE     read the statement from a file, or from - for stdin
   -f, --format FORMAT    table (the default), csv, json or markdown
-  -l, --limit ROWS       how many rows to return. Without it, one page of the
-                         profile, or every row a statement with its own limit asks for
-      --param NAME=VALUE bind :NAME in the statement. Repeat for each one
-      --explain          write the plan as JSON instead of running the statement
-  -h, --help             write this and exit
+  -l, --limit ROWS       positive output cap per statement, including statements with SQL limits
+      --param NAME=VALUE string value for :NAME; repeat for each parameter
+      --explain          write a JSON plan; run eligible queries for measurements
+  -h, --help             print this help and exit
 
 exit codes:
-  0 every statement ran
-  1 the server refused a statement, or a parameter has no value
-  2 the connection could not be opened
-  3 the profile is read-only and the statement writes`
+  0 run completed, possibly with capped output
+  1 statement, parameter, plan or output failure; empty input; incomplete write results
+  2 argument, input file, password or connection failure
+  3 the profile is read-only and the statement writes
 
-// runInvocation is what `masume run` was asked to do.
+Without --limit, reads use page_size unless the statement has its own limit.
+Headless writes have no confirmation, write plan or undo. Use explicit transactions for atomic batches.
+Exit 1 does not prove a write failed. Do not automatically retry writes.`
+
+// runInvocation is the parsed headless request.
 type runInvocation struct {
 	target      string
 	profileName string
@@ -49,7 +49,7 @@ type runInvocation struct {
 	statementFile string
 	statement     string
 	format        headless.Format
-	// How many rows to return. Zero reads one page of the profile.
+	// Row limit. Zero uses the profile page size unless the statement has a limit.
 	rowLimit int
 	params   map[string]any
 	explain  bool
@@ -61,8 +61,7 @@ var shortFlagNames = map[string]string{
 	"-p": "--profile", "-e": "--execute", "-l": "--limit", "-f": "--format",
 }
 
-// expandShortFlag returns a short flag written with its value attached, such as `-f=csv`,
-// as the long form. Every other argument is returned as it stands.
+// expandShortFlag expands short flags with attached values, such as -f=csv.
 func expandShortFlag(argument string) string {
 	name, value, attached := strings.Cut(argument, "=")
 	long, isShort := shortFlagNames[name]
@@ -76,7 +75,7 @@ func expandShortFlag(argument string) string {
 func readFlagText(argument, prefix string) (string, error) {
 	written := strings.TrimSpace(strings.TrimPrefix(argument, prefix))
 	if written == "" {
-		return "", failArgument(strings.TrimSuffix(prefix, "=") + " names nothing")
+		return "", failArgument(strings.TrimSuffix(prefix, "=") + " requires a value")
 	}
 	return written, nil
 }
@@ -84,24 +83,22 @@ func readFlagText(argument, prefix string) (string, error) {
 // readFlagValue returns the value that follows a flag, and the index it was read from.
 func readFlagValue(argv []string, at int, name string) (string, int, error) {
 	if at+1 >= len(argv) {
-		return "", at, failArgument(name + " needs a value")
+		return "", at, failArgument(name + " requires a value")
 	}
 	return argv[at+1], at + 1, nil
 }
 
-// parseRunParameter reads one `NAME=VALUE` pair into the values of the statement, with the
-// name in lower case.
+// parseRunParameter parses one NAME=VALUE pair with a lowercase parameter name.
 func parseRunParameter(written string, into map[string]any) error {
 	name, value, cut := strings.Cut(written, "=")
 	if !cut || strings.TrimSpace(name) == "" {
-		return failArgument("--param takes NAME=VALUE, and " + written + " is not one")
+		return failArgument("--param requires NAME=VALUE; invalid parameter: " + written)
 	}
 	into[strings.ToLower(strings.TrimSpace(name))] = value
 	return nil
 }
 
-// parseRunArguments reads the arguments of `masume run`. The first positional is the
-// connection where a second one follows it.
+// parseRunArguments parses masume run arguments. With two positional arguments, the first is the connection target.
 func parseRunArguments(argv []string) (runInvocation, error) {
 	held := runInvocation{format: headless.FormatTable, params: map[string]any{}}
 	positional := []string{}
@@ -174,7 +171,7 @@ func parseRunArguments(argv []string) (runInvocation, error) {
 			}
 		case strings.HasPrefix(argument, "-") && argument != "-":
 			return runInvocation{}, failArgument(
-				argument + " is not an argument masume run reads")
+				"unknown masume run option: " + argument)
 		default:
 			positional = append(positional, argument)
 		}
@@ -189,7 +186,7 @@ func parseRunArguments(argv []string) (runInvocation, error) {
 func readRunLimit(written string) (int, error) {
 	rows, err := strconv.Atoi(strings.TrimSpace(written))
 	if err != nil || rows < 1 {
-		return 0, failArgument("--limit must be a positive number of rows, and not " + written)
+		return 0, failArgument("--limit requires a positive integer; invalid value: " + written)
 	}
 	return rows, nil
 }
@@ -199,13 +196,12 @@ func readRunFormat(written string) (headless.Format, error) {
 	format, known := headless.FindFormat(written)
 	if !known {
 		return "", failArgument(
-			"--format must be one of " + headless.FormatNames() + ", and not " + written)
+			"--format must be one of " + headless.FormatNames() + "; invalid value: " + written)
 	}
 	return format, nil
 }
 
-// finishRunInvocation places the positional arguments and reports a run that names no
-// statement or two connections.
+// finishRunInvocation validates positional arguments and the statement source.
 func finishRunInvocation(held runInvocation, positional []string) (runInvocation, error) {
 	switch len(positional) {
 	case 0:
@@ -218,27 +214,26 @@ func finishRunInvocation(held runInvocation, positional []string) (runInvocation
 	case 2:
 		if held.statementFile != "" {
 			return runInvocation{}, failArgument(
-				"-e reads the statement, so " + positional[1] + " is a second one")
+				"-e cannot be combined with a statement argument: " + positional[1])
 		}
 		held.target, held.statement = positional[0], positional[1]
 	default:
 		return runInvocation{}, failArgument(
-			"masume run reads one connection and one statement, and " +
-				strconv.Itoa(len(positional)) + " arguments are more than that")
+			"masume run accepts at most two positional arguments; received " +
+				strconv.Itoa(len(positional)))
 	}
 
 	if held.target != "" && held.profileName != "" {
 		return runInvocation{}, failArgument(
-			"--profile and a connection target are two ways to name one connection")
+			"use either --profile or a connection target, not both")
 	}
 	if held.statement == "" && held.statementFile == "" {
-		return runInvocation{}, failArgument("masume run needs a statement, or -e to read one")
+		return runInvocation{}, failArgument("masume run requires a statement or -e FILE")
 	}
 	return held, nil
 }
 
-// readStatementText returns the statement of the run: the one on the command line, or the
-// text of the file, or what stdin holds.
+// readStatementText reads the statement from an argument, a file, or stdin.
 func readStatementText(held runInvocation, stdin io.Reader) (string, error) {
 	if held.statementFile == "" {
 		return held.statement, nil
@@ -246,19 +241,18 @@ func readStatementText(held runInvocation, stdin io.Reader) (string, error) {
 	if held.statementFile == "-" {
 		written, err := io.ReadAll(stdin)
 		if err != nil {
-			return "", fmt.Errorf("the statement could not be read from stdin: %w", err)
+			return "", fmt.Errorf("cannot read the statement from stdin: %w", err)
 		}
 		return string(written), nil
 	}
 	written, err := os.ReadFile(held.statementFile)
 	if err != nil {
-		return "", fmt.Errorf("the statement could not be read: %w", err)
+		return "", fmt.Errorf("cannot read the statement file: %w", err)
 	}
 	return string(written), nil
 }
 
-// resolveRunProfile returns the connection the run opens: the profile of the config file,
-// the target of the command line, or the one $DATABASE_URL names.
+// resolveRunProfile resolves a configured profile, a connection target, or $DATABASE_URL.
 func resolveRunProfile(
 	held runInvocation, profiles []cfg.Profile, environment func(string) string,
 ) (cfg.Profile, error) {
@@ -270,7 +264,7 @@ func resolveRunProfile(
 	}
 	if start == nil {
 		return cfg.Profile{}, failArgument(
-			"masume run needs a connection: a target, --profile, or $DATABASE_URL")
+			"masume run requires a connection: a target, --profile, or $DATABASE_URL")
 	}
 	return *start, nil
 }
@@ -280,7 +274,7 @@ func runHeadless(argv []string) int {
 	held, err := parseRunArguments(argv)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "masume: "+err.Error())
-		fmt.Fprintln(os.Stderr, "run masume run --help to see the arguments it reads")
+		fmt.Fprintln(os.Stderr, "run masume run --help for usage")
 		return 2
 	}
 	if held.help {
@@ -292,9 +286,7 @@ func runHeadless(argv []string) int {
 	for _, problem := range loaded.Project.Problems {
 		fmt.Fprintln(os.Stderr, "masume: "+problem)
 	}
-	// A profile the file got wrong is reported here as well as in the client. Without this
-	// a run of that profile only says the name is not one the file has, which sends the
-	// reader looking for a missing profile rather than a broken one.
+	// Report invalid profiles before resolving the requested profile.
 	for _, problem := range loaded.Problems {
 		fmt.Fprintln(os.Stderr, "masume: "+problem.Describe())
 	}

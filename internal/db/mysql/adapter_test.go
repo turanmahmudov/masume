@@ -8,8 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// A server that never named this connection leaves the thread id at zero. A KILL of id
-// zero would reach whichever connection the server gave that id, so it is refused.
+// Cancellation requires a known connection ID.
 func TestCancelRunningQueryRefusesAnUnknownThread(t *testing.T) {
 	session := &mysqlSession{SessionFacts: db.SessionFacts{
 		Support: db.EngineSupport{EngineInfo: core.EngineInfo{
@@ -25,7 +24,7 @@ func TestCancelRunningQueryRefusesAnUnknownThread(t *testing.T) {
 		t.Fatal("a cancel with no thread id answered no error")
 	}
 	if described := db.DescribeError(err); described !=
-		"the server did not name this connection, so its statement cannot be cancelled" {
+		"cannot cancel the statement: the connection ID is unavailable" {
 		t.Errorf("the cancel describes as %q", described)
 	}
 }

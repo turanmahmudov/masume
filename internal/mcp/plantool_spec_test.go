@@ -164,7 +164,7 @@ func TestTheSameWriteWithoutATokenIsRefused(t *testing.T) {
 	if answered["ran"] != false {
 		t.Fatalf("the write ran unasked: %v", answered)
 	}
-	if reason, _ := answered["reason"].(string); !strings.Contains(reason, "cannot ask you") {
+	if reason, _ := answered["reason"].(string); !strings.Contains(reason, "cannot show a confirmation dialog") {
 		t.Errorf("the refusal reads %q", reason)
 	}
 }
@@ -195,7 +195,7 @@ func TestPlanWriteSaysWhatItCannotMeasure(t *testing.T) {
 	read := runTool(t, tools, "plan_write",
 		map[string]any{"profile": "shop", "sql": "select 1"})
 	if read["measured"] != false ||
-		!strings.Contains(read["reason"].(string), "writes nothing") {
+		!strings.Contains(read["reason"].(string), "classified as read-only") {
 		t.Errorf("a read answered %v", read)
 	}
 
@@ -204,7 +204,7 @@ func TestPlanWriteSaysWhatItCannotMeasure(t *testing.T) {
 		"sql":     "update orders set status = 'x' from other where other.id = orders.id",
 	})
 	if joined["measured"] != false ||
-		!strings.Contains(joined["reason"].(string), "one relation") {
+		!strings.Contains(joined["reason"].(string), "one known table") {
 		t.Errorf("a write of two relations answered %v", joined)
 	}
 }

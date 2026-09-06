@@ -7,18 +7,14 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// A read-only connection refused in the client, above the driver. PostgreSQL, MySQL and
-// SQLite hold a read-only session of their own, and the server refuses the write. MongoDB
-// and a key store hold none, so without this the mode would be a promise the connection
-// does not keep, and every path that runs a statement would have to check for itself.
+// Read-only checks reject writes before driver calls, including engines without server-side read-only sessions.
 
-// readOnlySession is one session that runs only what changes nothing.
+// readOnlySession is a session wrapper that rejects write operations.
 type readOnlySession struct {
 	Session
 }
 
-// MakeReadOnly returns the session with every write refused, where the profile asked for a
-// read-only connection. Any other profile is answered as it is.
+// MakeReadOnly wraps read-only profiles. Other sessions remain unchanged.
 func MakeReadOnly(inner Session) Session {
 	if inner.Describe().Profile.AccessMode != cfg.AccessReadOnly {
 		return inner
@@ -26,17 +22,15 @@ func MakeReadOnly(inner Session) Session {
 	return &readOnlySession{Session: inner}
 }
 
-// unwrapSession returns the session inside, so a reader that looks for one kind of
-// session can look through this one.
+// unwrapSession returns the wrapped session.
 func (session *readOnlySession) unwrapSession() Session { return session.Session }
 
-// buildRefusal returns why the connection refuses this statement, and nothing where it
-// changes nothing.
+// buildRefusal returns an error for write risk and nil for read-only statements.
 func (session *readOnlySession) buildRefusal(sql string) error {
 	if session.Language().ResolveWriteRisk(sql) == statement.RiskNone {
 		return nil
 	}
-	return NewDatabaseError("this connection is read-only, so the statement was not sent")
+	return NewDatabaseError("this connection is read-only; the statement was not sent")
 }
 
 func (session *readOnlySession) RunQuery(
@@ -67,7 +61,7 @@ func (session *readOnlySession) ExplainQuery(
 	return session.Session.ExplainQuery(ctx, sql, analyze)
 }
 
-// ApplyChanges is refused whatever it holds, because every staged change is a write.
+// ApplyChanges rejects all staged changes.
 func (session *readOnlySession) ApplyChanges(context.Context, []Change) error {
-	return NewDatabaseError("this connection is read-only, so nothing was written")
+	return NewDatabaseError("this connection is read-only; the changes were not sent")
 }

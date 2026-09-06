@@ -50,17 +50,14 @@ type PlanState struct {
 // StatementResult is one statement of a batch and everything read for it.
 type StatementResult struct {
 	ID int
-	// The label the batch strip draws, which is the first words of the statement.
+	// The batch label from a table reference or opening keyword.
 	Label string
 	// The statement the run was built from, before a rewrite.
 	Source string
 	// The read the engine composed. Paging and counting use it.
 	Read  db.ComposedRead
 	State QueryState
-	// Revision counts how often the rows of this statement were replaced, so a caller
-	// that caches a result of the rows knows when to build it again. A page added at the
-	// end does not change it: the rows before the page are unchanged, and their number
-	// says how many rows the caller already read.
+	// Revision is the result replacement sequence. Appended pages preserve the revision unless they add missing columns.
 	Revision int
 	Plan     PlanState
 	// The number of rows of the whole result, after the user requested the total.
@@ -78,8 +75,7 @@ type StatementResult struct {
 	FinishedAt time.Time
 }
 
-// BuildStatementLabel returns the label of one statement of a batch: the table it reads, and
-// not the text of the statement.
+// BuildStatementLabel returns the first table reference, opening keyword, or a generic statement label.
 func BuildStatementLabel(written string) string {
 	references := statement.FindTableReferences(written, syntax.FlavourStandard)
 	if len(references) > 0 {
@@ -124,7 +120,7 @@ func (store *ResultStore) ActiveIndex() int {
 	return store.activeIndex
 }
 
-// Active returns the statement the pane draws, and nothing before the first run.
+// Active returns the selected statement result, or nil.
 func (store *ResultStore) Active() *StatementResult {
 	if store.activeIndex < 0 || store.activeIndex >= len(store.results) {
 		return nil
@@ -132,7 +128,7 @@ func (store *ResultStore) Active() *StatementResult {
 	return store.results[store.activeIndex]
 }
 
-// ResultAt returns the statement at that index, and nothing if the run has none.
+// ResultAt returns the statement result at an index, or nil for an invalid index.
 func (store *ResultStore) ResultAt(index int) *StatementResult {
 	if index < 0 || index >= len(store.results) {
 		return nil
@@ -198,7 +194,7 @@ func (store *ResultStore) Succeed(index int, read db.ComposedRead, result db.Que
 	held.Revision++
 }
 
-// Fail stores the reason one statement did not run.
+// Fail records a statement failure.
 func (store *ResultStore) Fail(index int, message string) {
 	if index < 0 || index >= len(store.results) {
 		return
@@ -207,8 +203,7 @@ func (store *ResultStore) Fail(index int, message string) {
 	store.results[index].FinishedAt = time.Now()
 }
 
-// SkipRest marks every statement from this one on as not run, which is the state after a
-// batch stopped at an error. Without it they wait for a server that is never asked.
+// SkipRest marks remaining running entries as failed after a batch stops.
 func (store *ResultStore) SkipRest(from int, message string) {
 	for index := from; index < len(store.results); index++ {
 		if store.results[index].State.Kind != QueryRunning {
@@ -240,10 +235,7 @@ func (store *ResultStore) AppendRows(index int, page db.QueryResult) {
 		return
 	}
 	result := held.State.Result
-	// The rows already read stay in place, so the page is added at the end and the
-	// revision does not change: a caller that formatted them keeps its result and
-	// formats the new rows only. A result of many pages is then formatted one time and
-	// not one time per page.
+	// Preserve the revision when appending rows to existing columns.
 	result.Rows = append(result.Rows, page.Rows...)
 	result.Truncated = page.Truncated
 	if len(result.Columns) == 0 {
@@ -262,8 +254,7 @@ func (store *ResultStore) CanFetchMore() bool {
 	return active.State.Result.Truncated && active.Read.Pageable
 }
 
-// CanCountRows is true if the server can count the whole result without a second run of the
-// read.
+// CanCountRows is true for a successful pageable result.
 func (store *ResultStore) CanCountRows() bool {
 	active := store.Active()
 	if active == nil || active.State.Kind != QuerySucceeded {

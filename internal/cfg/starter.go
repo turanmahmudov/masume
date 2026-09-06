@@ -8,8 +8,7 @@ import (
 	"path/filepath"
 )
 
-// The config file written on the first run. It is embedded, so the binary contains it and
-// no install step has to copy it.
+// The embedded config file for the first run.
 //
 //go:embed starter.toml
 var starterConfig []byte
@@ -17,11 +16,7 @@ var starterConfig []byte
 // StarterConfig returns the config file written on the first run.
 func StarterConfig() []byte { return starterConfig }
 
-// EnsureConfigFile writes the starter config if the file does not exist, so the first run
-// has a file to edit and the form has a file to write to. It reports whether it wrote a
-// file.
-//
-// An existing file is never changed, whatever it contains.
+// EnsureConfigFile creates a missing config file and reports creation. Existing files remain unchanged.
 func EnsureConfigFile(path string) (bool, error) {
 	if _, err := os.Stat(path); err == nil {
 		return false, nil
@@ -29,13 +24,12 @@ func EnsureConfigFile(path string) (bool, error) {
 		return false, err
 	}
 
-	// 0700, because the themes of the user are in this directory next to the config file.
+	// The config directory is private to its owner.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return false, err
 	}
 
-	// O_EXCL, so two clients that start at the same time cannot both write the file.
-	// 0600, because a profile can hold a password.
+	// O_EXCL permits one creator. File access is limited to the owner.
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		// Another client wrote the file first.

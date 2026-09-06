@@ -7,10 +7,10 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// AiProviderID is the name of one provider the chat can use. Each one has its own SDK.
+// AiProviderID is the name of one provider the AI chat can use. Each one has its own SDK.
 type AiProviderID string
 
-// The providers the chat can use.
+// The providers the AI chat can use.
 const (
 	ProviderAnthropic AiProviderID = "anthropic"
 	ProviderOpenai    AiProviderID = "openai"
@@ -19,8 +19,7 @@ const (
 // AiProviderIDs lists the providers a config file can use.
 var AiProviderIDs = []AiProviderID{ProviderAnthropic, ProviderOpenai}
 
-// describeAiProviderIDs returns the valid provider names, so an error message can list
-// them.
+// describeAiProviderIDs returns the supported provider names.
 func describeAiProviderIDs() string {
 	written := make([]string, 0, len(AiProviderIDs))
 	for _, id := range AiProviderIDs {
@@ -29,8 +28,7 @@ func describeAiProviderIDs() string {
 	return "The providers are " + strings.Join(written, " and ") + "."
 }
 
-// AiProviderSettings holds the model, the API key and the base URL of a proxy. The key and
-// the URL can name an environment variable.
+// AiProviderSettings is the model, API key, and provider address configuration.
 type AiProviderSettings struct {
 	Model      string
 	APIKey     string
@@ -39,26 +37,22 @@ type AiProviderSettings struct {
 	BaseURLEnv string
 }
 
-// AiConfig holds everything under `[ai]`: the configured providers, and the one that is
-// active at start.
+// AiConfig is the configuration under `[ai]`.
 type AiConfig struct {
-	// Enabled turns every AI feature on or off. When it is off, the chat cannot be
-	// opened, no AI action is bound, and no AI element is displayed.
+	// Enabled is the switch for the AI chat, its actions, and its interface elements.
 	Enabled         bool
 	DefaultProvider AiProviderID
 	Providers       map[AiProviderID]AiProviderSettings
-	// The time a statement of the chat can run before it is cancelled.
+	// The time one AI chat statement can run before it is cancelled.
 	StatementTimeout time.Duration
-	// The settings under `[ai]` that name a provider this client does not have. An
-	// unknown name is reported and not ignored, so the user sees a spelling error.
+	// Unsupported provider names under `[ai]`.
 	Problems []string
 }
 
-// DefaultAiStatementTimeout is the time a statement of the chat can run. The MCP server has
-// the same default, because no user watches a statement a model started.
+// DefaultAiStatementTimeout is the default time limit for AI chat statements.
 const DefaultAiStatementTimeout = 30 * time.Second
 
-// DefaultAiConfig holds the settings the chat starts with.
+// DefaultAiConfig returns the default AI chat settings.
 func DefaultAiConfig() AiConfig {
 	return AiConfig{
 		Enabled:          true,
@@ -115,7 +109,7 @@ func ParseAiConfig(document Table) AiConfig {
 	for _, name := range sortedKeys(providerTables) {
 		if _, known := core.FindAllowed(AiProviderIDs, name); !known {
 			config.Problems = append(config.Problems,
-				"ai.providers: \""+name+"\" is not a provider there is, so it is not read. "+
+				"ai.providers: unsupported provider \""+name+"\". Skipping this provider. "+
 					describeAiProviderIDs())
 		}
 	}
@@ -126,8 +120,8 @@ func ParseAiConfig(document Table) AiConfig {
 			config.DefaultProvider = id
 		} else {
 			config.Problems = append(config.Problems,
-				"ai.default_provider: \""+written+"\" is not a provider there is, so "+
-					string(config.DefaultProvider)+" is used. "+describeAiProviderIDs())
+				"ai.default_provider: unsupported provider \""+written+"\". Using "+
+					string(config.DefaultProvider)+". "+describeAiProviderIDs())
 		}
 	}
 	if milliseconds, named := FindPositiveInteger(ai, "statement_timeout_ms"); named {

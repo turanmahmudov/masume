@@ -25,9 +25,7 @@ type EngineSupport struct {
 	Compose  Composer
 }
 
-// SessionFacts answers what a connection is, and what its server does and does not do.
-// Every session embeds one, because these five answers are the descriptor and the engine
-// support alone.
+// SessionFacts is the session descriptor and engine support information.
 type SessionFacts struct {
 	Descriptor SessionDescriptor
 	Support    EngineSupport
@@ -39,15 +37,12 @@ func (facts SessionFacts) Language() language.Language     { return facts.Suppor
 func (facts SessionFacts) Capabilities() core.Capabilities { return facts.Support.Capabilities }
 func (facts SessionFacts) Composer() Composer              { return facts.Support.Compose }
 
-// The parts every SQL session does the same way. The SQL differs per engine, these do
-// not, so they are here and not in each adapter.
-
-// HoldsSeveralCommands is true where the buffer holds more than one statement.
+// HoldsSeveralCommands is true if the buffer contains multiple statements.
 func HoldsSeveralCommands(sql string, flavour syntax.SyntaxFlavour) bool {
 	return len(statement.SplitStatements(sql, flavour)) > 1
 }
 
-// RefuseSeveralCommands refuses a batch, because a cursor takes one command.
+// RefuseSeveralCommands rejects multiple statements for a single export cursor.
 func RefuseSeveralCommands(sql string, flavour syntax.SyntaxFlavour) error {
 	if HoldsSeveralCommands(sql, flavour) {
 		return NewDatabaseError("only one statement can be written to a file at a time")
@@ -55,8 +50,7 @@ func RefuseSeveralCommands(sql string, flavour syntax.SyntaxFlavour) error {
 	return nil
 }
 
-// RefuseSeveralPlans refuses a batch, because the prefix a planner adds covers only the
-// first statement, and every statement after that would run as itself.
+// RefuseSeveralPlans rejects multiple statements. An EXPLAIN prefix applies only to the first statement.
 func RefuseSeveralPlans(sql string, flavour syntax.SyntaxFlavour) error {
 	if HoldsSeveralCommands(sql, flavour) {
 		return NewDatabaseError("only one statement can be planned at a time")
@@ -75,9 +69,7 @@ func ReadLastStatement(sql string, flavour syntax.SyntaxFlavour) string {
 	return ""
 }
 
-// ReadLastCommandWord returns the command of the last statement of a buffer. A server
-// answers a buffer of several statements with one result per statement, and the last one
-// is the result the pane draws, so it is the last statement the result is named after.
+// ReadLastCommandWord returns the last statement command, which is the displayed result label.
 func ReadLastCommandWord(sql string, flavour syntax.SyntaxFlavour) string {
 	return syntax.ReadCommandWord(ReadLastStatement(sql, flavour), flavour)
 }
@@ -124,19 +116,17 @@ func ReadNonNegativeCount(value any) int64 {
 	return 0
 }
 
-// BuildMissingDefinition writes the comment a DDL read returns where the server keeps
-// no definition.
+// BuildMissingDefinition returns a comment for an unavailable DDL definition.
 func BuildMissingDefinition(name string) []string {
 	return []string{"-- no definition available for " + name}
 }
 
 // FailUnreadablePlan reports a plan no parser here can read.
 func FailUnreadablePlan() error {
-	return NewDatabaseError("the server answered with a plan we cannot read")
+	return NewDatabaseError("cannot parse the query plan")
 }
 
-// writeCommands name the statements that report a row count. Every other command
-// changes no row.
+// writeCommands is the set of commands with an affected row count.
 var writeCommands = map[string]bool{
 	"insert": true, "update": true, "delete": true, "replace": true, "merge": true,
 }
@@ -152,7 +142,7 @@ func ReadOverscanRowLimit(rowLimit int) int {
 	return rowLimit + 1
 }
 
-// CappedRead is what one read answered, before the extra row is dropped.
+// CappedRead is a query result before row limit enforcement.
 type CappedRead struct {
 	Rows        [][]any
 	RowLimit    int
@@ -161,7 +151,7 @@ type CappedRead struct {
 	Command     string
 	Affected    int64
 	HasAffected bool
-	// HoldsResultSet marks a read whose result names no column.
+	// HoldsResultSet is true for a result set, including one without columns.
 	HoldsResultSet bool
 }
 
@@ -217,19 +207,17 @@ func CountSQLRead(
 	return ReadNonNegativeCount(counted.Rows[0][0]), true, nil
 }
 
-// RowBatcher gathers the rows of a stream and hands them over a batch at a time, so an
-// export never holds the whole relation.
+// RowBatcher sends streamed rows to a callback in batches.
 type RowBatcher struct {
 	size    int
 	onBatch func(rows [][]any, columns []ResultColumn) error
 	batch   [][]any
 	total   int64
-	// True once a batch has been handed over, so the columns of a result with no rows
-	// are reported one time and never after a batch that already carried them.
+	// True after the first callback, including an empty batch with column metadata.
 	handed bool
 }
 
-// NewRowBatcher holds how many rows a batch takes, and what each full batch is handed to.
+// NewRowBatcher returns a batcher with a row limit and callback.
 func NewRowBatcher(
 	size int, onBatch func(rows [][]any, columns []ResultColumn) error,
 ) *RowBatcher {
@@ -249,10 +237,7 @@ func (batcher *RowBatcher) AddRow(row []any, columns []ResultColumn) error {
 	return batcher.FlushRows(columns)
 }
 
-// FlushRows hands over the rows the last batch was short of. A result that held no rows at
-// all hands over one batch of no rows, so a caller learns the columns of a result it can
-// write nothing else about: a format needs them for its header, and asking the server again
-// would run the statement twice.
+// FlushRows sends the final batch. An empty result sends column metadata once.
 func (batcher *RowBatcher) FlushRows(columns []ResultColumn) error {
 	if len(batcher.batch) == 0 {
 		if batcher.handed || len(columns) == 0 {
@@ -304,24 +289,17 @@ func BuildGuardCounter(
 	}
 }
 
-// rollbackWait is how long the rollback of a failed set is given. It is short, because it
-// is one word to a server that is already holding the transaction open for this connection.
+// rollbackWait is the rollback time limit after a failed change.
 const rollbackWait = 5 * time.Second
 
-// rollBackWhatFailed ends the transaction of a set that could not be applied. A write that
-// passed its time limit fails with the context already cancelled, and a rollback sent on
-// that context is refused before it leaves the client: the transaction would stay open on
-// the server, holding its locks, with nothing left that means to end it. So the rollback
-// runs on a context of its own.
+// rollBackWhatFailed attempts rollback with a separate timeout, even after the original context is cancelled.
 func rollBackWhatFailed(ctx context.Context, session ChangeApplication) {
 	held, stop := context.WithTimeout(context.WithoutCancel(ctx), rollbackWait)
 	defer stop()
 	_ = session.Rollback(held)
 }
 
-// ApplyChangesInTransaction applies the staged work, all of it or none. A transaction
-// of the user is joined, not nested, so nothing commits early. A failure inside one is
-// left for the user to roll back.
+// ApplyChangesInTransaction applies staged changes in a new or existing transaction. Existing transactions remain open for user action.
 func ApplyChangesInTransaction(
 	ctx context.Context, changes []Change, session ChangeApplication,
 ) error {
@@ -342,8 +320,7 @@ func ApplyChangesInTransaction(
 		if err == nil {
 			continue
 		}
-		// A batch names the edit the server refused. One edit on its own needs no name:
-		// the review card the user answered showed it.
+		// Batch errors include the failed change description.
 		if len(changes) > 1 {
 			err = WrapDatabaseOperation(change.Description, err)
 		}
@@ -358,9 +335,7 @@ func ApplyChangesInTransaction(
 
 	if !session.JoinsUserTransaction {
 		if err := session.Commit(ctx); err != nil {
-			// A commit that never reached the server leaves the writes in a transaction
-			// nothing means to end. They are rolled back rather than left holding locks,
-			// and a commit the user timed out never writes after the time it allowed.
+			// A failed commit can leave the transaction open.
 			rollBackWhatFailed(ctx, session)
 			return err
 		}
@@ -368,12 +343,10 @@ func ApplyChangesInTransaction(
 	return nil
 }
 
-// SideConnection is a second connection to the same server, opened when it is first
-// needed, so a catalog read does not wait for the query of the user.
+// SideConnection is a lazily opened connection for independent server operations.
 type SideConnection[T any] struct {
 	open func() (T, error)
-	// guard holds the open, because two reads on their own goroutines would otherwise
-	// each open a connection and one of them would be left behind.
+	// The mutex permits one connection open at a time.
 	guard      sync.Mutex
 	connection T
 	opened     bool
@@ -426,9 +399,7 @@ func ReadCatalogText(value any) string {
 	case []byte:
 		return string(held)
 	case int32:
-		// A PostgreSQL `"char"` column arrives as the code of one byte, and reads as that
-		// letter. A wider number is a count, which as a rune would answer a stray
-		// character nobody can see.
+		// PostgreSQL `"char"` values arrive as int32 byte codes. Larger values are numeric counts.
 		if held > 0 && held < utf8.RuneSelf {
 			return string(rune(held))
 		}
@@ -476,9 +447,7 @@ func ReadChangeGuard(change Change) (BoundStatement, bool, error) {
 	return guard, true, nil
 }
 
-// checkChangeGuard counts the rows the change will match and refuses it if the server
-// holds more of them than the user chose. A table without a key of its own can hold the
-// same row twice, and a write on it would otherwise take every copy.
+// checkChangeGuard rejects a change if the matched row count differs from the expected count.
 func checkChangeGuard(ctx context.Context, change Change, session ChangeApplication) error {
 	if session.CountMatches == nil {
 		return nil
@@ -498,8 +467,8 @@ func checkChangeGuard(ctx context.Context, change Change, session ChangeApplicat
 		return nil
 	}
 	return core.NewEditError(fmt.Sprintf(
-		"this table has no key of its own, and %s matches %d rows on the server, not the %d "+
-			"chosen. Nothing was written. Add a primary key, or narrow the result first.",
+		"%s matches %d rows on the server; expected %d. "+
+			"The change was not sent. Add a primary key or filter the result.",
 		change.Description, matched, change.Expect))
 }
 
@@ -513,8 +482,7 @@ func ReadChangeStatement(change Change) (BoundStatement, error) {
 	return statement, nil
 }
 
-// binaryColumnTypes are the column types that hold bytes and not text. A driver hands both
-// over as bytes, and only the type says which is which.
+// binaryColumnTypes is the set of binary column types. Drivers can return both binary and text values as bytes.
 var binaryColumnTypes = map[string]bool{
 	"binary": true, "varbinary": true, "blob": true, "tinyblob": true,
 	"mediumblob": true, "longblob": true, "geometry": true, "bytea": true,
@@ -525,9 +493,7 @@ func IsBinaryColumnType(dataType string) bool {
 	return binaryColumnTypes[strings.ToLower(strings.TrimSpace(dataType))]
 }
 
-// readTextBytes reads a driver value as the grid shows it. A driver hands a text column over
-// as bytes, which would be drawn as hex, so text becomes a string. Bytes that are not text
-// stay bytes: the column says so, or the bytes are no text a terminal can draw.
+// readTextBytes converts valid UTF-8 text bytes to strings. Binary columns and invalid UTF-8 remain bytes.
 func readTextBytes(value any, binary bool) any {
 	written, isBytes := value.([]byte)
 	if !isBytes {

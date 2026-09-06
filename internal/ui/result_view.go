@@ -380,7 +380,7 @@ func (model *Model) renderBanner(
 	keys, dropped := clear, ""
 	if len(tab.Filter) > 1 {
 		dropped = model.registry.FormatActionChordCompact(scope, ActionPopFilter) +
-			" drop the last"
+			" remove last filter"
 		keys = dropped + " · " + clear
 	}
 
@@ -417,7 +417,7 @@ func (model *Model) renderGrid(
 		return model.renderEmptyState(width, height, "no result yet", []Hint{
 			{
 				Key:   model.registry.FormatActionChords(cfg.ScopeTree, ActionOpenNode),
-				Label: "open what the cursor is on in the object tree",
+				Label: "open the selected object in the tree",
 			},
 			{
 				Key:   model.registry.FormatActionChords(cfg.ScopeGlobal, ActionRunAtCursor),
@@ -434,7 +434,7 @@ func (model *Model) renderGrid(
 	}
 	if len(shape.Columns) == 0 {
 		return model.renderEmptyState(width, height,
-			"the statement returned no rows", []Hint{{Label: model.describeOutcome(state)}})
+			"the statement returned no result set", []Hint{{Label: model.describeOutcome(state)}})
 	}
 
 	// The gutter numbers each row of the result, so the footer can name where the cursor is.
@@ -1021,7 +1021,7 @@ func (model *Model) renderTable(
 	tab *app.Tab, table detailTable, width, height int,
 ) []string {
 	if len(table.Rows) == 0 {
-		return model.renderEmptyState(width, height, "there are none", nil)
+		return model.renderEmptyState(width, height, "no entries to show", nil)
 	}
 
 	theme := model.styles.Theme
@@ -1078,7 +1078,7 @@ func (model *Model) renderStatistics(
 ) []string {
 	theme := model.styles.Theme
 	if len(held) == 0 {
-		return model.renderEmptyState(width, height, "there is nothing to show", nil)
+		return model.renderEmptyState(width, height, "no statistics to show", nil)
 	}
 	tab.DetailOffset = clampOffset(tab.DetailOffset, height, len(held))
 
@@ -1110,7 +1110,7 @@ func (model *Model) renderLines(
 ) []string {
 	theme := model.styles.Theme
 	if len(held) == 0 {
-		return model.renderEmptyState(width, height, "there is nothing to show", nil)
+		return model.renderEmptyState(width, height, "no text to show", nil)
 	}
 	tab.DetailOffset = clampOffset(tab.DetailOffset, height, len(held))
 

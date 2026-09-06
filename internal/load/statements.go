@@ -8,11 +8,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/build"
 )
 
-// The statements one import runs: the table where it makes one, and an insert per batch of
-// rows. Every value is bound.
+// An import creates a table if necessary, then inserts rows in batches with bound values.
 
-// BuildCreateTable returns the statement that makes the table the import writes into, in
-// the types of the server it is written for.
+// BuildCreateTable returns a CREATE TABLE statement with engine-specific column types.
 func BuildCreateTable(plan Plan, dialect *query.Dialect) string {
 	mapped := plan.ListMappedColumns()
 	lines := make([]string, 0, len(mapped))
@@ -24,17 +22,16 @@ func BuildCreateTable(plan Plan, dialect *query.Dialect) string {
 		dialect.BuildQualifiedName(plan.Table), strings.Join(lines, ",\n"))
 }
 
-// writeInsert returns one insert of the rows given. `write` decides whether a value is bound
-// to the statement or written into it.
+// writeInsert returns one INSERT statement. The write callback is the value renderer or parameter binder.
 func writeInsert(
 	plan Plan, rows [][]any, dialect *query.Dialect, write func(any) string,
 ) (string, error) {
 	mapped := plan.ListMappedColumns()
 	if len(mapped) == 0 {
-		return "", failValue("no column of the file is written")
+		return "", failValue("no source columns are mapped")
 	}
 	if len(rows) == 0 {
-		return "", failValue("there is no row to write")
+		return "", failValue("no rows to insert")
 	}
 
 	quoted := make([]string, 0, len(mapped))
@@ -46,7 +43,7 @@ func writeInsert(
 	for _, row := range rows {
 		if len(row) != len(mapped) {
 			return "", failValue(
-				"a row holds %d values and the import writes %d columns",
+				"the row has %d values; expected %d mapped columns",
 				len(row), len(mapped))
 		}
 		written := make([]string, 0, len(row))
@@ -61,8 +58,7 @@ func writeInsert(
 		strings.Join(quoted, ", "), strings.Join(groups, ",\n       ")), nil
 }
 
-// BuildInsert returns one insert of the rows given, with every value bound. The rows are
-// already cast to the kind of their column.
+// BuildInsert returns an INSERT statement with bound values. The input rows already have their target types.
 func BuildInsert(
 	plan Plan, rows [][]any, dialect *query.Dialect,
 ) (query.BoundStatement, error) {
@@ -77,11 +73,9 @@ func BuildInsert(
 	}, nil
 }
 
-// BuildShownInsert returns the insert with its values written in, for the review to show.
-// It is never run.
+// BuildShownInsert returns an INSERT preview with literal values. The preview is never executed.
 func BuildShownInsert(plan Plan, rows [][]any, dialect *query.Dialect) (string, error) {
 	return writeInsert(plan, rows, dialect, func(value any) string {
-		// A value that is not there is written as the server reads it.
 		if value == nil {
 			return "null"
 		}
@@ -89,8 +83,7 @@ func BuildShownInsert(plan Plan, rows [][]any, dialect *query.Dialect) (string, 
 	})
 }
 
-// BuildRows returns the values of the rows given, cast to the kind of the column each one is
-// written into. A value the column cannot hold stops the batch.
+// BuildRows converts mapped values to their target types. A conversion error stops the batch.
 func BuildRows(plan Plan, rows []Row) ([][]any, error) {
 	mapped := plan.ListMappedColumns()
 	indexes := plan.buildSourceIndexes()
@@ -116,8 +109,7 @@ func BuildRows(plan Plan, rows []Row) ([][]any, error) {
 	return built, nil
 }
 
-// DescribeStatements returns the statements of the import as the review shows them: the
-// table where one is made, and the first insert with its values written in.
+// DescribeStatements returns the optional CREATE TABLE statement and an INSERT preview.
 func DescribeStatements(plan Plan, dialect *query.Dialect) ([]string, error) {
 	written := []string{}
 	if plan.CreatesTable {
@@ -149,5 +141,5 @@ func DescribeStatements(plan Plan, dialect *query.Dialect) ([]string, error) {
 	return append(written, shownInsert), nil
 }
 
-// describedRows is how many rows the review writes out.
+// describedRows is the maximum rows in an INSERT preview.
 const describedRows = 5

@@ -460,13 +460,13 @@ func BuildWriteValue(value core.CellValue, dataType string) (any, error) {
 	case TypeObjectID:
 		held, err := bson.ObjectIDFromHex(strings.TrimSpace(written))
 		if err != nil {
-			return nil, core.NewEditError("an identity is twenty-four hexadecimal characters")
+			return nil, core.NewEditError("invalid ObjectId; use 24 hexadecimal characters")
 		}
 		return held, nil
 	case TypeInt, TypeLong:
 		held, err := strconv.ParseInt(strings.TrimSpace(written), 10, 64)
 		if err != nil {
-			return nil, core.NewEditError("this field holds a whole number")
+			return nil, core.NewEditError("this field requires an integer")
 		}
 		if dataType == TypeInt {
 			return int32(held), nil
@@ -475,19 +475,19 @@ func BuildWriteValue(value core.CellValue, dataType string) (any, error) {
 	case TypeDouble:
 		held, err := strconv.ParseFloat(strings.TrimSpace(written), 64)
 		if err != nil {
-			return nil, core.NewEditError("this field holds a number")
+			return nil, core.NewEditError("this field requires a number")
 		}
 		return held, nil
 	case TypeDecimal:
 		held, err := bson.ParseDecimal128(strings.TrimSpace(written))
 		if err != nil {
-			return nil, core.NewEditError("this field holds a decimal number")
+			return nil, core.NewEditError("this field requires a decimal number")
 		}
 		return held, nil
 	case TypeBool:
 		held, err := strconv.ParseBool(strings.TrimSpace(written))
 		if err != nil {
-			return nil, core.NewEditError("this field holds true or false")
+			return nil, core.NewEditError("this field requires true or false")
 		}
 		return held, nil
 	case TypeDate:
@@ -499,13 +499,12 @@ func BuildWriteValue(value core.CellValue, dataType string) (any, error) {
 	case TypeObject, TypeArray:
 		held, err := ReadValue(written)
 		if err != nil {
-			return nil, core.NewEditError("this field holds a document: " + err.Error())
+			return nil, core.NewEditError("invalid field value: " + err.Error())
 		}
 		return held, nil
 	}
 
-	// A field the sample saw under several types, or none, is read as the value it
-	// writes and left as text where it is no value.
+	// Mixed or unknown fields use parsed values, with text as the fallback.
 	held, err := ReadValue(written)
 	if err != nil {
 		return written, nil
@@ -513,8 +512,7 @@ func BuildWriteValue(value core.CellValue, dataType string) (any, error) {
 	return held, nil
 }
 
-// dateLayouts are the forms a date is read from: the one the grid writes, and the two a
-// user types.
+// dateLayouts are the supported date formats.
 var dateLayouts = []string{
 	time.RFC3339Nano, "2006-01-02 15:04:05.000", "2006-01-02 15:04:05", "2006-01-02",
 }
@@ -527,29 +525,29 @@ func ReadDateText(written string) (time.Time, error) {
 			return held.UTC(), nil
 		}
 	}
-	return time.Time{}, core.NewEditError("a date reads as 2006-01-02 15:04:05.000")
+	return time.Time{}, core.NewEditError("invalid date; use a format such as 2006-01-02 15:04:05.000")
 }
 
 // BuildIdentityFilter returns the filter that names one document.
 func BuildIdentityFilter(value any, dataType string) (bson.D, error) {
 	if value == nil {
-		return nil, core.NewEditError("this row has no identity, so it cannot be written")
+		return nil, core.NewEditError("cannot edit the row: the document identity is missing")
 	}
 	if dataType == TypeObjectID {
 		text, isText := value.(string)
 		if !isText {
-			return nil, core.NewEditError("the identity of this row is not readable")
+			return nil, core.NewEditError("invalid document ObjectId")
 		}
 		held, err := bson.ObjectIDFromHex(text)
 		if err != nil {
-			return nil, core.NewEditError("the identity of this row is not readable")
+			return nil, core.NewEditError("invalid document ObjectId")
 		}
 		return bson.D{{Key: IdentityField, Value: held}}, nil
 	}
 	return bson.D{{Key: IdentityField, Value: value}}, nil
 }
 
-// changeTarget holds what every command of one staged set writes to.
+// changeTarget is the database, collection, and result for staged changes.
 type changeTarget struct {
 	database   string
 	collection string
@@ -568,10 +566,10 @@ func (target changeTarget) findIdentity(rowIndex int) (bson.D, string, error) {
 	}
 	if at == -1 {
 		return nil, "", core.NewEditError(
-			"this read answers no " + IdentityField + ", so no document can be named")
+			"cannot edit documents: the result has no " + IdentityField + " field")
 	}
 	if rowIndex < 0 || rowIndex >= len(target.rows) || at >= len(target.rows[rowIndex]) {
-		return nil, "", core.NewEditError("this row is no longer on the screen")
+		return nil, "", core.NewEditError("the row or its identity is missing from the result")
 	}
 	value := target.rows[rowIndex][at]
 	filter, err := BuildIdentityFilter(value, target.columns[at].DataType)
@@ -702,11 +700,11 @@ func (target changeTarget) buildUpdates(staged core.PendingChanges) ([]db.Change
 		}
 		name, dataType := target.findColumnType(edit.ColumnIndex)
 		if name == "" {
-			return nil, core.NewEditError("this column is no longer on the screen")
+			return nil, core.NewEditError("the column is missing from the result")
 		}
 		if name == IdentityField {
 			return nil, core.NewEditError(
-				"the " + IdentityField + " of a document cannot be written")
+				"the document " + IdentityField + " field cannot be changed")
 		}
 		value, err := BuildWriteValue(edit.Value, dataType)
 		if err != nil {

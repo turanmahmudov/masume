@@ -14,8 +14,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// EditTarget is the table a result can be edited through, and the columns that identify one
-// row.
+// EditTarget is the table and key columns for result edits.
 type EditTarget struct {
 	Table      db.TableRef
 	KeyColumns []string
@@ -29,12 +28,10 @@ type EditTarget struct {
 	ForeignKeys []query.ForeignKey
 }
 
-// booleanTypes are the types a server lists no values for, so the two values are here.
+// booleanTypes is the set of column types with boolean choices.
 var booleanTypes = map[string]bool{"boolean": true, "bool": true, "tinyint(1)": true}
 
-// FindColumnChoices returns the values of a column, so the user selects the value of an enum
-// or a boolean cell instead of typing it. The server lists the values of an enum. It does not
-// list the two values of a boolean.
+// FindColumnChoices returns catalog enum values or boolean choices for a column.
 func (target EditTarget) FindColumnChoices(name string) []string {
 	for _, column := range target.Columns {
 		if !strings.EqualFold(column.Name, name) {
@@ -51,26 +48,23 @@ func (target EditTarget) FindColumnChoices(name string) []string {
 	return nil
 }
 
-// FindColumnProblem returns the reason a column cannot be written, or an empty text if it
-// can.
+// FindColumnProblem reports generated columns that cannot be edited.
 func (target EditTarget) FindColumnProblem(name string) string {
 	for _, column := range target.Columns {
 		if strings.EqualFold(column.Name, name) && column.IsGenerated {
-			return name + " is computed by the server, so it cannot be written"
+			return name + " is a generated column and cannot be edited"
 		}
 	}
 	return ""
 }
 
-// FindState is the search term of the statement and the replacement text. Each tab has its
-// own, so a search does not follow the user to another statement.
+// FindState is the tab search term and replacement text.
 type FindState struct {
 	Term        string
 	Replacement string
 }
 
-// Tab is one tab of a connection: its binding, the last run, and the changes staged on the
-// result.
+// Tab is the editor, result, view, and staged changes for one connection tab.
 type Tab struct {
 	ID   int
 	Kind TabKind
@@ -100,13 +94,9 @@ type Tab struct {
 	Focus Pane
 	// The staged changes of the grid. They are data until the run.
 	Pending core.PendingChanges
-	// PendingResultID is the result the changes were staged on. A run of several
-	// statements reads several tables, so a change staged on one of them must never be
-	// written through another one.
+	// PendingResultID is the result associated with the staged changes.
 	PendingResultID int
-	// True while the staged changes are at the server. No change can be staged then,
-	// because the answer discards the staged changes and would silently discard an edit
-	// made in the meantime.
+	// True while applying staged changes. Further staging is disabled.
 	Applying bool
 	// The undo stack of the staged changes, so a change can be undone.
 	undone []core.PendingChanges
@@ -117,16 +107,13 @@ type Tab struct {
 	GridColumn       int
 	GridRowOffset    int
 	GridColumnOffset int
-	// True while the wheel moved the rows away from the cursor, so the cursor can be off
-	// screen until the next move.
+	// True after scrolling independently of the grid cursor.
 	GridRolled bool
-	// The names of the columns of the cursor. A result with the same names is the same
-	// result read again, for example after a sort, so it keeps the cursor.
+	// The column key for retaining the cursor across compatible results.
 	GridColumnKey string
 	// The columns that always draw at the left, whatever the window shows.
 	Frozen map[int]bool
-	// The width the user set for a column with a drag of its border. A column without an
-	// entry is as wide as its widest value.
+	// User-defined column widths. Missing entries use automatic widths.
 	ColumnWidths map[int]int
 	// True while the values of a masked column are shown.
 	Unmasked bool
@@ -134,25 +121,20 @@ type Tab struct {
 	Screen present.ScreenFilter
 	// The scroll position of the plan tree and of the detail views.
 	DetailOffset int
-	// The open nodes of the document tree and the position of its cursor. A folded
-	// document is one row, so a result of a million rows stores the open nodes only and
-	// not a state per row.
+	// Expanded document nodes and the tree cursor position.
 	Opened        map[string]bool
 	TreeRow       int
 	TreeRowOffset int
-	// True while the wheel moved the rows away from the cursor, so the cursor may stand
-	// off screen until it moves again.
+	// True after scrolling independently of the tree cursor.
 	TreeRolled bool
 	// How far the editor has scrolled, down its lines and along them.
 	EditorRowOffset    int
 	EditorColumnOffset int
-	// True while the wheel moved the lines away from the caret, so the caret may stand off
-	// screen until it moves again.
+	// True after scrolling independently of the editor caret.
 	EditorRolled bool
 	// What a search of the statement looks for, and what a replace writes in its place.
 	Find FindState
-	// What the server said about the buffer, with the buffer it was said about. A fault
-	// the scanner found comes first, so the server is asked only where the scan is clean.
+	// Server diagnostics and the checked buffer text.
 	Served ServedDiagnostics
 }
 
@@ -203,8 +185,7 @@ func newTab(id int, kind TabKind, sql string) *Tab {
 	}
 }
 
-// IsBlank is true for a query tab without a statement and without a run. A read opened from
-// the tree or the history replaces such a tab.
+// IsBlank is true for a query tab with an empty editor and no execution state.
 func (tab *Tab) IsBlank() bool {
 	return tab.Kind == TabQuery && strings.TrimSpace(tab.Editor.Text) == "" &&
 		tab.Results.State().Kind == QueryIdle
@@ -215,8 +196,7 @@ func (tab *Tab) EditorVisible() bool {
 	return tab.Kind == TabQuery
 }
 
-// Label returns the name the tab row draws. A query tab uses its first line comment, or its
-// first words.
+// Label returns the table name, object name, query name, or shortened editor text.
 func (tab *Tab) Label() string {
 	switch tab.Kind {
 	case TabTable:
@@ -237,8 +217,7 @@ func (tab *Tab) Label() string {
 // tabLabelWidth is the maximum width of the name of a tab.
 const tabLabelWidth = 16
 
-// Views returns the views of this tab. The plan is not included if the server has no plan for
-// the statement.
+// Views returns available views, excluding unsupported plans and non-document tree views.
 func (tab *Tab) Views(session db.SessionInfo) []ResultView {
 	hasResultSet := true
 	active := tab.Results.Active()
@@ -253,8 +232,7 @@ func (tab *Tab) Views(session db.SessionInfo) []ResultView {
 		switch {
 		case view == ViewPlan && !tab.canExplain(session):
 			continue
-		// A result of plain columns has nothing to open, and a server without documents
-		// has no value to write in the form that keeps its types.
+		// The document view requires document values.
 		case view == ViewTree && !opensDocuments:
 			continue
 		}
@@ -272,15 +250,12 @@ func (tab *Tab) opensDocuments() bool {
 	return present.HasDocumentColumn(active.State.Result.Columns, active.State.Result.Rows)
 }
 
-// ActiveView returns the view that is drawn: the selected view if this tab has it, and the
-// first view of the tab otherwise. A statement without rows has no data view, so the result
-// of a write is drawn as statistics.
+// ActiveView returns the selected view when available, or the first available view.
 func (tab *Tab) ActiveView(session db.SessionInfo) ResultView {
 	return ResolveDrawnView(tab.Views(session), tab.View)
 }
 
-// ResolveDrawnView returns the view that is drawn. A frame that already read the views of a
-// tab passes them in and does not read them again.
+// ResolveDrawnView selects an available view, defaulting to ViewData for an empty list.
 func ResolveDrawnView(offered []ResultView, asked ResultView) ResultView {
 	if slices.Contains(offered, asked) {
 		return asked
@@ -312,16 +287,14 @@ func (tab *Tab) canExplain(session db.SessionInfo) bool {
 	return session.Language().CanExplain(statement)
 }
 
-// BindParameters converts the values of the `:name` placeholders into bind values of the
-// statement.
+// BindParameters binds named parameters through the connection composer.
 func (tab *Tab) BindParameters(
 	session db.SessionInfo, written string,
 ) (db.BoundText, error) {
 	return session.Composer().BindParameters(written, tab.Parameters)
 }
 
-// InlineParameters writes the values of the `:name` placeholders into the statement text, for
-// the display and for the planner. A normal run never uses it.
+// InlineParameters substitutes literals for display and plan requests, preserving the original text on failure.
 func (tab *Tab) InlineParameters(session db.SessionInfo, written string) string {
 	shown, err := statement.InlineQueryParameters(
 		written, tab.Parameters, session.Dialect())
@@ -333,21 +306,17 @@ func (tab *Tab) InlineParameters(session db.SessionInfo, written string) string 
 
 // StatementToExplain returns the statement the plan view sends to the server.
 func (tab *Tab) StatementToExplain(session db.SessionInfo) string {
-	// The plan request contains the values in the statement text. A planner without the
-	// values gives a wrong estimate, and a server does not plan a statement with a
-	// placeholder.
+	// Plan requests use inline parameter values.
 	if tab.Kind == TabTable {
 		return tab.ComposeRelationRead(session).Display
 	}
-	// The values of the placeholders are written first, and the rewrite of the tab is
-	// applied to the result.
+	// Apply the tab rewrite after parameter substitution.
 	shown := tab.InlineParameters(session, tab.StatementToPlan(session))
 	return strings.TrimSpace(
 		tab.ComposeStatementRead(session, db.BoundText{Text: shown}).Display)
 }
 
-// StatementToPlan returns the statement the plan belongs to. A batch draws one result per
-// statement, so it takes the statement off the result on show.
+// StatementToPlan returns the active batch statement or the statement under the caret.
 func (tab *Tab) StatementToPlan(session db.SessionInfo) string {
 	if len(tab.Results.Results()) < 2 {
 		return tab.StatementUnderCaret(session)
@@ -367,8 +336,7 @@ func (tab *Tab) StatementUnderCaret(session db.SessionInfo) string {
 	return tab.Editor.ReadStatementAtCaret(session.Language())
 }
 
-// Rewrite returns the sort and the filter of the grid, which the engine applies to the
-// read.
+// Rewrite returns the grid sort and filter.
 func (tab *Tab) Rewrite() core.ReadRewrite {
 	return core.ReadRewrite{Sort: tab.Sort, Filter: tab.Filter}
 }
@@ -393,8 +361,7 @@ func (tab *Tab) ComposeRelationRead(session db.SessionInfo) db.ComposedRead {
 	return session.Composer().ComposeRelationRead(tab.Table, tab.Rewrite())
 }
 
-// ComposeStatementRead returns the read of a statement of the user, with the rewrite
-// applied.
+// ComposeStatementRead composes a query with the tab rewrite.
 func (tab *Tab) ComposeStatementRead(session db.SessionInfo, statement db.BoundText) db.ComposedRead {
 	return session.Composer().ComposeStatementRead(statement, tab.Rewrite())
 }
@@ -407,8 +374,7 @@ func (tab *Tab) EffectiveSQL(session db.SessionInfo) string {
 	return tab.ComposeStatementRead(session, db.BoundText{Text: tab.Editor.Text}).Display
 }
 
-// ReadActiveResultID returns the id of the result on screen, and nothing if no statement has
-// answered yet.
+// ReadActiveResultID returns the active result ID, or zero when absent.
 func (tab *Tab) ReadActiveResultID() int {
 	active := tab.Results.Active()
 	if active == nil {
@@ -417,10 +383,7 @@ func (tab *Tab) ReadActiveResultID() int {
 	return active.ID
 }
 
-// StageChange stores the current staged changes, so the new change can be undone. The
-// changes carry the id of the result they were staged on, and a change on another result of
-// the same run is rejected: the rows of one statement written through the table of another
-// one would go to the wrong table.
+// StageChange snapshots staged changes and applies a new change. Staging is refused during execution or for a different result.
 func (tab *Tab) StageChange(change func(*core.PendingChanges)) bool {
 	if tab.Applying {
 		return false
@@ -439,8 +402,7 @@ func (tab *Tab) StageChange(change func(*core.PendingChanges)) bool {
 	return true
 }
 
-// HoldsChangesOfAnotherResult is true if changes are staged on a result that is not the
-// result on screen.
+// HoldsChangesOfAnotherResult is true for staged changes on a different result.
 func (tab *Tab) HoldsChangesOfAnotherResult() bool {
 	return core.CountChanges(tab.Pending) > 0 &&
 		tab.PendingResultID != tab.ReadActiveResultID()
@@ -482,8 +444,7 @@ func copyPending(pending core.PendingChanges) core.PendingChanges {
 	for row := range pending.DeletedRows {
 		copied.DeletedRows[row] = true
 	}
-	// Each inserted row is a map, so the rows are copied one by one. With a shared map a
-	// later edit would change the snapshot the undo restores.
+	// Copy each inserted row map for the undo snapshot.
 	for _, row := range pending.Inserts {
 		held := make(map[string]any, len(row))
 		maps.Copy(held, row)

@@ -13,17 +13,13 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// mysqlConnectTimeout is how long one attempt at a connection may take.
+// mysqlConnectTimeout is the connection time limit.
 const mysqlConnectTimeout = 15 * time.Second
 
-// mysqlTLSName is the name this client registers its own TLS settings under, because
-// the driver takes a name rather than a config.
+// mysqlTLSName is the registered TLS configuration name. The driver requires a name for custom TLS settings.
 const mysqlTLSName = "masume"
 
-// droppedLog takes what the driver would otherwise print. The screen is drawn over the whole
-// terminal, so a line written to it scrolls the frame and stands on a row of its own until the
-// next redraw. A killed statement leaves the connection out of step, and the driver reports
-// that, so this is not a rare case.
+// droppedLog discards direct driver output to the terminal.
 type droppedLog struct{}
 
 func (droppedLog) Print(...any) {}
@@ -32,17 +28,14 @@ func init() {
 	_ = driver.SetLogger(droppedLog{})
 }
 
-// resolveMysqlTLS returns what the profile asks of the connection. A profile with no
-// mode encrypts where the server offers it, which is what `prefer` means and what a
-// MySQL client of this version does.
+// resolveMysqlTLS returns the driver TLS setting. Unset and prefer modes allow unencrypted connections.
 func resolveMysqlTLS(profile cfg.Profile) (string, error) {
 	policy := core.ResolveSSLPolicy(profile.SSLMode)
 	switch policy {
 	case core.PolicyOff:
 		return "false", nil
 	case core.PolicyUnset, core.PolicyPrefer:
-		// The driver encrypts where the server offers TLS, and connects in the clear
-		// where it does not, so a server without TLS still opens.
+		// Preferred mode uses TLS if available and otherwise connects without encryption.
 		return "preferred", nil
 	case core.PolicyVerifyFull:
 		return "true", nil
@@ -53,7 +46,7 @@ func resolveMysqlTLS(profile cfg.Profile) (string, error) {
 		}
 		return name, nil
 	}
-	// `require` encrypts and checks nothing, as a MySQL client reads it.
+	// Require mode encrypts without certificate verification.
 	name := mysqlTLSName + "-skip-verify"
 	if err := driver.RegisterTLSConfig(
 		name, &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}); err != nil {
@@ -76,16 +69,15 @@ func buildMysqlDsn(profile cfg.Profile, password string) (string, error) {
 	config.DBName = profile.Database
 	config.Timeout = mysqlConnectTimeout
 	config.TLSConfig = tlsName
-	// A buffer of several statements is one read, so the driver has to allow them.
+	// Query buffers can contain multiple statements.
 	config.MultiStatements = true
-	// A MySQL date has no zone, so the driver would read it as local time and show a
-	// value the server never stored.
+	// MySQL dates have no time zone. Text preserves their stored values.
 	config.ParseTime = false
 	config.InterpolateParams = false
 	return config.FormatDSN(), nil
 }
 
-// mysqlSession is one session on a MySQL-protocol server, built from its engine entry
+// openMysqlPool opens a pool limited to one connection.
 
 func openMysqlPool(profile cfg.Profile, password string) (*sql.DB, error) {
 	dsn, err := buildMysqlDsn(profile, password)

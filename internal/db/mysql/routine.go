@@ -14,8 +14,7 @@ const (
 	RoutineProcedure RoutineKind = "procedure"
 )
 
-// BuildRoutineIdentity names a routine, because the name alone does not give the kind
-// and MySQL needs it for the DDL and the DROP.
+// BuildRoutineIdentity combines the routine kind and name for DDL operations.
 func BuildRoutineIdentity(kind RoutineKind, schema, name string) string {
 	return fmt.Sprintf("%s:%s.%s", kind, schema, name)
 }

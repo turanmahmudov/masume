@@ -11,11 +11,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// The only tool that changes data. The runner of the caller decides whether it can run.
-// This file asks, runs and reports.
+// The caller authorizes statement execution and write measurement.
 
-// describeCellForModel returns one cell as a JSON value: a number stays a number, and every
-// other type becomes text.
+// describeCellForModel preserves JSON scalar types and formats other values as text.
 func describeCellForModel(value any, dataType string) any {
 	switch held := value.(type) {
 	case nil:
@@ -49,8 +47,7 @@ func describeResultForModel(answered db.QueryResult) map[string]any {
 		rows = append(rows, written)
 	}
 
-	// Every field is written. The number of changed rows is null if the server reported
-	// none, because a missing field looks like a field the model did not request.
+	// An unreported affected row count is null.
 	var affected any
 	if answered.HasAffected {
 		affected = answered.Affected
@@ -73,19 +70,18 @@ var runQueryFields = []field{
 	},
 	{
 		name: "limit", kind: kindInteger, positive: true,
-		description: "Rows to bring back. Capped by the limit this connection carries.",
+		description: "Maximum rows to return, capped by the connection row limit.",
 	},
 }
 
 var runQuery = ToolDefinition{
 	Name: "run_query",
-	Description: "Run a statement and answer with its rows. Call this only where the user " +
-		"asked for data, a count or a value; a query they asked to see belongs in a fenced " +
-		"block instead, unrun. The user is asked before anything runs and may say no, and " +
-		"what a statement is allowed to do depends on the connection. The result is cut to " +
-		"the row limit, so a read of a large table needs its own LIMIT and ORDER BY to mean " +
-		"anything. Where the connection measures a write before it runs, the answer carries " +
-		"an `undo` list: the statements that reverse it, read inside its transaction.",
+	Description: "Run a statement and return its rows. Call this only when the user " +
+		"requests data, a count, or a value. If the user requests query text, return a fenced " +
+		"code block without running the query. The connection policy may require user confirmation " +
+		"or refuse execution. Results use the connection row limit. Use LIMIT and ORDER BY " +
+		"for a bounded, ordered result from a large table. When the connection captures undo data, " +
+		"the response includes an `undo` list of statements built from rows read inside the write transaction.",
 	InputSchema: buildSchema(runQueryFields),
 	Call: func(ctx context.Context, deps ToolDeps, input map[string]any) any {
 		read, problem := readInput(runQueryFields, input)
@@ -148,13 +144,12 @@ var planWriteFields = []field{
 
 var planWrite = ToolDefinition{
 	Name: "plan_write",
-	Description: "Measure what a write would do before running it: the rows it lands on, " +
-		"counted on the server; the columns it assigns; the relations it reaches through a " +
-		"trigger or a foreign key; the relations that block it; and whether it can be undone. " +
-		"Nothing is written. Call this before run_query for an UPDATE, DELETE or TRUNCATE, " +
-		"show the answer to the user, and run the statement only if they agree. Where the " +
-		"answer carries a `token`, pass it to run_query as `plan_token` to run that one " +
-		"statement without being asked again.",
+	Description: "Measure a write before execution: matching rows counted on the server, " +
+		"assigned columns, triggers, foreign key effects, blocking references, and undo availability. " +
+		"The write does not run. Call this before run_query for an UPDATE, DELETE, or TRUNCATE. " +
+		"Show the plan to the user and run the statement only with their approval. If the " +
+		"response includes a `token`, pass the token to run_query as `plan_token` to run that " +
+		"statement without another confirmation request.",
 	InputSchema: buildSchema(planWriteFields),
 	Call: func(ctx context.Context, deps ToolDeps, input map[string]any) any {
 		read, problem := readInput(planWriteFields, input)
@@ -165,7 +160,7 @@ var planWrite = ToolDefinition{
 
 		if deps.Runner.MeasureWrite == nil {
 			return map[string]any{
-				"measured": false, "reason": "this connection measures no write",
+				"measured": false, "reason": "write measurement is unavailable on this connection",
 			}
 		}
 		measured, held := deps.Runner.MeasureWrite(ctx, sql)
@@ -176,16 +171,14 @@ var planWrite = ToolDefinition{
 	},
 }
 
-// describeUnmeasured says why a statement was not measured, so a model does not call the
-// tool again with the same statement.
+// describeUnmeasured returns the reason write measurement is unavailable.
 func describeUnmeasured(sql string, deps ToolDeps) string {
 	if language.ResolveBatchRisk(
 		deps.Session.Language().SplitStatements(sql), deps.Session.Language()) == statement.RiskNone {
-		return "this statement writes nothing, so there is nothing to measure"
+		return "this statement is classified as read-only; write measurement does not apply"
 	}
-	return "this write was not read as one relation and one predicate, so its rows cannot " +
-		"be counted. A write that joins a second relation, that names its target through an " +
-		"alias, or that runs beside other statements is not measured"
+	return "cannot measure this write as one known table and one predicate. " +
+		"Write measurement does not support joins, target aliases, or statement batches"
 }
 
 // describeMeasuredWrite returns the plan in the form the model reads.
@@ -213,8 +206,7 @@ func describeMeasuredWrite(measured MeasuredWrite) map[string]any {
 	return described
 }
 
-// describeCount writes a number the server did not answer for as null, because a missing
-// field reads as a field the model did not request.
+// describeCount returns null for an unavailable count.
 func describeCount(count int64, held bool) any {
 	if !held {
 		return nil

@@ -6,21 +6,16 @@ import (
 	"strings"
 )
 
-// The Messages protocol of Anthropic. It caches nothing without a request to cache, which is
-// a mark on one block: the last block of the request, so the next request reads all of it
-// from the cache. A cache write costs 25 percent more and is cheaper from the second request
-// on.
+// The Anthropic Messages client marks the final message block as an explicit cache boundary.
 
 const (
 	anthropicBaseURL = "https://api.anthropic.com/v1"
 	anthropicVersion = "2023-06-01"
-	// strictSchemaBeta is the beta feature for a model that validates a tool schema
-	// strictly.
+	// strictSchemaBeta is the beta header value for strict tool schemas.
 	strictSchemaBeta = "structured-outputs-2025-11-13"
 )
 
-// The maximum number of tokens a model can write in one answer. An unknown model uses the
-// lowest limit, because a limit above the limit of the model gives an error.
+// Output token limits for supported model families.
 const (
 	leastOutputTokens   = 4096
 	largeOutputTokens   = 128_000
@@ -28,9 +23,7 @@ const (
 	smallerOutputTokens = 32_000
 )
 
-// namesOlderClaudeModel is true for the families with the lowest limit: the instant models,
-// and the second and third generations. A generation is one digit, and only if a separator
-// follows it, so `claude-35` is not the third generation.
+// namesOlderClaudeModel matches instant models and generations 2 and 3. Generation digits require a separator or the end of the name.
 func namesOlderClaudeModel(model string) bool {
 	_, after, ok := strings.Cut(model, "claude-")
 	if !ok {
@@ -52,14 +45,11 @@ func namesOlderClaudeModel(model string) bool {
 	return false
 }
 
-// modelCapabilities holds the properties of one model of this provider, taken from the
-// family in its name.
+// modelCapabilities is the output limit and schema support inferred from the model family.
 type modelCapabilities struct {
-	// outputLimit is the maximum number of tokens in one answer. A limit above the limit
-	// of the model gives an error, so an unknown model uses the lowest limit.
+	// outputLimit is the maximum tokens per response.
 	outputLimit int
-	// readsSchemasStrictly is true if the model validates a tool schema strictly. The
-	// request enables this with a beta header.
+	// readsSchemasStrictly is true for model families with strict schema support.
 	readsSchemasStrictly bool
 }
 
@@ -116,15 +106,14 @@ func (held *anthropicModel) Describe() string {
 type anthropicBlock struct {
 	Type string `json:"type"`
 	Text string `json:"text,omitempty"`
-	// A call the model requested. The input is written also for a call without
-	// arguments, because the protocol requires the field on every call.
+	// The protocol requires input even for calls without arguments.
 	ID    string          `json:"id,omitempty"`
 	Name  string          `json:"name,omitempty"`
 	Input *map[string]any `json:"input,omitempty"`
 	// The result of a call, keyed by the id of that call.
 	ToolUseID string `json:"tool_use_id,omitempty"`
 	Content   string `json:"content,omitempty"`
-	// CacheControl marks the end of the part the provider caches.
+	// CacheControl is the cache boundary for the request prefix.
 	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 }
 
@@ -141,8 +130,7 @@ type anthropicTool struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"input_schema"`
-	// EagerInputStreaming requests the input of a call in parts as the model writes it,
-	// and not as one block at the end.
+	// EagerInputStreaming is the option for streamed tool argument fragments.
 	EagerInputStreaming bool `json:"eager_input_streaming"`
 }
 
@@ -161,8 +149,7 @@ type anthropicRequest struct {
 	Stream     bool                 `json:"stream"`
 }
 
-// buildAnthropicMessages converts the turns into the form of this protocol. A turn with tool
-// results is a user turn, because this protocol puts the results there.
+// buildAnthropicMessages builds Messages input. The protocol requires tool results in user messages.
 func buildAnthropicMessages(messages []Message) []anthropicMessage {
 	written := make([]anthropicMessage, 0, len(messages))
 	for _, message := range messages {
@@ -198,9 +185,7 @@ func buildAnthropicMessages(messages []Message) []anthropicMessage {
 	return written
 }
 
-// markLastBlock marks the last block of the request as the end of the cached part. The
-// provider reads everything before it from the cache, including the system prompt and the
-// tools.
+// markLastBlock requests prefix caching through the final message block, including the tools and system prompt.
 func markLastBlock(messages []anthropicMessage) {
 	if len(messages) == 0 {
 		return
@@ -240,8 +225,7 @@ func (held *anthropicModel) buildRequest(
 	return built
 }
 
-// buildAnthropicHeaders returns the headers of one request. A model that validates a schema
-// strictly gets the beta header, because the tools have a schema.
+// buildAnthropicHeaders includes the schema beta header when tools and model support are available.
 func (held *anthropicModel) buildHeaders(
 	request Request, capabilities modelCapabilities,
 ) map[string]string {
@@ -304,7 +288,7 @@ func (held *anthropicModel) Stream(
 	err = readServerEvents(body, func(held serverEvent) error {
 		event := anthropicStreamEvent{}
 		if problem := readJSONInto(held.data, &event); problem != nil {
-			LogEvent("! anthropic wrote an event this build cannot read: " + problem.Error())
+			LogEvent("! cannot parse anthropic event: " + problem.Error())
 			return nil
 		}
 
@@ -362,11 +346,9 @@ func (held *anthropicModel) Stream(
 	return answer, nil
 }
 
-// readAnthropicUsage returns the token counts of an event, together with the counts of an
-// earlier event.
+// readAnthropicUsage combines current and previous event token counts.
 func readAnthropicUsage(reported anthropicUsage, kept Usage) Usage {
-	// The input count of this protocol does not include the tokens read from the cache
-	// and the tokens written to it. This function counts every token of the request.
+	// Anthropic reports uncached input, cache reads, and cache writes as separate counts.
 	input := reported.InputTokens + reported.CacheReadTokens + reported.CacheCreationTokens
 	if input > kept.InputTokens {
 		kept.InputTokens = input
@@ -380,8 +362,7 @@ func readAnthropicUsage(reported anthropicUsage, kept Usage) Usage {
 	return kept
 }
 
-// readAnthropicStopReason converts the stop reason of this model into the form used by the
-// panel.
+// readAnthropicStopReason maps provider stop reasons to shared finish reasons.
 func readAnthropicStopReason(reported string) string {
 	switch reported {
 	case "end_turn", "stop_sequence":

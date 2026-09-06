@@ -6,13 +6,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// Writes one table into the text of the config file and keeps every other line unchanged,
-// so a write does not remove the comments and the layout of the user. A rewrite of the
-// whole document would remove both.
+// Config updates replace one table and preserve lines outside that table.
 
 // ConfigFileError is the error class for a config file that cannot be read. The client
 // never writes over such a file.
@@ -65,9 +64,7 @@ func readAssignmentKey(line string) (string, bool) {
 	return strings.Trim(key, `"`), key != ""
 }
 
-// writeTomlValue returns one value in TOML form. The form writes text, integers and
-// booleans only. Another type would be written as text and read back as a different value,
-// so this function panics at the call site instead of writing a bad file.
+// writeTomlValue serializes strings, integers, and booleans as TOML. Other types cause a panic.
 func writeTomlValue(value any) string {
 	switch held := value.(type) {
 	case string:
@@ -77,12 +74,10 @@ func writeTomlValue(value any) string {
 	case bool:
 		return strconv.FormatBool(held)
 	}
-	panic(fmt.Sprintf("a profile holds a %T, which no config file can be written from", value))
+	panic(fmt.Sprintf("unsupported profile value type %T", value))
 }
 
-// buildProfileKeys returns the keys the form writes, the values of the keys that have one,
-// and the full set of keys the form controls. A file engine writes no host, port or user,
-// because those keys are not valid for it.
+// buildProfileKeys returns ordered keys, non-empty values, and managed keys. File engines omit host, port, and user.
 func buildProfileKeys(profile Profile) ([]string, map[string]any, map[string]bool) {
 	written := map[string]any{
 		"engine":   string(profile.Engine),
@@ -97,17 +92,13 @@ func buildProfileKeys(profile Profile) ([]string, map[string]any, map[string]boo
 	for key := range written {
 		managed[key] = true
 	}
-	// A key without a value is omitted and not written empty. The reader uses the default
-	// for a missing key and rejects a key with an empty value, so an empty value would
-	// write a file that cannot be read back. The key stays in the managed set, so the
-	// line of a value the form cleared is removed.
+	// Empty values remove managed keys. Missing keys use reader defaults.
 	for key, value := range map[string]string{
 		"auth":           string(profile.Auth),
 		"env":            string(profile.Environment),
 		"mode":           string(profile.AccessMode),
 		"confirm_writes": string(profile.ConfirmWrites),
-		// A password is never written. The key stays managed, so saving a profile
-		// removes one that a hand-edited file still holds.
+		// Saving removes any existing password key.
 		"password":         "",
 		"password_env":     profile.PasswordEnv,
 		"password_command": profile.PasswordCommand,
@@ -183,6 +174,29 @@ func writeProfileBlock(text string, profile Profile) string {
 
 	lines := strings.Split(text, "\n")
 	start := findProfileHeaderLine(lines, profile.Name)
+	if start == -1 {
+		for _, setting := range []struct {
+			key   string
+			value any
+			omit  bool
+		}{
+			{"mcp", string(profile.McpAccess), profile.McpAccess == McpUnset},
+			{"write_plan", string(profile.WritePlan), profile.WritePlan == ""},
+			{"undo_rows", profile.UndoRows, false},
+			{"statement_timeout_ms", int(profile.StatementTimeout / time.Millisecond), false},
+			{"autocommit", profile.Autocommit, false},
+			{"page_size", profile.PageSize, profile.PageSize == 0},
+			{"keepalive_s", int(profile.Keepalive / time.Second), false},
+			{"command", profile.Command, profile.Command == ""},
+			{"wait_for_port", profile.WaitForPort, profile.WaitForPort == 0},
+			{"command_timeout", int(profile.CommandTimeout / time.Second), profile.CommandTimeout == 0},
+		} {
+			if !setting.omit {
+				order = append(order, setting.key)
+				values[setting.key] = setting.value
+			}
+		}
+	}
 
 	written := make([]string, 0, len(order))
 	for _, key := range order {
@@ -210,27 +224,23 @@ func writeProfileBlock(text string, profile Profile) string {
 		pending[key] = true
 	}
 
-	// An unchanged key keeps its line, and with it any comment on that line.
+	// Unmanaged keys and non-assignment lines remain unchanged.
 	for _, line := range lines[start+1 : end] {
 		key, isAssignment := readAssignmentKey(line)
 		if !isAssignment {
 			kept = append(kept, line)
 			continue
 		}
-		// A setting the form does not show stays unchanged. Only the keys the form
-		// controls are written again, so an edit of a connection never removes the page
-		// size or the keepalive from the file.
+		// Settings absent from the form remain unchanged.
 		if !managed[key] {
 			kept = append(kept, line)
 			continue
 		}
-		// A key that the form controls and cleared is removed, so a cleared password
-		// deletes its line and does not leave the old value.
+		// Cleared managed keys are removed.
 		if _, holdsValue := values[key]; !holdsValue {
 			continue
 		}
-		// A key that is already written is removed, so a file with the same key twice keeps
-		// one copy.
+		// Repeated managed keys keep one copy.
 		if !pending[key] {
 			continue
 		}
@@ -262,9 +272,7 @@ func findProfileHeaderLine(lines []string, name string) int {
 	return -1
 }
 
-// renameProfileBlock replaces the name in the header of a block and keeps every line below
-// it unchanged. A rename that deleted the block and wrote a new one would lose the settings
-// the form does not show, such as `mcp` and `page_size`, and every comment.
+// renameProfileBlock replaces the profile header name and preserves all other lines.
 func renameProfileBlock(text, from, to string) string {
 	lines := strings.Split(text, "\n")
 	start := findProfileHeaderLine(lines, from)
@@ -312,20 +320,17 @@ func readConfigText(path string) (string, error) {
 		}
 		return "", err
 	}
-	// A file that does not parse is kept unchanged, so no write can replace it.
+	// Invalid TOML prevents config updates.
 	if _, decodeErr := DecodeDocument(string(held)); decodeErr != nil {
 		return "", ConfigFileError{Reason: fmt.Sprintf(
-			"%s is not valid TOML, so it was left as it is: %v", path, decodeErr)}
+			"%s contains invalid TOML; the file is unchanged: %v", path, decodeErr)}
 	}
 	return string(held), nil
 }
 
-// writeConfigText writes the file and creates its directory. The text is written to a
-// temporary file in the same directory and then moved over the target, so a write that
-// fails part way leaves the old file complete. A truncated config file would lose every
-// profile.
+// writeConfigText writes and syncs a temporary file, then renames the temporary file over the config file.
 func writeConfigText(path, text string) error {
-	// The directory can hold passwords.
+	// The config directory is private to its owner.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
@@ -342,8 +347,7 @@ func writeConfigText(path, text string) error {
 	if _, err := file.WriteString(text); err != nil {
 		return dropTemporary(err)
 	}
-	// The data reaches the disk before the move, so a machine that stops here restarts
-	// with the old file and never with an empty one.
+	// Sync completes before the rename.
 	if err := file.Sync(); err != nil {
 		return dropTemporary(err)
 	}
@@ -358,18 +362,14 @@ func writeConfigText(path, text string) error {
 	return nil
 }
 
-// SaveProfileToFile writes the profile into the config file. A rename removes the old block
-// first.
+// SaveProfileToFile adds or updates a profile and handles a changed profile name.
 func SaveProfileToFile(profile Profile, replacing, path string) error {
 	text, err := readConfigText(path)
 	if err != nil {
 		return err
 	}
 	if replacing != "" && replacing != profile.Name {
-		// The block is renamed if possible, so the settings the form does not show and
-		// the comments beside them stay. If the file already has a block with the new
-		// name, the old block is deleted and the settings are written into the block that
-		// stays, because two blocks with one name is not a valid file.
+		// An existing target block replaces the old block. Otherwise, only the header name changes.
 		if findProfileHeaderLine(strings.Split(text, "\n"), profile.Name) == -1 {
 			text = renameProfileBlock(text, replacing, profile.Name)
 		} else {
@@ -379,7 +379,7 @@ func SaveProfileToFile(profile Profile, replacing, path string) error {
 	written := writeProfileBlock(text, profile)
 	if _, decodeErr := DecodeDocument(written); decodeErr != nil {
 		return ConfigFileError{Reason: fmt.Sprintf(
-			"the profile did not write back as valid TOML, so %s was left as it is", path)}
+			"the generated profile is invalid TOML; %s is unchanged", path)}
 	}
 	return writeConfigText(path, written)
 }

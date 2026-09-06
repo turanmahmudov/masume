@@ -6,8 +6,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// ResolveLogPath returns the path of the log of the agent calls, so the user can read them
-// later.
+// ResolveLogPath returns the MCP log path.
 func ResolveLogPath() string {
 	return core.ResolveStatePath("mcp.log")
 }

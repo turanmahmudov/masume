@@ -6,10 +6,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// The relation one write lands on, read out of the statement, so a plan can count the rows
-// before the write runs.
+// Write target parsing for row counts before execution.
 
-// WriteKind is what a statement does to the rows of a relation.
+// WriteKind is the write operation.
 type WriteKind string
 
 // The kinds of write a plan is built for.
@@ -20,11 +19,11 @@ const (
 	WriteTruncate WriteKind = "truncate"
 )
 
-// WriteTarget is one write, read as the relation it lands on and the rows it names.
+// WriteTarget is a parsed write with its target table, predicate, and assigned columns.
 type WriteTarget struct {
 	Kind  WriteKind
 	Table SelectSource
-	// The text of the WHERE, without the keyword. A write without one lands on every row.
+	// The WHERE clause text without the keyword.
 	Where    string
 	HasWhere bool
 	// The columns a SET assigns.
@@ -34,16 +33,14 @@ type WriteTarget struct {
 // whereEnders name the clauses that end a WHERE.
 var whereEnders = []string{"returning", "order by", "limit", "offset", "fetch"}
 
-// joiningKeywords name the words that bring a second relation into a write. The rows such
-// a statement reaches cannot be counted from its target alone.
+// joiningKeywords is the set of clauses excluded from single-table write measurement.
 var joiningKeywords = []string{"from", "using", "join", "select", "with"}
 
 func countsJoins(tokens []syntax.CodeToken) int {
 	return len(syntax.FindKeywordsIn(tokens, joiningKeywords))
 }
 
-// readWriteRelation returns the relation named at that token. An alias is refused: the
-// predicate is then written against the alias, which a count of the relation cannot read.
+// readWriteRelation parses a target table and rejects aliases.
 func readWriteRelation(
 	sql string, tokens []syntax.CodeToken, index int,
 ) (SelectSource, int, bool) {
@@ -77,8 +74,7 @@ func readWhereClause(sql string, tokens []syntax.CodeToken) (string, bool) {
 	return strings.TrimSpace(sql[first.Start:end]), true
 }
 
-// readAssignedColumns returns the columns a SET assigns, reading a name at the start of the
-// clause and after every comma of the top level.
+// readAssignedColumns reads assigned columns after SET and top-level commas.
 func readAssignedColumns(sql string, tokens []syntax.CodeToken, from, to int) []string {
 	columns := []string{}
 	depth := 0
@@ -149,7 +145,7 @@ func readTruncateTarget(sql string, tokens []syntax.CodeToken) (WriteTarget, boo
 	if token, present := syntax.TokenAt(tokens, at); present && token.Text == "table" {
 		at++
 	}
-	// A truncate of several relations names them with commas between.
+	// Require one table without trailing tokens.
 	table, next, read := readWriteRelation(sql, tokens, at)
 	if !read || next != len(tokens) {
 		return WriteTarget{}, false
@@ -168,9 +164,7 @@ func readInsertTarget(sql string, tokens []syntax.CodeToken) (WriteTarget, bool)
 	return WriteTarget{Kind: WriteInsert, Table: table}, true
 }
 
-// ReadWriteTarget reads the relation and the rows one write names. It returns nothing for a
-// statement whose rows cannot be counted before it runs: one that reaches a second relation,
-// one that names its target through an alias, and one that is no write at all.
+// ReadWriteTarget parses supported single-statement writes. UPDATE and DELETE joins and target aliases are unsupported.
 func ReadWriteTarget(sql string, flavour syntax.SyntaxFlavour) (WriteTarget, bool) {
 	if len(SplitStatements(sql, flavour)) > 1 {
 		return WriteTarget{}, false

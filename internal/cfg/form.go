@@ -14,7 +14,7 @@ type FormField struct {
 	Key   string
 	Label string
 	Value string
-	// The values of a field that is a choice and not free text.
+	// The allowed values for a choice field.
 	Choices []string
 }
 
@@ -30,8 +30,7 @@ func buildBlankProfile() Profile {
 	}
 }
 
-// resolveDatabaseLabel returns the label of the field: a database name on a server, or a
-// file path.
+// resolveDatabaseLabel returns the database or file label for the engine.
 func resolveDatabaseLabel(engine core.Engine) string {
 	if core.OpensFile(engine) {
 		return "file"
@@ -46,8 +45,7 @@ var serverFields = map[string]bool{
 	"secret": true, "secretRef": true,
 }
 
-// passwordFields give the field each auth mode reads the password from. The prompt mode and
-// the keyring mode read no field: one asks the user, the other asks the operating system.
+// passwordFields are the visible fields for each password source. Prompt and keyring modes have no source fields.
 var passwordFields = map[AuthMode]map[string]bool{
 	AuthPassword: {"passwordEnv": true},
 	AuthCommand:  {"passwordCommand": true},
@@ -86,8 +84,7 @@ func listModeNames[T ~string](allowed []T) []string {
 	return names
 }
 
-// BuildFormFields returns the fields of the form, filled from the profile under edit. The
-// store names are the ones the config file declares, which the secret field offers.
+// BuildFormFields returns profile fields and the configured secret store choices.
 func BuildFormFields(profile Profile, editing bool, secretStoreNames []string) []FormField {
 	source := profile
 	if !editing {
@@ -126,10 +123,7 @@ func BuildFormFields(profile Profile, editing bool, secretStoreNames []string) [
 	}
 }
 
-// FindShownFields returns the fields the form draws. A file engine has no server, so the
-// host and password fields are hidden. An auth mode reads the password from one field, so
-// the other password fields are hidden. The text of a hidden field is kept and appears
-// again with the mode that reads it.
+// FindShownFields filters fields by engine and password source. Hidden field values remain unchanged.
 func FindShownFields(fields []FormField) []FormField {
 	engine, known := core.FindEngine(ReadField(fields, "engine"))
 	if known && core.OpensFile(engine) {
@@ -173,10 +167,7 @@ func findChoice[T ~string](allowed []T, written string, fallback T) T {
 	return fallback
 }
 
-// BuildProfileFromFields converts the edited fields back into a profile and rejects an
-// invalid value. The settings the form does not show are taken from the profile under edit,
-// so a test connection and a save both keep the pre-connect command, the page size and the
-// other settings.
+// BuildProfileFromFields validates form values and updates the profile. Settings absent from the form remain unchanged.
 func BuildProfileFromFields(fields []FormField, source Profile, editing bool) (Profile, error) {
 	built := source
 	if !editing {
@@ -199,8 +190,7 @@ func BuildProfileFromFields(fields []FormField, source Profile, editing bool) (P
 	built.Environment = findChoice(Environments, read("environment"), EnvironmentDev)
 	built.AccessMode = findChoice(AccessModes, read("accessMode"), AccessWrite)
 	built.ConfirmWrites = findChoice(ConfirmModes, read("confirmWrites"), ConfirmOff)
-	// The form never writes a password: the file it saves to must hold none. A profile
-	// that carries one in memory, from a URL or from a container, keeps it.
+	// Existing passwords from URLs or containers remain in memory only.
 	built.PasswordEnv = read("passwordEnv")
 	built.PasswordCommand = read("passwordCommand")
 	built.Secret = read("secret")
@@ -231,34 +221,34 @@ func BuildProfileFromFields(fields []FormField, source Profile, editing bool) (P
 	}
 
 	if built.Name == "" {
-		return Profile{}, FormError{Reason: "name cannot be empty"}
+		return Profile{}, FormError{Reason: "the profile name is missing"}
 	}
 	if built.Database == "" {
 		if opensFile {
-			return Profile{}, FormError{Reason: "the database file cannot be empty"}
+			return Profile{}, FormError{Reason: "the database file path is missing"}
 		}
-		return Profile{}, FormError{Reason: "database cannot be empty"}
+		return Profile{}, FormError{Reason: "the database name is missing"}
 	}
 	if !opensFile && built.Host == "" {
-		return Profile{}, FormError{Reason: "host cannot be empty"}
+		return Profile{}, FormError{Reason: "the host is missing"}
 	}
 	if core.NeedsUser(engine) && built.User == "" {
-		return Profile{}, FormError{Reason: "user cannot be empty"}
+		return Profile{}, FormError{Reason: "the user is missing"}
 	}
 	if built.Auth == AuthSecret && (built.Secret == "" || built.SecretRef == "") {
 		return Profile{}, FormError{
-			Reason: "the secret store and the reference cannot be empty when auth is secret",
+			Reason: "auth = secret requires a secret store and reference",
 		}
 	}
 	if built.Auth == AuthCommand && built.PasswordCommand == "" {
 		return Profile{}, FormError{
-			Reason: "password command cannot be empty when auth is command",
+			Reason: "auth = command requires a password command",
 		}
 	}
 	return built, nil
 }
 
-// ConnectionURL is a parsed connection URL, in the form fields it fills.
+// ConnectionURL is a parsed connection URL without a password.
 type ConnectionURL struct {
 	Engine   core.Engine
 	Host     string
@@ -268,7 +258,7 @@ type ConnectionURL struct {
 	SSLMode  string
 }
 
-// urlSchemes give the engine of each scheme, including the alternative scheme names.
+// urlSchemes are the engines for supported URL schemes and aliases.
 var urlSchemes = func() map[string]core.Engine {
 	schemes := map[string]core.Engine{}
 	for _, info := range core.ListEngineInfo() {
@@ -282,9 +272,7 @@ var urlSchemes = func() map[string]core.Engine {
 // sslKeys are the query keys a URL can use for the SSL setting.
 var sslKeys = []string{"sslmode", "ssl-mode", "sslMode"}
 
-// ParseConnectionURL reads a pasted connection string. It returns false unless the scheme,
-// the host and the database are all present, because an incomplete URL means the user is
-// still typing. A password in the URL is removed.
+// ParseConnectionURL requires a supported scheme, host, and database. The returned fields omit the password.
 func ParseConnectionURL(text string) (ConnectionURL, bool) {
 	trimmed := strings.TrimSpace(text)
 	if !strings.Contains(trimmed, "://") {
@@ -300,7 +288,7 @@ func ParseConnectionURL(text string) (ConnectionURL, bool) {
 		return ConnectionURL{}, false
 	}
 
-	// A URL puts an IPv6 address in brackets. Every other reader needs it without them.
+	// Connection hosts use IPv6 addresses without brackets.
 	host := strings.Trim(parsed.Hostname(), "[]")
 	database := strings.TrimPrefix(parsed.Path, "/")
 	if host == "" || database == "" {
@@ -364,8 +352,7 @@ func ApplyConnectionURL(fields []FormField, held ConnectionURL) []FormField {
 	return filled
 }
 
-// ApplyFieldChange sets one value and updates the fields that depend on it. A host never
-// contains `://`, so a value with it is a pasted connection string.
+// ApplyFieldChange updates a field and related fields. A connection URL in the host field fills the form.
 func ApplyFieldChange(fields []FormField, key, value string) []FormField {
 	if key == "host" {
 		if held, parsed := ParseConnectionURL(value); parsed {
@@ -379,8 +366,7 @@ func ApplyFieldChange(fields []FormField, key, value string) []FormField {
 	return followEngine(fields, changed, value)
 }
 
-// followEngine sets the port and the database label of the selected engine. A port the user
-// typed is kept.
+// followEngine updates the database label and default port. A non-default port remains unchanged.
 func followEngine(before, after []FormField, engine string) []FormField {
 	wanted, known := core.FindEngine(engine)
 	if !known {

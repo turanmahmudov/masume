@@ -24,8 +24,7 @@ const nodeMarker = "->"
 
 var (
 	costGroup = regexp.MustCompile(`\(cost=[^)]*?\brows=([\d.eE+-]+)[^)]*\)`)
-	// MySQL writes a loop count over a million in scientific notation, like a row
-	// count, so both use the same pattern.
+	// MySQL can use scientific notation for row and loop counts.
 	actualGroup = regexp.MustCompile(
 		`\(actual (?:time=[\d.eE+-]+\.\.([\d.eE+-]+) )?rows=([\d.eE+-]+) loops=([\d.eE+-]+)\)`)
 	// summaryTime matches a line at the end of the plan, which is not a node.
@@ -38,7 +37,7 @@ const neverRun = "(never executed)"
 
 // openNode is a node being read, with the lines under it read so far.
 type openNode struct {
-	// The column of the arrow, which decides where the next node nests.
+	// The arrow column for nesting.
 	indent int
 	label  string
 	// The text after a colon on the node line, which is how MySQL writes it.
@@ -73,8 +72,7 @@ func readNumber(written string) (float64, bool) {
 	return value, true
 }
 
-// buildOpenNode reads one node line. The numbers in brackets are removed first, so
-// the rest is what the node does.
+// buildOpenNode parses node measurements and removes measurement groups from the label.
 func buildOpenNode(line string, marker int, hasMarker bool, indent int) *openNode {
 	body := strings.TrimSpace(line)
 	if hasMarker {
@@ -129,8 +127,7 @@ func buildOpenNode(line string, marker int, hasMarker bool, indent int) *openNod
 	return node
 }
 
-// buildDetail returns the detail of a node. A server writes several conditions, so
-// they are ranked and the first one wins.
+// buildDetail returns inline detail or the first recognized condition in priority order.
 func buildDetail(open *openNode) string {
 	if open.inlineDetail != "" {
 		return open.inlineDetail
@@ -200,7 +197,7 @@ func applyProperty(carrying *openNode, line string) {
 	}
 }
 
-// closeNodesTo closes every node the indent has left, and hangs it under the one above.
+// closeNodesTo completes nodes at or above the current indentation and appends each node to its parent.
 func closeNodesTo(open *[]*openNode, topLevel *[]query.PlanNode, indent int) {
 	for len(*open) > 0 && indent <= (*open)[len(*open)-1].indent {
 		node := closeOpenNode((*open)[len(*open)-1])
@@ -214,8 +211,7 @@ func closeNodesTo(open *[]*openNode, topLevel *[]query.PlanNode, indent int) {
 	}
 }
 
-// joinTopLevel joins the trees a server wrote apart. MySQL writes one tree per
-// subquery, and each one after the first is a child of the root.
+// joinTopLevel attaches additional roots to the first root. MySQL can return separate trees for subqueries.
 func joinTopLevel(topLevel []query.PlanNode) (query.PlanNode, bool) {
 	if len(topLevel) == 0 {
 		return query.PlanNode{}, false
@@ -228,10 +224,7 @@ func joinTopLevel(topLevel []query.PlanNode) (query.PlanNode, bool) {
 	return main, true
 }
 
-// ParseTextPlan reads a plan a server wrote as text. Both servers write one node per
-// line and nest by indent. No indent width is assumed: an arrow is compared with the
-// arrows still open, and a line without an arrow is the cost or a detail of the node
-// above.
+// ParseTextPlan parses PostgreSQL and MySQL text plans using node arrows and relative indentation.
 func ParseTextPlan(text string, analyzed, measurable bool) (query.QueryPlan, bool) {
 	open := []*openNode{}
 	topLevel := []query.PlanNode{}
@@ -251,8 +244,7 @@ func ParseTextPlan(text string, analyzed, measurable bool) (query.QueryPlan, boo
 			continue
 		}
 
-		// The first line opens the tree, with or without an arrow. Only MySQL puts an
-		// arrow before the first node.
+		// MySQL uses a root arrow; PostgreSQL does not.
 		indent := marker
 		if !hasMarker {
 			indent = countLeadingSpaces(line)
@@ -288,7 +280,7 @@ type PlanRow struct {
 	Share float64
 	// True for the node with the most time of its own.
 	Slowest bool
-	// True if the planner expected ten times more or fewer rows.
+	// True when actual rows are at least ten times the positive estimate.
 	Misestimated bool
 }
 
@@ -304,8 +296,7 @@ func collectNodes(node query.PlanNode, depth int, into *[]collectedNode) {
 	}
 }
 
-// isMisestimated marks only an estimate that is far too low. A LIMIT makes every node
-// below it read fewer rows than planned, so marking that would mark half a plan.
+// isMisestimated detects positive row estimates at least ten times below actual counts.
 func isMisestimated(node query.PlanNode) bool {
 	if !node.HasActualRows || !node.HasEstimatedRows || node.EstimatedRows <= 0 {
 		return false
@@ -313,8 +304,7 @@ func isMisestimated(node query.PlanNode) bool {
 	return node.ActualRows/node.EstimatedRows >= misestimateFactor
 }
 
-// FlattenPlan flattens the tree into rows, each with its share of the time and its
-// estimate.
+// FlattenPlan builds display rows with time shares and estimate warnings.
 func FlattenPlan(plan query.QueryPlan) []PlanRow {
 	collected := []collectedNode{}
 	collectNodes(plan.Root, 0, &collected)
@@ -352,14 +342,13 @@ func FlattenPlan(plan query.QueryPlan) []PlanRow {
 	return rows
 }
 
-// DescribePlanCost writes the line above the tree: the time the run took, or that it
-// never ran.
+// DescribePlanCost summarizes plan measurements or estimate-only status.
 func DescribePlanCost(plan query.QueryPlan) string {
 	if !plan.Analyzed {
 		if plan.Measurable {
 			return "estimated"
 		}
-		return "estimated · the server measures no plan"
+		return "estimated · execution measurements are unavailable"
 	}
 	parts := []string{}
 	if plan.HasPlanningMs {

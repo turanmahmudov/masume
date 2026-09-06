@@ -15,7 +15,7 @@ type Predicate struct {
 	Params []any
 }
 
-// RenderLiteral writes a value as the server would read it, for a person to see.
+// RenderLiteral formats a value as an SQL literal.
 func RenderLiteral(value any, dialect *query.Dialect, dataType string) string {
 	switch held := value.(type) {
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
@@ -30,8 +30,7 @@ func RenderLiteral(value any, dialect *query.Dialect, dataType string) string {
 	return dialect.QuoteTextLiteral(core.FormatCell(value, dataType))
 }
 
-// writeStep writes one filter step as SQL. `bind` decides whether a value is bound
-// or written out.
+// writeStep builds one SQL predicate. bind is the parameter binder or literal formatter.
 func writeStep(step core.FilterStep, dialect *query.Dialect, bind func(any) string) string {
 	if step.Kind == core.FilterRaw {
 		return step.Text
@@ -61,8 +60,7 @@ func joinSteps(steps []core.FilterStep, dialect *query.Dialect, bind func(any) s
 	return strings.Join(written, " and ")
 }
 
-// ComposeFilter returns the filter with every value bound, numbered from
-// firstParamIndex.
+// ComposeFilter builds a filter with parameters numbered from firstParamIndex.
 func ComposeFilter(steps []core.FilterStep, dialect *query.Dialect, firstParamIndex int) *Predicate {
 	if len(steps) == 0 {
 		return nil
@@ -72,8 +70,7 @@ func ComposeFilter(steps []core.FilterStep, dialect *query.Dialect, firstParamIn
 	return &Predicate{Text: text, Params: bound.Params}
 }
 
-// InlineFilter returns the filter with every value written out, for the buffer and
-// the banner, not for the server.
+// InlineFilter builds a filter with inline values for display.
 func InlineFilter(steps []core.FilterStep, dialect *query.Dialect) *Predicate {
 	if len(steps) == 0 {
 		return nil

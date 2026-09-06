@@ -24,8 +24,7 @@ const (
 // ExportFormats lists the formats in the order the form steps through them.
 var ExportFormats = []ExportFormat{ExportCSV, ExportJSON}
 
-// BuildRecordKeys names each column once. A join can return one column name twice,
-// so a repeat gets a suffix.
+// BuildRecordKeys generates unique record keys with numeric suffixes for duplicate column names.
 func BuildRecordKeys(columns []query.ResultColumn) []string {
 	used := map[string]bool{}
 	keys := make([]string, 0, len(columns))
@@ -66,12 +65,12 @@ const (
 // CSVLineEndings lists the endings in the order the form steps through them.
 var CSVLineEndings = []CSVLineEnding{EndingLf, EndingCrlf}
 
-// CSVOptions says how a CSV export is written.
+// CSVOptions is the CSV output configuration.
 type CSVOptions struct {
 	Delimiter string
 	Header    bool
 	Quoting   CSVQuoting
-	// A spreadsheet on Windows expects CRLF.
+	// The CSV record separator.
 	LineEnding CSVLineEnding
 	// The text for a null. Empty by default, which reads as no value.
 	NullText string
@@ -79,7 +78,7 @@ type CSVOptions struct {
 	SanitizeFormulas bool
 }
 
-// DefaultCSVOptions holds the options an export opens with.
+// DefaultCSVOptions returns the initial export options.
 func DefaultCSVOptions() CSVOptions {
 	return CSVOptions{
 		Delimiter: ",", Header: true, Quoting: QuoteAsNeeded, LineEnding: EndingLf,
@@ -94,9 +93,7 @@ var formulaStarts = []string{"=", "+", "-", "@", "\t", "\r"}
 
 var plainNumber = regexp.MustCompile(`^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$`)
 
-// sanitizeFormula makes a field text. A field that starts with `=`, `+`, `-` or `@`
-// is a formula in Excel and Sheets, so a leading quote makes it text. A number is
-// left as it is.
+// sanitizeFormula prefixes possible spreadsheet formulas with an apostrophe. Plain numbers remain unchanged.
 func sanitizeFormula(value string) string {
 	if value == "" || plainNumber.MatchString(value) {
 		return value
@@ -149,8 +146,7 @@ func buildCSVRow(row []any, columns []query.ResultColumn, options CSVOptions) st
 	return strings.Join(written, options.Delimiter)
 }
 
-// buildExportText returns the text of one cell for a file. A document keeps no extended
-// JSON wrapper, because a reader of the file reads plain JSON.
+// buildExportText formats a cell for export, using relaxed JSON for valid documents.
 func buildExportText(value any, dataType string) string {
 	if held, isDocument := value.(core.DocumentValue); isDocument {
 		if relaxed, isJSON := core.RelaxDocumentJSON(held.Text); isJSON {
@@ -160,22 +156,18 @@ func buildExportText(value any, dataType string) string {
 	return core.FormatCell(value, dataType)
 }
 
-// castToJSONValue keeps a value with a JSON type as it is. The rest are written as in
-// the CSV export.
+// castToJSONValue preserves supported JSON values and formats other values as text.
 func castToJSONValue(value any, dataType string) any {
 	if value == nil {
 		return nil
 	}
-	// A column that holds a document is written as that document, not as the text of
-	// one, so a reader of the file does not have to unescape it first. A list the driver
-	// gave as a structure is written the same way.
+	// Embed valid document and list values as JSON.
 	if core.IsDocumentType(dataType) || core.IsListValue(value) {
 		if embedded, isJSON := embedJSONDocument(value, dataType); isJSON {
 			return embedded
 		}
 	}
-	// JSON has no form for NaN and no form for an infinity, so those are written as the
-	// text of the cell rather than refused by the encoder.
+	// JSON has no numeric representation for NaN or infinity.
 	if held, isFloat := readFloatValue(value); isFloat {
 		if math.IsNaN(held) || math.IsInf(held, 0) {
 			return buildExportText(value, dataType)
@@ -192,7 +184,7 @@ func castToJSONValue(value any, dataType string) any {
 	return buildExportText(value, dataType)
 }
 
-// readFloatValue returns the value as a float, and reports nothing where it is no float.
+// readFloatValue converts float32 and float64 values to float64.
 func readFloatValue(value any) (float64, bool) {
 	switch held := value.(type) {
 	case float32:
@@ -203,8 +195,7 @@ func readFloatValue(value any) (float64, bool) {
 	return 0, false
 }
 
-// embedJSONDocument returns the value as the JSON it holds, and reports nothing where the
-// text is no document the file can carry.
+// embedJSONDocument returns valid JSON from the formatted value.
 func embedJSONDocument(value any, dataType string) (json.RawMessage, bool) {
 	written := buildExportText(value, dataType)
 	if !json.Valid([]byte(written)) {
@@ -248,8 +239,7 @@ func buildTextRecord(
 	return record
 }
 
-// ExportWriter writes an export a batch at a time, so a large relation is never held
-// whole.
+// ExportWriter formats export batches.
 type ExportWriter interface {
 	// Begin writes the first text of the file, built from the columns of the result.
 	Begin(columns []query.ResultColumn) string
@@ -294,8 +284,7 @@ func (writer *jsonWriter) WriteRows(rows [][]any, columns []query.ResultColumn) 
 	for _, row := range rows {
 		encoded, err := json.Marshal(buildJSONRecord(row, columns, keys))
 		if err != nil {
-			// A row must never go missing from an export, so a record this encoder
-			// refuses is written again with every cell as its text.
+			// Retry failed records with every cell formatted as text.
 			encoded, _ = json.Marshal(buildTextRecord(row, columns, keys))
 		}
 		records = append(records, "  "+string(encoded))
@@ -323,12 +312,12 @@ func CreateExportWriter(format ExportFormat, csv CSVOptions) ExportWriter {
 	return &jsonWriter{}
 }
 
-// ExportProgressRows is how many rows an export writes between two progress reports.
+// ExportProgressRows is the row interval between progress reports.
 const ExportProgressRows = 10_000
 
 var unsafeFilenameCharacters = regexp.MustCompile(`[^\w.-]+`)
 
-// BuildExportFilename names the file, from the label and the moment of the export.
+// BuildExportFilename builds a filename from the label, timestamp, and format.
 func BuildExportFilename(label string, format ExportFormat, stamp string) string {
 	safeLabel := strings.Trim(unsafeFilenameCharacters.ReplaceAllString(label, "_"), "_")
 	if safeLabel == "" {
@@ -347,8 +336,7 @@ func renderSQLLiteral(value any, dataType string, dialect *query.Dialect) string
 
 var markdownBreak = regexp.MustCompile(`\s*\n\s*`)
 
-// BuildMarkdown writes a Markdown table. A pipe in a value is escaped, and a newline
-// becomes a space.
+// BuildMarkdown formats a table with escaped pipes and spaces in place of newlines.
 func BuildMarkdown(columns []query.ResultColumn, rows [][]any) string {
 	escapeCell := func(text string) string {
 		return markdownBreak.ReplaceAllString(strings.ReplaceAll(text, "|", `\|`), " ")
@@ -378,8 +366,7 @@ func BuildMarkdown(columns []query.ResultColumn, rows [][]any) string {
 	return strings.Join(lines, "\n")
 }
 
-// BuildInClause writes one column as `('a', 'b')` for a WHERE. Each value comes once,
-// and no nulls, because IN never matches a null.
+// BuildInClause builds a list of unique nonnull column values for an IN predicate.
 func BuildInClause(
 	columns []query.ResultColumn, rows [][]any, columnIndex int, dialect *query.Dialect,
 ) string {

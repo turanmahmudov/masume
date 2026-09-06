@@ -9,8 +9,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// KeySettings holds everything under `[keys]`: the preset, and the chords that replace
-// entries of it.
+// KeySettings is the preset and binding configuration under `[keys]`.
 type KeySettings struct {
 	// The key set the app uses, before the chords of this file are applied.
 	Preset  PresetID
@@ -19,7 +18,7 @@ type KeySettings struct {
 	Problems []string
 }
 
-// DefaultKeySettings holds the keys the app starts with.
+// DefaultKeySettings returns the default key settings.
 func DefaultKeySettings() KeySettings {
 	return KeySettings{Preset: PresetDefault, Choices: ChordChoices{}}
 }
@@ -59,11 +58,11 @@ func readPreset(keys Table, problems *[]string) PresetID {
 		return found
 	}
 	*problems = append(*problems, fmt.Sprintf(
-		"keys.preset %q is not a preset; use %s", written, listPresetNames()))
+		"keys.preset: unsupported preset %q; use %s", written, listPresetNames()))
 	return PresetDefault
 }
 
-// readChords returns the chords of one entry of the table, or reports that it has none.
+// readChords returns chord strings, or false for an invalid type.
 func readChords(written any) ([]string, bool) {
 	switch held := written.(type) {
 	case string:
@@ -100,14 +99,13 @@ func readActionSequences(written string, entry any, problems *[]string) ([]Chord
 	for _, text := range texts {
 		sequence, parsed := ParseChordSequence(text)
 		if !parsed {
-			*problems = append(*problems, fmt.Sprintf("%s cannot read the chord %q", written, text))
+			*problems = append(*problems, fmt.Sprintf("%s: invalid chord %q", written, text))
 			continue
 		}
 		sequences = append(sequences, sequence)
 	}
 
-	// A line without a valid chord was still an attempt to bind the action, so the
-	// action keeps its default key.
+	// An entry with no valid chords keeps the default binding.
 	if len(texts) > 0 && len(sequences) == 0 {
 		return nil, false
 	}
@@ -171,7 +169,7 @@ func ParseKeySettings(document Table) KeySettings {
 		scope, known := findKeyScope(name)
 		if !known {
 			problems = append(problems, fmt.Sprintf(
-				"keys.%s is not a scope; use %s", name, listScopeNames()))
+				"keys.%s: unsupported scope; use %s", name, listScopeNames()))
 			continue
 		}
 		maps.Copy(choices, readScopeChoices(scope, keys[name], &problems))

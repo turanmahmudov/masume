@@ -6,13 +6,12 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// McpConfig holds everything under `[mcp]`: the profiles an agent can connect to, and the
-// operations it can run.
+// McpConfig is the profile access and limit configuration under `[mcp]`.
 type McpConfig struct {
 	// The profiles an agent can connect to. It is empty until the file lists one.
 	Profiles []string
 	Access   McpAccess
-	// The number of rows one read returns, which is also the maximum a caller can request.
+	// The default and maximum rows per read.
 	RowLimit int
 	// The time a statement can run before it is cancelled.
 	Timeout time.Duration
@@ -24,7 +23,7 @@ const (
 	DefaultMcpTimeout  = 30 * time.Second
 )
 
-// DefaultMcpConfig holds the access level an agent starts with.
+// DefaultMcpConfig returns the default MCP access and limits.
 func DefaultMcpConfig() McpConfig {
 	return McpConfig{Access: McpReadOnly, RowLimit: DefaultMcpRowLimit, Timeout: DefaultMcpTimeout}
 }
@@ -34,7 +33,7 @@ func FindMcpAccess(written string) (McpAccess, bool) {
 	return core.FindAllowed(McpAccessLevels, written)
 }
 
-// ResolveLowerAccess returns the lower of two levels, because each setting is a maximum.
+// ResolveLowerAccess returns the lower access level.
 func ResolveLowerAccess(left, right McpAccess) McpAccess {
 	if indexOfAccess(left) <= indexOfAccess(right) {
 		return left
@@ -51,8 +50,7 @@ func indexOfAccess(level McpAccess) int {
 	return 0
 }
 
-// ParseMcpConfig reads `[mcp]`. An invalid setting uses the default and does not stop the
-// server, because that would leave the agent without a client.
+// ParseMcpConfig reads `[mcp]` with defaults for invalid settings.
 func ParseMcpConfig(document Table) McpConfig {
 	config := DefaultMcpConfig()
 	mcp, present := FindSection(document, "mcp")

@@ -10,16 +10,14 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// The command palette: the rows it offers, what each row runs, and the switches of a preset,
-// a provider and a theme that only it reaches.
+// The command palette lists actions, key presets, AI providers, and themes.
 
 // The prefix of the id of a palette row that changes the AI provider, and of one that
 // changes the key preset.
 const (
 	aiProviderPrefix = "ai-provider:"
 	keyPresetPrefix  = "key-preset:"
-	// configProblemsAction shows the faults of the config. It is offered only if there
-	// are any, so the row itself is the message.
+	// configProblemsAction is available when configuration problems exist.
 	configProblemsAction = "config-problems"
 )
 
@@ -61,10 +59,10 @@ var paletteEntries = []paletteEntry{
 	{id: "show-saved", label: "Saved queries",
 		scope: cfg.ScopeGlobal, action: ActionShowSaved},
 	{id: "show-activity", label: "Server activity",
-		detail: "the load, the locks and the other sessions",
+		detail: "load, locks, and other sessions",
 		scope:  cfg.ScopeGlobal, action: ActionShowActivity},
 	{id: "undo-write", label: "Undo the last write",
-		detail: "runs the undo statement the write plan kept",
+		detail: "run the saved undo statement",
 		scope:  cfg.ScopeGlobal, action: ActionUndoWrite},
 	{id: "export-csv", label: "Export result as CSV",
 		scope: cfg.ScopeGlobal, action: ActionExportCSV},
@@ -88,16 +86,16 @@ var paletteEntries = []paletteEntry{
 		scope: cfg.ScopeGlobal, action: ActionRollbackTransaction},
 	{id: "toggle-autocommit", label: "Toggle autocommit",
 		scope: cfg.ScopeGlobal, action: ActionToggleAutocommit},
-	{id: "tab-data", label: "View: Data", detail: "the rows of the result"},
+	{id: "tab-data", label: "View: Data", detail: "result rows"},
 	{id: "tab-fields", label: "View: Fields",
 		detail: "the columns the server returned"},
-	{id: "tab-statistics", label: "View: Statistics", detail: "the rows a write changed, and the timings"},
-	{id: "tab-columns", label: "View: Columns", detail: "the columns of the table"},
-	{id: "tab-indexes", label: "View: Indexes", detail: "the indexes of the table"},
-	{id: "tab-constraints", label: "View: Constraints", detail: "the constraints of the table"},
+	{id: "tab-statistics", label: "View: Statistics", detail: "affected rows and execution times"},
+	{id: "tab-columns", label: "View: Columns", detail: "table columns"},
+	{id: "tab-indexes", label: "View: Indexes", detail: "table indexes"},
+	{id: "tab-constraints", label: "View: Constraints", detail: "table constraints"},
 	{id: "tab-ddl", label: "View: DDL", detail: "the statement that defines the table"},
-	{id: "tab-plan", label: "View: Plan", detail: "the plan of the query"},
-	{id: "reveal-sql", label: "Edit the query behind this result",
+	{id: "tab-plan", label: "View: Plan", detail: "query plan"},
+	{id: "reveal-sql", label: "Edit the query for this result",
 		detail: "a table opens as a query", scope: cfg.ScopeGlobal, action: ActionRevealSQL},
 	{id: "toggle-sidebar", label: "Show or hide the object tree",
 		scope: cfg.ScopeGlobal, action: ActionToggleSidebar},
@@ -116,7 +114,7 @@ var paletteEntries = []paletteEntry{
 	{id: "new-query-tab", label: "New query tab",
 		scope: cfg.ScopeGlobal, action: ActionNewQueryTab},
 	{id: "next-tab", label: "Next tab", scope: cfg.ScopeGlobal, action: ActionNextTab},
-	{id: "close-tab", label: "Close this tab", detail: "asks if work is staged",
+	{id: "close-tab", label: "Close this tab", detail: "asks if changes are staged",
 		scope: cfg.ScopeGlobal, action: ActionCloseTab},
 	{id: "name-tab", label: "Name this tab", scope: cfg.ScopeGlobal, action: ActionNameTab},
 	{id: "refresh-objects", label: "Refresh the object tree",
@@ -131,11 +129,11 @@ var paletteEntries = []paletteEntry{
 	{id: "copy-inserts", label: "Copy the result as INSERTs", detail: "in the grid",
 		scope: cfg.ScopeGrid, action: ActionCopyInserts},
 	{id: "copy-plan", label: "Copy the query plan",
-		detail: "in the plan · as the server sent it",
+		detail: "in the plan view · raw server output",
 		scope:  cfg.ScopePlan, action: ActionCopyPlan},
 	{id: "open-picker", label: "New connection",
 		scope: cfg.ScopeGlobal, action: ActionOpenPicker},
-	{id: "close-connection", label: "Close this connection", detail: "every tab of it",
+	{id: "close-connection", label: "Close this connection", detail: "close all its tabs",
 		scope: cfg.ScopeGlobal, action: ActionCloseConnection},
 	{id: "next-page", label: "Fetch more rows",
 		scope: cfg.ScopeGlobal, action: ActionNextPage},
@@ -144,7 +142,7 @@ var paletteEntries = []paletteEntry{
 	{id: "format-sql", label: "Format the query", detail: "one clause per line",
 		scope: cfg.ScopeEditor, action: ActionFormatSQL},
 	{id: "show-themes", label: "Theme",
-		detail: "each one is shown while the cursor is on it",
+		detail: "preview the selected theme",
 		scope:  cfg.ScopeGlobal, action: ActionShowThemes},
 	{id: "reload-themes", label: "Reload the theme files",
 		detail: "read the theme files again"},
@@ -152,9 +150,9 @@ var paletteEntries = []paletteEntry{
 	{id: "show-ai-chat", label: "Ask AI", detail: "ask about this database, or for a query",
 		scope: cfg.ScopeGlobal, action: ActionShowAiChat},
 	{id: "ai-explain-query", label: "Ask AI: explain this query",
-		detail: "the one in the editor"},
+		detail: "the query in the editor"},
 	{id: "ai-optimize-query", label: "Ask AI: optimize this query",
-		detail: "the one in the editor"},
+		detail: "the query in the editor"},
 	{id: "ai-fix-error", label: "Ask AI: fix the error",
 		detail: "the last failed run in the editor",
 		scope:  cfg.ScopeGlobal, action: ActionAiFixError},
@@ -233,7 +231,7 @@ func (model *Model) buildPaletteActions(connection *app.Connection) []app.Palett
 		actions = append(actions, app.PaletteAction{
 			ID: configProblemsAction, Label: "Config problems",
 			Detail: present.FormatCount(int64(len(model.problems))) +
-				" · what the config file and the theme files got wrong",
+				" · config and theme file problems",
 		})
 	}
 	return actions
@@ -292,7 +290,7 @@ func (model *Model) runPaletteAction(
 
 	action, known := FindActionID(id)
 	if !known {
-		connection.ShowError("there is no action called \"" + id + "\"")
+		connection.ShowError("unknown action: \"" + id + "\"")
 		return model, nil
 	}
 	scope := cfg.ScopeGlobal
@@ -341,8 +339,7 @@ func (model *Model) selectResultView(
 	return model, nil
 }
 
-// switchKeyPreset applies another preset. The choice is not written to the config file,
-// because that would drop its comments, so the app reports what to write.
+// switchKeyPreset applies a preset without changing the config file.
 func (model *Model) switchKeyPreset(
 	connection *app.Connection, written string,
 ) (tea.Model, tea.Cmd) {
@@ -374,9 +371,7 @@ func (model *Model) switchAiProvider(
 	return model, nil
 }
 
-// reloadThemeFiles reads the theme files again, so a theme can be edited without a restart.
-// The theme named in the config file is applied again, so an edit to the theme on screen is
-// seen at once.
+// reloadThemeFiles reloads theme files and reapplies the configured theme.
 func (model *Model) reloadThemeFiles(connection *app.Connection) (tea.Model, tea.Cmd) {
 	path := cfg.ResolveConfigPath()
 	documents, problems := cfg.ReadThemeDocuments(cfg.ResolveThemesPath(path))
@@ -394,7 +389,7 @@ func (model *Model) reloadThemeFiles(connection *app.Connection) (tea.Model, tea
 	reported, applied := styles.ApplyThemeByName(name)
 	found = append(found, reported...)
 	if !applied {
-		connection.ShowError("there is no theme called \"" + name + "\"")
+		connection.ShowError("unknown theme: \"" + name + "\"")
 		return model, nil
 	}
 	found = append(found, styles.ApplyColorOverrides(model.settings.Colors)...)
@@ -411,7 +406,7 @@ func (model *Model) reloadThemeFiles(connection *app.Connection) (tea.Model, tea
 		return model, nil
 	}
 	connection.ShowError(present.FormatCount(int64(len(found))) +
-		" problems · the palette lists them")
+		" problems · see Config problems in the palette")
 	return model, nil
 }
 

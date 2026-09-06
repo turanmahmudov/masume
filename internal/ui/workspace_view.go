@@ -412,7 +412,7 @@ func (model *Model) renderTree(
 	model.layout.closeConnectionFrom = inner - 1
 	model.layout.closeConnectionTo = inner
 	if len(rows) == 0 {
-		reason := "nothing to show"
+		reason := "no objects to show"
 		if connection.Catalog.Loading {
 			reason = spinnerFrame(model.spinnerAt) + " reading the objects…"
 		}
@@ -972,7 +972,7 @@ const editorPaneName = "query"
 func (model *Model) describeEditorTitle(tab *app.Tab, faults int) string {
 	if total := len(tab.Completion.Candidates); total > 0 {
 		return " " + editorPaneName + " · " + strconv.Itoa(tab.Completion.Selected+1) + "/" +
-			strconv.Itoa(total) + " · ↑↓ Tab take · Esc "
+			strconv.Itoa(total) + " · ↑↓ Tab accept · Esc "
 	}
 	if faults == 0 {
 		return " " + editorPaneName + " "

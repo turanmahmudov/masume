@@ -506,7 +506,7 @@ func TestCheckFileReportsAFileItCanWriteWhole(t *testing.T) {
 		t.Fatalf("the check read %d rows and refused %d, wanted 3 and 0",
 			report.Rows, report.Refused)
 	}
-	if !strings.Contains(load.DescribeReport(report), "every one") {
+	if !strings.Contains(load.DescribeReport(report), "all rows passed validation") {
 		t.Errorf("the report reads %q", load.DescribeReport(report))
 	}
 }

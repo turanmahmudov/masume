@@ -123,7 +123,7 @@ func TestWriteExportRefusesEveryRowOfAStatementThatWrites(t *testing.T) {
 	if command != nil {
 		t.Error("the export of a statement that writes was started")
 	}
-	if connection.Notice == nil || !strings.Contains(connection.Notice.Text, "writes") {
+	if connection.Notice == nil || !strings.Contains(connection.Notice.Text, "this statement may write") {
 		t.Errorf("the report reads %v, wanted it to say the statement writes", connection.Notice)
 	}
 	if _, err := os.Stat(path); err == nil {

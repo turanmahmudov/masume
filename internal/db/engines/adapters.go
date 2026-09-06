@@ -16,12 +16,10 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/tidb"
 )
 
-// Adapters holds one adapter per engine. This is the one place that pairs an engine
-// with the driver that opens it.
+// Adapters is the map of engines to connection adapters.
 type Adapters map[core.Engine]db.Adapter
 
-// CreateAdapters builds one adapter per engine. The servers that speak one protocol
-// share an adapter, and their entry and flavour hold the rest.
+// CreateAdapters builds adapters with engine-specific metadata and protocol settings.
 func CreateAdapters() Adapters {
 	return Adapters{
 		core.EnginePostgres: postgres.NewAdapter(postgres.Support, postgres.FlavourStandard),
@@ -50,15 +48,13 @@ func (adapters Adapters) Open(
 ) (db.Session, error) {
 	adapter, known := adapters[profile.Engine]
 	if !known {
-		return nil, db.NewDatabaseError("no driver opens the %s engine", profile.Engine)
+		return nil, db.NewDatabaseError("no driver is registered for engine %s", profile.Engine)
 	}
 	session, err := adapter.Connect(ctx, profile, password)
 	if err != nil {
 		return nil, err
 	}
-	// Wrapped, so a connection that is lost can be opened again under the tabs that use
-	// it, so a statement that runs past the limit of the profile is cancelled, and so a
-	// read-only profile refuses a write whatever the server would have allowed.
+	// Session wrappers apply reconnection, time limits, and read-only checks.
 	return db.MakeReadOnly(
 		db.MakeTimeLimited(db.MakeReconnectable(session, adapter, password))), nil
 }

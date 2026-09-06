@@ -9,9 +9,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 )
 
-// The interface every provider implements. Each provider builds its own request and reads
-// its own stream, because the two protocols are different in every part except the
-// content.
+// Shared provider requests, responses, and streaming interface.
 
 // The roles a turn of the request can have.
 const (
@@ -25,8 +23,7 @@ type ToolCall struct {
 	ID    string
 	Name  string
 	Input map[string]any
-	// Arguments is the input in the exact form the model sent, so the next request can
-	// send it back unchanged.
+	// Arguments is the original input text for subsequent provider requests.
 	Arguments string
 }
 
@@ -44,7 +41,7 @@ type Message struct {
 	Text string
 	// Calls holds the calls an assistant turn requested.
 	Calls []ToolCall
-	// Returns holds the results of those calls, sent in the next turn.
+	// Answers is the tool results sent in the next turn.
 	Answers []ToolAnswer
 }
 
@@ -89,9 +86,7 @@ const (
 type Usage struct {
 	InputTokens  int
 	OutputTokens int
-	// CachedInputTokens is the part of the input the provider read from its cache, at ten
-	// percent of the price. It is included in the input count and is not a separate
-	// total.
+	// CachedInputTokens is the cached portion of InputTokens.
 	CachedInputTokens int
 }
 
@@ -105,16 +100,13 @@ type Answer struct {
 
 // Model is one provider, configured for one model.
 type Model interface {
-	// Describe returns the provider and the model, in the form used by the panel and the
-	// log.
+	// Describe returns the provider and model for display and logging.
 	Describe() string
-	// Stream sends one request and reports every event. It returns at the end of the
-	// stream.
+	// Stream sends a request and reports events until the stream ends.
 	Stream(ctx context.Context, request Request, onEvent func(Event)) (Answer, error)
 }
 
-// ResolveVersionedBaseURL adds `/v1` to a base URL that has no version, because neither
-// provider adds it to a URL from the config.
+// ResolveVersionedBaseURL appends /v1 unless the URL already ends with /v1.
 func ResolveVersionedBaseURL(baseURL string) string {
 	stripped := strings.TrimRight(baseURL, "/")
 	if strings.HasSuffix(strings.ToLower(stripped), "/v1") {
@@ -123,9 +115,7 @@ func ResolveVersionedBaseURL(baseURL string) string {
 	return stripped + "/v1"
 }
 
-// OpenModel returns the model of the active provider, or the reason it cannot be opened.
-// cacheKey groups the requests that share a prefix. A provider that marks its own blocks
-// ignores it.
+// OpenModel configures a provider model. cacheKey is the OpenAI cache grouping key.
 func OpenModel(config cfg.AiConfig, id cfg.AiProviderID, cacheKey string) (Model, error) {
 	if id != cfg.ProviderAnthropic && id != cfg.ProviderOpenai {
 		return nil, fmt.Errorf("no provider named %q", string(id))

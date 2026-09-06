@@ -14,9 +14,7 @@ type StatementRange struct {
 	End   int
 }
 
-// SplitStatementRanges splits on top-level semicolons and keeps the place of each
-// statement. A semicolon inside a literal, comment, dollar-quoted body or
-// parentheses does not end a statement.
+// SplitStatementRanges splits at semicolons outside literals, comments, and parentheses, preserving statement byte ranges.
 func SplitStatementRanges(sql string, flavour syntax.SyntaxFlavour) []StatementRange {
 	hits := syntax.FindTopLevelKeywords(sql, []string{";"}, flavour)
 	ranges := []StatementRange{}
@@ -54,8 +52,7 @@ func SplitStatements(sql string, flavour syntax.SyntaxFlavour) []string {
 	return statements
 }
 
-// ReadStatementAtOffset returns the statement the caret is in, or the whole buffer
-// if there is only one.
+// ReadStatementAtOffset returns the statement at or before the caret, or the first statement when the caret precedes all statements.
 func ReadStatementAtOffset(sql string, offset int, flavour syntax.SyntaxFlavour) string {
 	ranges := SplitStatementRanges(sql, flavour)
 	if len(ranges) <= 1 {

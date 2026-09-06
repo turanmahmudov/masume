@@ -12,9 +12,7 @@ type CompletionList struct {
 	Dismissed bool
 }
 
-// IsListing is true while the list is displayed over the statement. An open list takes the
-// arrow keys: it is at the position of the caret, and an arrow key that moved the caret would
-// leave the list behind.
+// IsListing is true when completion candidates are available.
 func (list *CompletionList) IsListing() bool {
 	return len(list.Candidates) > 0
 }
@@ -25,8 +23,7 @@ func (list *CompletionList) Close() {
 	list.Selected = 0
 }
 
-// Dismiss closes the list for the word at the caret and stores that word, so the list does
-// not open again before the word changes.
+// Dismiss closes the list and marks completion as dismissed.
 func (list *CompletionList) Dismiss() {
 	list.Dismissed = true
 	list.Close()

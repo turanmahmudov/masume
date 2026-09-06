@@ -335,7 +335,7 @@ func TestTheCardNamesHowOftenItRefreshes(t *testing.T) {
 	openDashboard(t, model, connection)
 
 	frame := stripStyles(model.render())
-	want := "refreshing " + core.FormatLargestUnit(dashboardRefreshWait)
+	want := "refresh every " + core.FormatLargestUnit(dashboardRefreshWait)
 	if !strings.Contains(frame, want) {
 		t.Errorf("the title does not say %q", want)
 	}

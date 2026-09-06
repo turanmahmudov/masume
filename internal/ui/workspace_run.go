@@ -18,12 +18,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
-// runStatementAtCursor runs the selection, or the statement at the caret. A selection wins
-// over the statement the caret stands in.
-// resolveRowView returns the view a run lands on. A read answers rows, so a view that draws
-// something else about the relation steps aside for them. A view that draws the rows
-// themselves is the one the reader is working in, and a sort or a filter run from inside it
-// must not throw them back to another one.
+// resolveRowView preserves a row view or returns the data view.
 func resolveRowView(held app.ResultView) app.ResultView {
 	if DrawsResultRows(held) {
 		return held
@@ -70,14 +65,12 @@ func (model *Model) runWholeBuffer(
 		tab.Editor.Text))
 }
 
-// refuseSecondRun reports whether this tab is already running, and says so. A run started
-// beside the one going replaces only what the client keeps: the statements of the run
-// before it are already with the server, and an INSERT asked for twice is written twice.
+// refuseSecondRun refuses another run while this tab has a running query.
 func (model *Model) refuseSecondRun(connection *app.Connection, tab *app.Tab) bool {
 	if !tab.Results.IsRunning() {
 		return false
 	}
-	connection.Show("this tab is still running; stop it first, or open another tab")
+	connection.Show("a query is running in this tab; stop the query first, or open another tab")
 	return true
 }
 
@@ -104,7 +97,7 @@ func (model *Model) runTabRead(
 		connection.Profile().PageSize, writeplan.UndoPlan{})
 	return model, runStatements(model.ActiveID(), tab.ID, runID, 0, connection.Session,
 		reads, connection.Profile().PageSize, writeplan.UndoPlan{},
-		model.log, connection.Profile().Name)
+		model.log, connection.Profile().Name, connection.Autocommit)
 }
 
 // execute runs the statements of the user. It asks for the values of every `:name` mark
@@ -119,7 +112,7 @@ func (model *Model) execute(
 		}
 	}
 	if len(kept) == 0 {
-		connection.Show("there is nothing to run")
+		connection.Show("no statement to run")
 		return model, nil
 	}
 
@@ -129,10 +122,7 @@ func (model *Model) execute(
 		})
 }
 
-// buildRuns asks for the values of the `:name` marks of each statement in turn, one card per
-// statement that holds a mark, and composes the read of that statement straight after, because
-// the values of one statement are not the values of the next. A cancel closes the card and
-// nothing runs.
+// buildRuns asks for each statement's parameters and composes each query. Cancellation prevents the batch from running.
 func (model *Model) buildRuns(
 	connection *app.Connection, tab *app.Tab, statements []string, at int,
 	reads []db.ComposedRead, then func([]db.ComposedRead) (tea.Model, tea.Cmd),
@@ -188,7 +178,7 @@ func (model *Model) executeBound(
 	// A read-only connection refuses a write before it reaches the server.
 	risk := language.ResolveBatchRisk(kept, spoken)
 	if connection.Profile().AccessMode == cfg.AccessReadOnly && risk != statement.RiskNone {
-		connection.ShowError("this connection is read-only, so the statement was not sent")
+		connection.ShowError("this connection is read-only; the statements were not sent")
 		return model, nil
 	}
 
@@ -225,17 +215,10 @@ func (model *Model) askPlainWriteQuestion(
 	return model, nil
 }
 
-// replaceResults opens the entries of a run and takes off what belonged to the result they
-// replace: the screen filter, and the staged work.
-//
-// A staged change names a row by its place in the result. A run puts other rows in those
-// places, and a sort puts the same rows in other places, so a change that outlived either
-// would be written to a row the reader never chose. Every path that replaces a result comes
-// through here, so none of them can keep one.
+// replaceResults starts a run and clears the previous result's screen filter and staged changes.
 func (model *Model) replaceResults(
 	connection *app.Connection, tab *app.Tab, statements []string, pageSize int,
 ) {
-	// Silence would read as the client losing what the reader typed.
 	if dropped := core.CountChanges(tab.Pending); dropped > 0 {
 		connection.Show(present.DescribeDroppedChanges(dropped))
 	}
@@ -261,7 +244,7 @@ func (model *Model) startRun(
 
 	runID := model.startBatch(connection, tab, reads, pageSize, undo)
 	return runStatements(model.ActiveID(), tab.ID, runID, 0, connection.Session, reads,
-		pageSize, undo, model.log, connection.Profile().Name)
+		pageSize, undo, model.log, connection.Profile().Name, connection.Autocommit)
 }
 
 // startBatch opens a run of that tab and returns the number it is stamped with. The number
@@ -390,7 +373,7 @@ func (model *Model) askNextStatement(
 	}
 	return runStatements(answered.ConnectionID, answered.TabID, answered.RunID,
 		answered.Index+1, connection.Session, batch.reads, batch.rowLimit,
-		batch.undo, model.log, batch.profileName)
+		batch.undo, model.log, batch.profileName, connection.Autocommit)
 }
 
 // readTargetColumns asks the server for the columns a result would be written through, and
@@ -448,18 +431,18 @@ func (model *Model) resolveEditTarget(
 
 	active := tab.Results.Active()
 	if active == nil || active.State.Kind != app.QuerySucceeded {
-		return app.EditTarget{Reason: "nothing has run yet"}
+		return app.EditTarget{Reason: "no successful query result to edit"}
 	}
 	source, single := connection.Session.Composer().FindStatementSource(active.Source)
 	if !single {
 		return app.EditTarget{
-			Reason: "the rows are not the rows of one relation, so no row can be identified",
+			Reason: "cannot identify one source table for these rows",
 		}
 	}
 
 	table, known := model.findTableByName(connection, source)
 	if !known {
-		return app.EditTarget{Reason: "the catalog does not hold " + source.Name}
+		return app.EditTarget{Reason: "table not found in the catalog: " + source.Name}
 	}
 	return model.buildEditTarget(connection, table)
 }
@@ -478,7 +461,7 @@ func (model *Model) buildEditTarget(
 ) app.EditTarget {
 	target := app.EditTarget{Table: table}
 	if table.Kind != db.RelationTable {
-		target.Reason = "a " + string(table.Kind) + " is read, not written"
+		target.Reason = "editing is not available for a " + string(table.Kind)
 		return target
 	}
 
@@ -502,7 +485,7 @@ func (model *Model) buildEditTarget(
 		}
 	}
 	if len(target.KeyColumns) == 0 {
-		target.Reason = table.Name + " has no primary key, so no row can be identified"
+		target.Reason = table.Name + " has no primary key; row editing requires a primary key"
 		return target
 	}
 	target.Editable = true
@@ -532,7 +515,7 @@ func (model *Model) readMoreRows(connection *app.Connection, tab *app.Tab) tea.C
 	active.FetchingMore = true
 	return readNextPage(model.ActiveID(), tab.ID, tab.Results.ActiveIndex(), active.ID,
 		connection.Session, active.Read,
-		db.ReadWindow{Limit: active.PageSize, Offset: len(active.State.Result.Rows)})
+		db.ReadWindow{Limit: active.PageSize, Offset: len(active.State.Result.Rows)}, connection.Autocommit)
 }
 
 // readPageAnswer adds the next page to the result already drawn.
@@ -580,7 +563,7 @@ func (model *Model) countRows(
 	// size says one is on its way.
 	active.Counting = true
 	return model, countRows(model.ActiveID(), tab.ID, tab.Results.ActiveIndex(), active.ID,
-		connection.Session, active.Read)
+		connection.Session, active.Read, connection.Autocommit)
 }
 
 // readCountAnswer keeps the count of the whole result.
@@ -639,7 +622,7 @@ func (model *Model) explainBound(
 	}
 	if !connection.Session.Capabilities().PlansEveryStatement &&
 		!connection.Session.Language().CanExplain(written) {
-		connection.Show("the server has no plan for this statement")
+		connection.Show("query plans are not available for this statement")
 		return model, nil
 	}
 
@@ -648,7 +631,7 @@ func (model *Model) explainBound(
 	// is not how a write is run.
 	if analyze && connection.Session.Language().ResolveWriteRisk(written) != statement.RiskNone {
 		analyze = false
-		connection.Show("this statement writes, so the plan is estimated and nothing ran")
+		connection.Show("this statement may write; requesting an estimated plan without running the statement")
 	}
 
 	tab.View = app.ViewPlan
@@ -657,7 +640,7 @@ func (model *Model) explainBound(
 		active.Plan = app.PlanState{Kind: app.PlanLoading}
 	}
 	return model, readPlan(model.ActiveID(), tab.ID, tab.ReadActiveResultID(),
-		connection.Session, written, analyze)
+		connection.Session, written, analyze, connection.Autocommit)
 }
 
 // readPlanAnswer draws the plan the server sent.
@@ -824,7 +807,7 @@ func buildStatistics(tab *app.Tab) []app.Statistic {
 	lines := []app.Statistic{}
 	if succeeded && result.HasAffected {
 		lines = append(lines, app.Statistic{
-			Label: "updated rows", Value: strconv.FormatInt(result.Affected, 10),
+			Label: "affected rows", Value: strconv.FormatInt(result.Affected, 10),
 			Leading: true,
 		})
 	}
@@ -835,7 +818,7 @@ func buildStatistics(tab *app.Tab) []app.Statistic {
 	lines = append(lines, app.Statistic{Label: "command", Value: command})
 	if succeeded {
 		lines = append(lines, app.Statistic{
-			Label: "execute time", Value: present.FormatDuration(result.Elapsed),
+			Label: "execution time", Value: present.FormatDuration(result.Elapsed),
 		})
 	}
 	if !active.StartedAt.IsZero() {
@@ -928,7 +911,7 @@ func (model *Model) applyStagedChanges(
 	// A read-only connection refuses a staged write before it reaches the server, the same
 	// way a statement of the editor is refused.
 	if connection.Profile().AccessMode == cfg.AccessReadOnly {
-		connection.ShowError("this connection is read-only, so nothing was written")
+		connection.ShowError("this connection is read-only; no changes were sent")
 		return model, nil
 	}
 	changes, err := model.buildChanges(connection, tab)
@@ -937,7 +920,7 @@ func (model *Model) applyStagedChanges(
 		return model, nil
 	}
 	if len(changes) == 0 {
-		connection.Show("nothing is staged")
+		connection.Show("no staged changes")
 		return model, nil
 	}
 	// A server that cannot apply the set as one leaves the changes before a failure
@@ -946,12 +929,10 @@ func (model *Model) applyStagedChanges(
 		return model.askToApplyOneAtATime(connection, tab, changes)
 	}
 	tab.Applying = true
-	return model, applyChanges(model.ActiveID(), tab.ID, connection.Session, changes)
+	return model, applyChanges(model.ActiveID(), tab.ID, connection.Session, changes, connection.Autocommit)
 }
 
-// askToApplyOneAtATime asks before writing a set the server cannot apply as one. A
-// standalone MongoDB holds no transaction, so a failure part way through leaves the
-// changes before it written and the ones after it unwritten.
+// askToApplyOneAtATime asks before applying changes without a shared transaction.
 func (model *Model) askToApplyOneAtATime(
 	connection *app.Connection, tab *app.Tab, changes []db.Change,
 ) (tea.Model, tea.Cmd) {
@@ -959,24 +940,23 @@ func (model *Model) askToApplyOneAtATime(
 	connection.Overlay = app.Overlay{
 		Kind:  app.OverlayConfirm,
 		Title: " apply one at a time ",
-		Body: "This server holds no transaction, so the " + strconv.Itoa(len(changes)) +
-			" changes are applied one after the other. A failure part way through " +
-			"leaves the ones before it written. Apply them?",
+		Body: "This server cannot apply these " + strconv.Itoa(len(changes)) +
+			" changes in one transaction. Changes run one at a time. If a change fails, " +
+			"earlier changes remain applied. Apply the changes?",
 		Answers: app.OverlayAnswers{Answer: func(confirmed bool) app.AnswerCommand {
 			if !confirmed {
 				return nil
 			}
 			tab.Applying = true
-			return carryAnswer(applyChanges(id, tabID, session, changes))
+			return carryAnswer(applyChanges(id, tabID, session, changes, connection.Autocommit))
 		}},
 	}
 	return model, nil
 }
 
-// stagedElsewhereMessage is what the bar says where the staged work belongs to another
-// statement of the same run.
-const stagedElsewhereMessage = "work is staged against another statement of this run; " +
-	"show that one again to apply it, or discard the work"
+// stagedElsewhereMessage is the notice for changes staged against another result.
+const stagedElsewhereMessage = "changes are staged for another result in this batch; " +
+	"select that result to apply the changes, or discard the changes"
 
 // applyingMessage is what the bar says where the staged work is already with the server.
 const applyingMessage = "the staged changes are being written; wait for the server"
@@ -995,7 +975,7 @@ func (model *Model) buildChanges(
 ) ([]db.Change, error) {
 	active := tab.Results.Active()
 	if active == nil || active.State.Kind != app.QuerySucceeded {
-		return nil, core.NewEditError("there is no result to write against")
+		return nil, core.NewEditError("no successful query result to edit")
 	}
 	// The rows below come from the result on screen, and the target names the relation
 	// the staged work was staged against. They have to be the same one.

@@ -13,17 +13,15 @@ type SelectSource struct {
 	Name      string
 }
 
-// multiSourceKeywords name what a statement that reads more than one relation
-// carries, which means it cannot identify a row.
+// multiSourceKeywords is the set of clauses excluded from editable single-table queries.
 var multiSourceKeywords = []string{
 	"join", "union", "intersect", "except", "group by", "having", "distinct",
 }
 
-// fromEnders name where the FROM clause of a plain SELECT ends.
+// fromEnders is the set of clauses after FROM in a simple SELECT.
 var fromEnders = []string{"where", "order by", "limit", "offset", "fetch", "window", "for"}
 
-// readTableReference reads one relation out of a clause. A second relation or a
-// subquery is not one table, so it is refused.
+// readTableReference parses one table reference with an optional alias, excluding subqueries and multiple tables.
 func readTableReference(sql string, tokens []syntax.CodeToken, from, to int) (SelectSource, bool) {
 	if from < 0 || to > len(tokens) || from >= to {
 		return SelectSource{}, false
@@ -66,13 +64,12 @@ type TableReference struct {
 	SelectSource
 	Alias    string
 	HasAlias bool
-	// Where the name is in the buffer, so a report can point at it.
+	// The table name byte range in the buffer.
 	Start int
 	End   int
 }
 
-// readReferenceAt reads a relation reference and the token after its name. Only a
-// name token opens a reference, so an unfinished `from where` names no relation.
+// readReferenceAt parses a table reference and returns the next token index.
 func readReferenceAt(sql string, tokens []syntax.CodeToken, index int) (TableReference, int, bool) {
 	opening, present := syntax.TokenAt(tokens, index)
 	if !present || !syntax.IsNameToken(tokens, index) {
@@ -120,9 +117,7 @@ func readReferenceAt(sql string, tokens []syntax.CodeToken, index int) (TableRef
 	return reference, cursor, true
 }
 
-// readCteDefinition reads one CTE definition and returns where the next one starts.
-// Each definition is `name [(columns)] as [not] [materialized] ( … )`, and a comma
-// after the closing bracket starts the next one.
+// readCteDefinition parses name [(columns)] AS [NOT] [MATERIALIZED] (...) and returns the next definition index.
 func readCteDefinition(tokens []syntax.CodeToken, index int) (string, int, bool) {
 	named, present := syntax.TokenAt(tokens, index)
 	if !present || !syntax.IsNameToken(tokens, index) {
@@ -149,8 +144,7 @@ func readCteDefinition(tokens []syntax.CodeToken, index int) (string, int, bool)
 	return name, cursor + 1, true
 }
 
-// FindCteNames returns the names a statement defines itself, in lower case. A CTE
-// exists only inside its statement, so the catalog is not asked.
+// FindCteNames returns lowercase CTE names from the statement.
 func FindCteNames(sql string, flavour syntax.SyntaxFlavour) map[string]bool {
 	tokens := syntax.ReadCodeTokens(sql, flavour)
 	names := map[string]bool{}
@@ -172,12 +166,10 @@ func FindCteNames(sql string, flavour syntax.SyntaxFlavour) map[string]bool {
 	return names
 }
 
-// relationKeywords name where a relation follows. A write names its relation
-// without a FROM clause, so those words count too.
+// relationKeywords is the set of clauses followed by table references.
 var relationKeywords = []string{"from", "join", "update", "insert into"}
 
-// FindTableReferences returns each relation under its alias, so `o` in
-// `from orders o` leads back to orders.
+// FindTableReferences returns table references with their aliases.
 func FindTableReferences(sql string, flavour syntax.SyntaxFlavour) []TableReference {
 	tokens := syntax.ReadCodeTokens(sql, flavour)
 	references := []TableReference{}
@@ -200,9 +192,7 @@ func FindTableReferences(sql string, flavour syntax.SyntaxFlavour) []TableRefere
 	return references
 }
 
-// FindSingleSelectTable returns the one relation a statement comes from, or nothing
-// when it joins, groups, unions or reads a subquery. An edit needs one relation and
-// a projection that did not group the rows.
+// FindSingleSelectTable parses a simple SELECT source, excluding joins, grouping, set operations, and subquery sources.
 func FindSingleSelectTable(sql string, flavour syntax.SyntaxFlavour) (SelectSource, bool) {
 	statement := strings.TrimRight(strings.TrimSpace(sql), "; \t\r\n")
 	tokens := syntax.ReadCodeTokens(statement, flavour)

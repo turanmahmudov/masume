@@ -237,8 +237,8 @@ func TestFindLocalDiagnosticsReportsWhatTheClientCanSee(t *testing.T) {
 	}{
 		{`db.orders.find({})`, ""},
 		{`orders.find({})`, "starts with db"},
-		{`db.orders.somethingNew({})`, "not a call this client knows"},
-		{`db.orders.find({a: 1)`, "never closes"},
+		{`db.orders.somethingNew({})`, "unsupported call"},
+		{`db.orders.find({a: 1)`, "missing closing parenthesis"},
 	} {
 		found := Support.Language.FindLocalDiagnostics(held.written, editor.NothingKnown())
 		if held.wanted == "" {

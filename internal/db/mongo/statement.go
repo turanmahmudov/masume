@@ -5,30 +5,27 @@ import (
 	"strings"
 )
 
-// A statement is one call chain of the shell: the database, the collection, and the calls
-// made on them. Nothing here reaches the server.
+// A statement is a shell call chain with a database, collection, and method calls.
 
 // databaseWord is the word every statement starts with.
 const databaseWord = "db"
 
-// siblingCall names the database a statement reads, where it is not the one of the
-// connection.
+// siblingCall is the method for selecting another database.
 const siblingCall = "getSiblingDB"
 
-// collectionCall names a collection whose name is no bare word.
+// collectionCall is the method for selecting a collection by a quoted name.
 const collectionCall = "getCollection"
 
 // MethodCall is one call of a statement: its name and the text of each argument.
 type MethodCall struct {
 	Name string
 	Args []string
-	// Start and End are where the name of the call stands in the statement.
+	// Start and End are the method name offsets.
 	Start int
 	End   int
 }
 
-// ReadArgument returns the text of one argument, and an empty text where the call has
-// fewer arguments than that.
+// ReadArgument returns an argument, or an empty string for an invalid index.
 func (call MethodCall) ReadArgument(index int) string {
 	if index < 0 || index >= len(call.Args) {
 		return ""
@@ -38,7 +35,7 @@ func (call MethodCall) ReadArgument(index int) string {
 
 // Statement is one command of a buffer, read into the parts a session runs.
 type Statement struct {
-	// Empty where the statement reads the database of the connection.
+	// Empty for the connection database.
 	Database string
 	// Empty for a call on the database itself, such as runCommand.
 	Collection string
@@ -46,7 +43,7 @@ type Statement struct {
 	Text       string
 }
 
-// ReadMethod returns the name of the first call, which is what the statement does.
+// ReadMethod returns the first method name.
 func (parsed Statement) ReadMethod() string {
 	if len(parsed.Calls) == 0 {
 		return ""
@@ -64,7 +61,7 @@ func (parsed Statement) FindCall(name string) (MethodCall, bool) {
 	return MethodCall{}, false
 }
 
-// SyntaxFault is a fault this client found in a statement, and where it stands.
+// SyntaxFault is a local syntax error and its offsets.
 type SyntaxFault struct {
 	Message string
 	Start   int
@@ -118,7 +115,7 @@ func (read *parser) parse() (Statement, SyntaxFault, bool) {
 		}
 		if read.text[read.at] != '.' {
 			return parsed, SyntaxFault{
-				Message: "a call follows a dot", Start: read.at, End: read.at + 1,
+				Message: "expected a dot before the call", Start: read.at, End: read.at + 1,
 			}, false
 		}
 		read.at++
@@ -128,7 +125,7 @@ func (read *parser) parse() (Statement, SyntaxFault, bool) {
 		name := read.readName()
 		if name == "" {
 			return parsed, SyntaxFault{
-				Message: "a dot is followed by a name", Start: nameStart,
+				Message: "expected a name after the dot", Start: nameStart,
 				End: read.markEnd(nameStart),
 			}, false
 		}
@@ -155,19 +152,19 @@ func (read *parser) parse() (Statement, SyntaxFault, bool) {
 
 	if len(parsed.Calls) == 0 {
 		return parsed, SyntaxFault{
-			Message: "this statement calls nothing", Start: 0, End: len(read.text),
+			Message: "the statement has no method call", Start: 0, End: len(read.text),
 		}, false
 	}
 	return parsed, SyntaxFault{}, true
 }
 
-// takeName takes a name that carries no brackets, which is the collection.
+// takeName reads a collection name without parentheses.
 func (read *parser) takeName(
 	parsed *Statement, name string, start int,
 ) (SyntaxFault, bool) {
 	if parsed.Collection != "" || len(parsed.Calls) > 0 {
 		return SyntaxFault{
-			Message: name + " is read as a call and carries no brackets",
+			Message: "missing parentheses after " + name,
 			Start:   start, End: start + len(name),
 		}, false
 	}
@@ -175,15 +172,14 @@ func (read *parser) takeName(
 	return SyntaxFault{}, true
 }
 
-// takeCall takes one call: the database it names, the collection it names, or the work
-// the statement does.
+// takeCall reads a database selector, collection selector, or method call.
 func (read *parser) takeCall(parsed *Statement, call MethodCall) (SyntaxFault, bool) {
 	first := parsed.Collection == "" && len(parsed.Calls) == 0
 	if first && (call.Name == siblingCall || call.Name == collectionCall) {
 		name, err := ReadText(call.ReadArgument(0))
 		if err != nil || name == "" {
 			return SyntaxFault{
-				Message: call.Name + " names one database or collection as text",
+				Message: call.Name + " requires a non-empty database or collection name in quotes",
 				Start:   call.Start, End: call.End,
 			}, false
 		}
@@ -207,7 +203,7 @@ func ReadText(written string) (string, error) {
 	}
 	text, isText := value.(string)
 	if !isText {
-		return "", newSyntaxError("this argument is not a name in quotes")
+		return "", newSyntaxError("this argument must be a name in quotes")
 	}
 	return text, nil
 }
@@ -294,7 +290,7 @@ func readCallArguments(text string, open int) ([]string, int, *SyntaxFault) {
 		index++
 	}
 	return nil, 0, &SyntaxFault{
-		Message: "this call never closes", Start: open, End: len(text),
+		Message: "missing closing parenthesis", Start: open, End: len(text),
 	}
 }
 

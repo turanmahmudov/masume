@@ -7,10 +7,7 @@ import (
 	"strings"
 )
 
-// The arguments of a tool, defined one time and used two ways: as the JSON Schema given to
-// a caller, and as the validation of the input. An unknown field gives an error and is not
-// ignored, because an ignored field takes its default and the model reads that default as
-// the value it sent.
+// Tool fields define the JSON Schema and input validation. Unknown fields are invalid.
 
 // The kinds of value a tool accepts.
 const (
@@ -32,8 +29,7 @@ type field struct {
 // schemaDialect is the JSON Schema dialect reported to every caller.
 const schemaDialect = "http://json-schema.org/draft-07/schema#"
 
-// largestWholeNumber is the highest integer a JSON number holds without a loss of
-// precision. It is the maximum of every count a tool accepts.
+// largestWholeNumber is the largest exact integer in a float64 and the schema maximum for counts.
 const largestWholeNumber = 1<<53 - 1
 
 // buildSchema converts the arguments into the JSON Schema a caller reads.
@@ -68,9 +64,7 @@ func BuildEmptySchema() map[string]any {
 	return buildSchema(nil)
 }
 
-// ExtendSchema returns the schema with one more required text field. The server uses it to
-// add the profile of a call. The schema of a definition is built one time, so this function
-// copies it and does not modify it.
+// ExtendSchema copies the schema and adds a required text field.
 func ExtendSchema(schema map[string]any, name, description string) map[string]any {
 	extended := addTextField(schema, name, description)
 	required, _ := schema["required"].([]string)
@@ -78,8 +72,7 @@ func ExtendSchema(schema map[string]any, name, description string) map[string]an
 	return extended
 }
 
-// ExtendSchemaOptionally returns the schema with one more text field the caller may leave
-// out.
+// ExtendSchemaOptionally copies the schema and adds an optional text field.
 func ExtendSchemaOptionally(schema map[string]any, name, description string) map[string]any {
 	return addTextField(schema, name, description)
 }
@@ -96,7 +89,7 @@ func addTextField(schema map[string]any, name, description string) map[string]an
 	return extended
 }
 
-// castProperties returns the properties of a schema, and false if it has none.
+// castProperties returns the schema properties, or nil if unavailable.
 func castProperties(schema map[string]any) map[string]any {
 	properties, is := schema["properties"].(map[string]any)
 	if !is {
@@ -105,8 +98,7 @@ func castProperties(schema map[string]any) map[string]any {
 	return properties
 }
 
-// readInput validates the input against the arguments. It returns the values, or the reason
-// the input is invalid.
+// readInput validates tool arguments and returns the values or an error message.
 func readInput(fields []field, input map[string]any) (map[string]any, string) {
 	known := map[string]field{}
 	for _, held := range fields {
@@ -116,7 +108,7 @@ func readInput(fields []field, input map[string]any) (map[string]any, string) {
 	problems := []string{}
 	for name := range input {
 		if _, allowed := known[name]; !allowed {
-			problems = append(problems, name+": this tool takes no such field")
+			problems = append(problems, name+": unknown field")
 		}
 	}
 	slices.Sort(problems)
@@ -126,7 +118,7 @@ func readInput(fields []field, input map[string]any) (map[string]any, string) {
 		value, given := input[held.name]
 		if !given || value == nil {
 			if held.required {
-				problems = append(problems, held.name+": this field is needed")
+				problems = append(problems, held.name+": required field")
 			}
 			continue
 		}
@@ -139,7 +131,7 @@ func readInput(fields []field, input map[string]any) (map[string]any, string) {
 	}
 
 	if len(problems) > 0 {
-		return nil, "this call cannot be read: " + strings.Join(problems, "; ")
+		return nil, "invalid tool arguments: " + strings.Join(problems, "; ")
 	}
 	return read, ""
 }
@@ -150,13 +142,13 @@ func readValue(held field, value any) (any, string) {
 	case kindString:
 		written, is := value.(string)
 		if !is {
-			return nil, "a text is wanted"
+			return nil, "expected a string"
 		}
 		return written, ""
 	case kindBoolean:
 		answered, is := value.(bool)
 		if !is {
-			return nil, "true or false is wanted"
+			return nil, "expected true or false"
 		}
 		return answered, ""
 	case kindInteger:
@@ -165,20 +157,19 @@ func readValue(held field, value any) (any, string) {
 			return nil, problem
 		}
 		if held.positive && counted <= 0 {
-			return nil, "a number above zero is wanted"
+			return nil, "expected a number above zero"
 		}
 		return counted, ""
 	}
-	return nil, "this field cannot be read"
+	return nil, "unsupported field type"
 }
 
-// readWholeNumber returns a number as an integer. JSON sends every number as a float, so a
-// value with a fraction gives an error and is not truncated.
+// readWholeNumber accepts integers, including JSON numbers decoded as float64, and rejects fractions.
 func readWholeNumber(value any) (int, string) {
 	switch held := value.(type) {
 	case float64:
 		if held != math.Trunc(held) {
-			return 0, "a whole number is wanted"
+			return 0, "expected an integer"
 		}
 		return int(held), ""
 	case int:
@@ -186,7 +177,7 @@ func readWholeNumber(value any) (int, string) {
 	case int64:
 		return int(held), ""
 	}
-	return 0, "a whole number is wanted"
+	return 0, "expected an integer"
 }
 
 // readText returns a text argument of the input, and whether the input has one.

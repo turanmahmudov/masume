@@ -177,12 +177,8 @@ func TestSaveProfileToFileWritesAProfileThatReadsBack(t *testing.T) {
 		}
 	}
 
-	// The writer writes the keys the connection form edits. A setting the form does not
-	// show, such as the page size, is not written for a new profile and uses its default.
-	// A setting that is already in the file is kept, which
-	// TestSaveProfileToFileKeepsTheSettingsTheFormNeverShows tests.
-	if held.PageSize != cfg.DefaultPageSize {
-		t.Errorf("the page size read back as %d, wanted the default", held.PageSize)
+	if held.PageSize != source.PageSize {
+		t.Errorf("the page size read back as %d, wanted %d", held.PageSize, source.PageSize)
 	}
 }
 

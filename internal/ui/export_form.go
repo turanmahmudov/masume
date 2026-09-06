@@ -8,8 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/result"
 )
 
-// The form the export dialog draws: one row per setting, each typed into or stepped
-// through. The CSV settings only stand where CSV is the format.
+// The export form contains file options. CSV options appear only for CSV exports.
 
 // The two sets of rows an export writes.
 const (
@@ -86,10 +85,10 @@ func readExportPath(overlay app.Overlay) string {
 // FindExportProblem returns why the export cannot be written, and nothing where it can.
 func FindExportProblem(overlay app.Overlay) string {
 	if strings.TrimSpace(readExportPath(overlay)) == "" {
-		return "the file cannot be empty"
+		return "enter a file path"
 	}
 	if overlay.Export.Format == result.ExportCSV && len([]rune(overlay.Export.CSV.Delimiter)) != 1 {
-		return "the delimiter has to be one character"
+		return "the delimiter must be one character"
 	}
 	return ""
 }

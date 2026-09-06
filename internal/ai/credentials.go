@@ -2,8 +2,7 @@ package ai
 
 import "github.com/turanmahmudov/masume/internal/cfg"
 
-// This is separate from the client, because a screen asks these questions before the first
-// request.
+// Provider credential lookup and diagnostics.
 
 // FindAPIKey returns the key of this provider, and whether the config has one.
 func FindAPIKey(settings cfg.AiProviderSettings) (string, bool) {
@@ -22,9 +21,9 @@ func DescribeMissingKey(config cfg.AiConfig, id cfg.AiProviderID) string {
 	settings := config.Providers[id]
 	table := "[ai.providers." + string(id) + "]"
 	if settings.APIKeyEnv != "" {
-		return "no API key: " + settings.APIKeyEnv + " is empty. Set it, or set api_key " +
+		return "no API key: " + settings.APIKeyEnv + " is empty or unset. Set the variable, or set api_key " +
 			"under " + table + " in the config file."
 	}
 	return "no API key: set api_key under " + table + " in the config file, or set " +
-		"api_key_env to the name of the environment variable that holds the key."
+		"api_key_env to the environment variable containing the key."
 }

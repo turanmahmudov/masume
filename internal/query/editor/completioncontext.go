@@ -16,10 +16,10 @@ const (
 	PositionNone     NamePosition = "none"
 )
 
-// endsSetList names the words that end the assignment list of an UPDATE.
+// endsSetList is the set of keywords that end an UPDATE assignment list.
 var endsSetList = map[string]bool{"from": true, "where": true, "returning": true}
 
-// setListPlace says where a statement stands in an UPDATE, one token at a time.
+// setListPlace is the parser position within an UPDATE assignment list.
 type setListPlace string
 
 const (
@@ -29,8 +29,7 @@ const (
 	placeInValue  setListPlace = "in-value"
 )
 
-// readNextPlace returns the place after this token. Only a token outside every
-// bracket is read.
+// readNextPlace advances the assignment state for a top-level token.
 func readNextPlace(
 	place setListPlace, tokens []syntax.CodeToken, index int, token syntax.CodeToken,
 ) setListPlace {
@@ -61,8 +60,7 @@ func readNextPlace(
 	return place
 }
 
-// IsUpdateSetTarget is true where the server refuses a qualified name, so
-// `set a.name = …` is rejected.
+// IsUpdateSetTarget detects an UPDATE assignment target position.
 func IsUpdateSetTarget(sql string, offset int) bool {
 	depth := 0
 	place := placeOutside
@@ -90,27 +88,25 @@ func IsUpdateSetTarget(sql string, offset int) bool {
 	return place == placeOnTarget
 }
 
-// columnOpeners name the words a column can follow.
+// columnOpeners is the set of keywords followed by column suggestions.
 var columnOpeners = map[string]bool{
 	"select": true, "where": true, "and": true, "or": true, "on": true, "having": true,
 	"by": true, "distinct": true, "case": true, "when": true, "then": true, "else": true,
 	"returning": true, "using": true, "not": true, "set": true,
 }
 
-// relationOpeners name the words a relation can follow.
+// relationOpeners is the set of keywords followed by table suggestions.
 var relationOpeners = map[string]bool{
 	"from": true, "join": true, "into": true, "update": true, "table": true,
 }
 
-// columnMarks name the operators a column can follow. A star is left out, because
-// after `select *` the statement needs a FROM clause.
+// columnMarks is the set of operators followed by column suggestions. The wildcard * is excluded.
 var columnMarks = map[string]bool{
 	",": true, "(": true, "=": true, "<": true, ">": true, "<=": true, ">=": true,
 	"<>": true, "!=": true, "+": true, "-": true, "/": true, "||": true,
 }
 
-// ResolveNamePosition returns what the statement expects at the caret. The raw
-// tokens are read, because the caret can be in a comment or an unfinished string.
+// ResolveNamePosition determines the suggestion category from tokens before the caret.
 func ResolveNamePosition(sql string, offset int) NamePosition {
 	if offset > len(sql) {
 		offset = len(sql)
@@ -122,8 +118,7 @@ func ResolveNamePosition(sql string, offset int) NamePosition {
 	}
 	last := tokens[len(tokens)-1]
 
-	// A token that reaches the caret is being typed now: a word, or the content of a
-	// string or a comment.
+	// Exclude positions inside a word, string, or comment.
 	if last.End >= offset && last.Kind != syntax.TokenOperator {
 		return PositionNone
 	}

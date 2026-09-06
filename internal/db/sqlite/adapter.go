@@ -25,8 +25,7 @@ const mainSchema = "main"
 // memoryDatabase is the SQLite database that is never written to a file.
 const memoryDatabase = ":memory:"
 
-// sqliteBusyTimeout is how long a statement waits for another process to release the
-// file.
+// sqliteBusyTimeout is the file lock wait limit.
 const sqliteBusyTimeout = 5 * time.Second
 
 // generatedMarks name a generated column, which SQLite hides from a write.
@@ -40,13 +39,11 @@ type sqliteSession struct {
 
 	file        *sql.DB
 	transaction db.TransactionMark
-	// mainQueue holds the file for one caller at a time. The pool opens one connection,
-	// so a statement of another goroutine would otherwise take that connection between
-	// the `begin` of a staged set and its `commit`, and run inside that transaction.
+	// mainQueue reserves the single connection for each operation, including a complete staged transaction.
 	mainQueue *db.CallQueue
 }
 
-// holdFile waits for its turn on the file and returns what gives the turn back.
+// holdFile reserves the file connection and returns a release callback.
 func (session *sqliteSession) holdFile(ctx context.Context) (func(), error) {
 	giveBack, err := session.mainQueue.Take(ctx)
 	if err != nil {
@@ -118,9 +115,7 @@ func (session *sqliteSession) read(
 	return rawRead{rows: read, columns: readColumns(names, types, first)}, nil
 }
 
-// markTransactionFromStatement records what the statement left the transaction as. A
-// `begin` or a `commit` written into the editor never reaches BeginTransaction, and
-// without this the mark and the file would drift apart.
+// markTransactionFromStatement updates transaction state after statements from the editor.
 func (session *sqliteSession) markTransactionFromStatement(sql string) {
 	session.transaction.ApplyStatementEffect(
 		statement.ResolveTransactionEffect(sql, session.Support.Dialect.Syntax))
@@ -136,8 +131,7 @@ func (session *sqliteSession) countChanges(ctx context.Context) int64 {
 	return db.ReadNonNegativeCount(read.rows[0][0])
 }
 
-// RunQuery runs the buffer statement by statement. The driver prepares only the first
-// one, so the buffer is split and run in order, and the last statement gives the result.
+// RunQuery splits the buffer and executes statements in order. The driver prepares one statement; the final statement provides the result.
 func (session *sqliteSession) RunQuery(
 	ctx context.Context, sql string, rowLimit int, params []any,
 ) (db.QueryResult, error) {
@@ -159,8 +153,7 @@ func (session *sqliteSession) RunQuery(
 		if at == len(statements)-1 {
 			cap = db.ReadOverscanRowLimit(rowLimit)
 		}
-		// Every statement of a batch takes the same values, because the client binds a
-		// value only for a statement it wrote itself.
+		// All statements receive the same bound values.
 		one, err := session.read(ctx, statement, params, cap)
 		if err != nil {
 			return db.QueryResult{}, db.WrapDatabaseError(err)
@@ -284,7 +277,7 @@ func (session *sqliteSession) ExplainQuery(
 ) (db.QueryPlan, error) {
 	if analyze && !session.Support.Capabilities.MeasuresPlan {
 		return db.QueryPlan{}, db.NewDatabaseError(
-			"sqlite measures no plan, so only the estimated plan can be read")
+			"SQLite does not support measured query plans; request an estimated plan")
 	}
 	if err := db.RefuseSeveralPlans(statement, session.Support.Dialect.Syntax); err != nil {
 		return db.QueryPlan{}, err
@@ -333,8 +326,7 @@ func (session *sqliteSession) CommitTransaction(ctx context.Context) error {
 	return nil
 }
 
-// RollbackTransaction ends the transaction. The server can roll back by itself, so
-// there may be nothing left to do.
+// RollbackTransaction ends the transaction and accepts an earlier automatic rollback.
 func (session *sqliteSession) RollbackTransaction(ctx context.Context) error {
 	giveBack, waitErr := session.holdFile(ctx)
 	if waitErr != nil {
@@ -387,10 +379,7 @@ func (session *sqliteSession) ApplyChanges(ctx context.Context, changes []db.Cha
 	})
 }
 
-// Ping asks whether the file still answers. The pool holds one connection, so a ping
-// while a statement runs would wait for that statement and then look like a dead
-// server. A file that is still answering a call of its own is left alone: it is
-// answering, so the file is there.
+// Ping checks an idle file connection. Busy connections skip the check.
 func (session *sqliteSession) Ping(ctx context.Context) error {
 	giveBack, free := session.mainQueue.TryTake()
 	if !free {
@@ -418,11 +407,11 @@ func (adapter *sqliteAdapter) Connect(
 	path := core.ExpandHomePath(profile.Database)
 	inMemory := path == memoryDatabase
 	if !inMemory {
-		// The driver creates a missing file, so a wrong path would open an empty database.
+		// The driver creates missing files. Existing paths are required here.
 		if _, err := os.Stat(path); err != nil {
 			reason := err
 			if errors.Is(err, fs.ErrNotExist) {
-				reason = errors.New("there is no database file at this path")
+				reason = errors.New("the database file is missing at this path")
 			}
 			return nil, db.WrapDatabaseMessage(db.BuildConnectMessage(profile, reason), err)
 		}
@@ -435,8 +424,7 @@ func (adapter *sqliteAdapter) Connect(
 	if readOnly && !inMemory {
 		settings = append(settings, "mode=ro")
 	} else {
-		// SQLite checks foreign keys only if the connection asks for it, so a write that
-		// breaks one is refused rather than kept.
+		// SQLite requires explicit foreign key enforcement for each connection.
 		settings = append(settings, "_pragma=foreign_keys(1)")
 	}
 
@@ -444,7 +432,7 @@ func (adapter *sqliteAdapter) Connect(
 	if err != nil {
 		return nil, db.WrapDatabaseMessage(db.BuildConnectMessage(profile, err), err)
 	}
-	// One connection, so a transaction and the pragmas of this session stay on it.
+	// One connection retains the transaction and session pragmas.
 	file.SetMaxOpenConns(1)
 
 	if pingErr := file.PingContext(ctx); pingErr != nil {
@@ -472,5 +460,5 @@ func (adapter *sqliteAdapter) Connect(
 	}, nil
 }
 
-// The compiler reports a part of the port this session has not answered for.
+// Compile-time Session interface check.
 var _ db.Session = (*sqliteSession)(nil)

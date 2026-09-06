@@ -1,59 +1,71 @@
 # Architecture
 
-masume is one binary with three front ends. `cmd/masume` reads the arguments and decides which one to start, and it builds the profile of a connection given on the command line. `internal/ui` is the terminal user interface. `internal/mcp` is the MCP server for AI agents. `internal/headless` is `masume run`, which draws nothing and answers with an exit code.
+masume is one binary with three front ends. `cmd/masume` parses arguments, builds connection targets, and starts the selected front end.
 
-No front end owns a connection. Each one accesses a server through `internal/db`, and the two that keep a history write to the same one through `internal/hist`. This is why a statement run by an agent appears in the history under `Ctrl+T`.
+`internal/ui` is the terminal interface. `internal/mcp` is the MCP server. `internal/headless` runs statements without a screen and returns an exit code.
 
-## The packages
+Front ends create and retain sessions through `internal/db`. Drivers hold the database connections. The terminal interface and MCP record query history through `internal/hist`; headless runs do not.
 
-| Package | Contains |
+## Packages
+
+| Package | Contents |
 | --- | --- |
-| `internal/core` | Shared basics: the text form of a value, the engine list, JSON that keeps field order |
-| `internal/cfg` | The config file: profiles, interface settings, key presets, themes, the pre-connect command. Also the URL, connection string and file path read from the command line |
-| `internal/db` | The connection interface: what one open connection provides |
-| `internal/db/<engine>` | One driver per protocol, and one variant per hosted service |
-| `internal/db/engines` | The one place that maps an engine to its driver and its capabilities |
-| `internal/query` | The dialect: how a name is quoted, how a placeholder is written |
-| `internal/query/syntax` | The lexer: tokens, keywords, top-level keyword search |
-| `internal/query/statement` | Statement analysis: splitting, kind, write risk, references, paging, sorting |
-| `internal/query/editor` | Autocompletion, and the errors that can be detected without a server |
-| `internal/query/build` | Statements the client generates: edits, filters, the object menu templates |
-| `internal/query/result` | The plan parser, and the export and copy formats |
-| `internal/query/language` | Parsing a buffer that is not SQL |
-| `internal/present` | Layout at a given width, value formatting, and the ER diagram |
-| `internal/app` | The application state: screens, tabs, connections, chats |
-| `internal/ui` | Rendering: the theme, the keys, the screens and the panes |
-| `internal/agent` | The ten tools shared by the chat and the MCP server |
-| `internal/ai` | One provider client each, for Anthropic and OpenAI |
-| `internal/mcp` | The JSON-RPC server, `list_profiles`, and the access policy |
-| `internal/load` | Reading a data file into an import: sampling, kinds, mapping, the dry run, the statements |
-| `internal/writeplan` | What a write does before it runs: the rows it lands on, what it cascades into, and the statements that undo it |
-| `internal/detect` | The databases running in a container on this machine, read from docker or podman |
-| `internal/headless` | `masume run`: one statement, one format, one exit code, no screen |
-| `internal/hist` | The SQLite file: history, saved queries, marks, open tabs |
+| `internal/core` | Shared values, engine properties, and JSON with field order |
+| `internal/cfg` | Profiles, settings, keys, themes, project configuration, connection targets, and pre-connect commands |
+| `internal/secret` | System keyring access and availability checks |
+| `internal/db` | Session interfaces, connection wrappers, call queues, and shared database types |
+| `internal/db/<engine>` | Protocol drivers and engine-specific behavior |
+| `internal/db/engines` | Engine support registry and adapter creation |
+| `internal/db/dbtest` | Shared integration fixtures and server connections from environment variables |
+| `internal/query` | SQL dialects, identifiers, placeholders, and result types |
+| `internal/query/syntax` | SQL tokens, keywords, and top-level searches |
+| `internal/query/statement` | Statement splitting, classification, write risk, references, paging, and sorting |
+| `internal/query/editor` | Completion and local diagnostics |
+| `internal/query/build` | Generated SQL for edits, filters, and object actions |
+| `internal/query/result` | Plans, exports, and copy formats |
+| `internal/query/language` | Shared language interface and SQL implementation |
+| `internal/present` | Layout, value formatting, safe text, and ER diagrams |
+| `internal/app` | Application state, tabs, connections, and chats |
+| `internal/ui` | Rendering, themes, keys, screens, and event handling |
+| `internal/agent` | Tools shared by chat and MCP |
+| `internal/ai` | Anthropic and OpenAI clients |
+| `internal/mcp` | JSON-RPC server, profile listing, sessions, and access policy |
+| `internal/load` | Import sampling, type detection, mapping, dry runs, and generated statements |
+| `internal/writeplan` | Write previews, affected rows, cascades, and undo statements |
+| `internal/detect` | Database discovery through Docker or Podman |
+| `internal/headless` | Statement batches, output formats, row caps, and exit codes |
+| `internal/hist` | SQLite storage for history, saved queries, tabs, favorites, recent schemas, chats, and catalog cache |
 
-Nothing under `internal/query` or `internal/present` opens a network connection. These packages take text and return text. This is why most of the tests need no server.
+The language interface covers SQL and MongoDB syntax. The MongoDB implementation is in `internal/db/mongo`.
 
-## One call at a time
+`internal/query` and `internal/present` do not open network connections. These packages process text and typed data, including tokens, diagnostics, plans, columns, rows, and layout structures. Export writers can write to supplied streams.
 
-A driver that uses one socket refuses a second call while the first call is still running. `pgx` returns `conn busy`, and `go-sql-driver` drops the connection.
+## Sessions
 
-The screens read on their own goroutines. A refresh of the tree can request the columns of every open relation at the same time. To handle this, each connection has a queue in `internal/db/callqueue.go`, and a second call waits until the first one finishes.
+`internal/db/engines` selects an adapter for each profile. PostgreSQL-family engines share the PostgreSQL adapter; MySQL-family engines share the MySQL adapter. Engine variants provide their catalog behavior, capabilities, and plan handling.
 
-The user connection and the catalog connection have separate queues. A read of the tree never waits for a query from the editor.
+The adapter layer wraps sessions with reconnect handling, statement timeouts, and read-only checks. Front ends add their own execution behavior. Headless batches do not use interface write confirmations, write previews, undo capture, or automatic transactions.
+
+## Call queues
+
+`internal/db/callqueue.go` permits one call at a time through each queue. Calls wait for the queue or stop when their context ends.
+
+PostgreSQL and MySQL use separate main and catalog connections with separate queues. Catalog reads can run while an editor query holds the main connection. Server locks and resources can still delay either connection.
+
+SQLite has one connection and a shared queue for user and catalog work. Catalog reads can wait for editor queries. MongoDB uses the driver's client and separate transaction synchronization.
 
 ## Rendering
 
-There is no layout pass. The frame is written directly, and the optimization effort goes into avoiding repeated work. The escape codes for a colour pair are built once and cached. A line is measured by its plain runs, so only the runs with non-ASCII text go to the width library. The rows of a result are rendered once and cached until the result, the page or the masking changes.
+The renderer writes frames directly. It caches color escape codes and rendered result rows. Result, page, and masking changes invalidate the relevant row cache.
 
-No control sequences reach the frame. `present.SafeText` replaces a control character with a space, and an invalid byte with a replacement character. Every measure, cut, pad and wrap operation works on that text, so what is measured is what is drawn.
+`present.SafeText` replaces control characters with spaces and invalid bytes with replacement characters. Text measurement, cutting, padding, and wrapping use the safe text helpers. The renderer adds its own terminal escape sequences.
 
-`internal/ui/frame_safety_test.go` enforces this. It renders a result with hostile values through every view and card. Each row must be exactly the screen width and must contain no control sequences.
+`internal/ui/frame_safety_test.go` renders hostile values through views and cards. The tests check row widths and control characters in rendered content.
 
 ## Tests
 
-Spec tests sit next to the code in `*_spec_test.go` files and use the `_test` package. They use only the exported API of a package.
+Spec tests use `*_spec_test.go` files and external `_test` packages. These tests exercise exported APIs. Other tests can use the package itself.
 
-Tests that need a real server are behind the `integration` build tag and read connection URLs from the environment. `compose.yaml` starts those servers. No Go code knows that a container is involved.
+Server tests use the `integration` build tag and connection URLs from environment variables. `compose.yaml` provides the local test servers. `internal/db/dbtest` provides shared test setup.
 
-See [../CONTRIBUTING.md](../CONTRIBUTING.md) for how to run them.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for the quality gate and integration matrix.

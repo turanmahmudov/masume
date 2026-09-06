@@ -1,8 +1,4 @@
-// Command masume is a database client for the terminal. It opens PostgreSQL, MySQL, SQLite
-// and MongoDB, and the servers that speak their protocols.
-//
-// This is the only entry point, and the only place that chooses between the two clients: the
-// screen for a user, or the protocol for an agent. Neither one starts before it is chosen.
+// Command masume is a terminal database client for PostgreSQL, MySQL, SQLite, MongoDB, and protocol-compatible servers.
 package main
 
 import (
@@ -21,40 +17,39 @@ import (
 	"github.com/turanmahmudov/masume/internal/ui"
 )
 
-// version is what this client reports to the client of an agent, and what `--version`
-// returns. A release build stamps it with `-ldflags "-X main.version=…"`; a build from the
-// tree reads the revision the toolchain records instead.
+// version is the release version, set with -ldflags "-X main.version=...". Development builds use the recorded revision.
 var version = "dev"
 
-// usage is what `--help` writes. It names every argument this command reads.
+// usage is the --help text.
 const usage = `masume - a database client for the terminal
 
 usage:
-  masume                     open the client
-  masume run STATEMENT       run one statement, write the result, and exit
-  masume URL                 open that connection, for example postgres://you@host/shop
-  masume FILE                open that SQLite file, for example ./notes.db
-  masume DSN                 open that connection string, for example "host=db dbname=shop"
-  masume --profile NAME      open that profile of the config file
-  masume --detect            list the databases running in a container on this machine
-  masume --mcp               serve the profiles to an agent over JSON-RPC on stdio
-  masume --mcp --profile=NAME  serve that one profile alone
-  masume --mcp --check       open every profile once, report, and exit
-  masume --version           write the version and exit
-  masume --help              write this and exit
+  masume                        open the client
+  masume run [TARGET] STATEMENT  run statements, write results, and exit
+  masume URL                    open a supported URL, for example postgres://you@host/shop
+  masume FILE                   open an existing SQLite file, for example ./notes.db
+  masume DSN                    open a keyword connection string, for example "host=db dbname=shop"
+  masume --profile NAME         open a user or project profile
+  masume --detect               list detected container databases
+  masume --mcp                  serve allowed profiles over JSON-RPC on stdio
+  masume --mcp --profile=NAME   serve one allowed profile
+  masume --mcp --check          check enabled MCP profiles and exit
+  masume --version              print the version and exit
+  masume --help                 print this help and exit
 
-Run masume run --help for the arguments of a run without a screen.
+Run masume run --help for headless options.
 
-A connection given on the command line is not written to the config file. Press
-Ctrl+N and then e to save it. With no target, $DATABASE_URL is opened if it is set.
+A command-line connection remains temporary until saved.
+Press Ctrl+N, then e, then Ctrl+S to save the selected profile.
+Without an explicit target or profile, masume can open $DATABASE_URL.
 
-The config file is read from $XDG_CONFIG_HOME/masume/config.toml, and the history
-from $XDG_STATE_HOME/masume/history.sqlite. A .masume.toml found from the working
-directory upward adds the connections and the queries of a project.`
+The config file is $XDG_CONFIG_HOME/masume/config.toml.
+The history file is $XDG_STATE_HOME/masume/history.sqlite.
+The nearest .masume.toml in or above the working directory supplies project profiles and queries.`
 
 func main() {
 	argv := os.Args[1:]
-	// A subcommand reads its own arguments, so it is taken before the flags of the client.
+	// Parse subcommand arguments before client flags.
 	if len(argv) > 0 && argv[0] == "run" {
 		os.Exit(runHeadless(argv[1:]))
 	}
@@ -78,14 +73,13 @@ func main() {
 	}
 	fmt.Fprintln(os.Stderr, "masume: "+err.Error())
 	if _, isArgument := errors.AsType[argumentError](err); isArgument {
-		fmt.Fprintln(os.Stderr, "run masume --help to see the arguments it reads")
+		fmt.Fprintln(os.Stderr, "run masume --help for usage")
 		os.Exit(2)
 	}
 	os.Exit(1)
 }
 
-// resolveVersion returns what this build calls itself. A build that was stamped keeps its
-// stamp; any other reads the revision of the tree it was built from.
+// resolveVersion returns the release version or the recorded revision.
 func resolveVersion() string {
 	if version != "dev" {
 		return version
@@ -118,13 +112,10 @@ func resolveVersion() string {
 func runApp(held invocation) error {
 	configPath := cfg.ResolveConfigPath()
 
-	// Written to stderr and kept for the app to show. Only the app reaches the user, because
-	// the renderer takes the alternate screen a moment later.
+	// Keep startup problems for display after the renderer enters the alternate screen.
 	problems := []string{}
 
-	// A first run has no config file. Writing the starter gives the user something to edit
-	// and the connection form something to write into. A client that cannot write it still
-	// opens every connection it was given.
+	// A config creation failure does not stop startup.
 	if _, err := cfg.EnsureConfigFile(configPath); err != nil {
 		problems = append(problems, "config: "+err.Error())
 	}
@@ -149,8 +140,7 @@ func runApp(held invocation) error {
 		problems = append(problems, "theme: "+problem)
 	}
 
-	// The history file is opened whatever it returns: a client that cannot write its history
-	// still opens every connection.
+	// A history failure does not stop startup.
 	historyStore, historyErr := hist.Open(hist.DefaultPath())
 	if historyErr != nil {
 		problems = append(problems, "history: "+historyErr.Error())

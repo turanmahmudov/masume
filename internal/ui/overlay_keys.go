@@ -499,7 +499,7 @@ func (model *Model) runOverlayAction(
 				return true, model, nil
 			}
 			overlay.Draft.SetText(written)
-			overlay.Notice = "prettified"
+			overlay.Notice = "JSON formatted"
 			return true, model, nil
 		case ActionSetNull:
 			held, command := model.stageCellValue(
@@ -526,7 +526,7 @@ func (model *Model) runOverlayAction(
 				return true, model, nil
 			}
 			overlay.Draft.SetText(written)
-			overlay.Notice = "prettified"
+			overlay.Notice = "JSON formatted"
 			return true, model, nil
 		}
 
@@ -693,7 +693,7 @@ func (model *Model) chooseOverlayRow(
 		}
 		statement := overlay.Sessions[overlay.List.Cursor].Query
 		if strings.TrimSpace(statement) == "" {
-			connection.Show("that session runs no statement")
+			connection.Show("no statement is available for this session")
 			return model, nil
 		}
 		connection.Overlay = app.Overlay{}
@@ -761,7 +761,7 @@ func (model *Model) readStopBackendAnswer(answered stoppedBackendMsg) (tea.Model
 		return model, nil
 	}
 	named := strconv.FormatInt(answered.PID, 10)
-	done := "the statement of session " + named
+	done := "the statement in session " + named
 	if answered.Ended {
 		done = "session " + named
 	}
@@ -771,7 +771,7 @@ func (model *Model) readStopBackendAnswer(answered stoppedBackendMsg) (tea.Model
 	case answered.Stopped:
 		connection.Show(done + " was stopped")
 	default:
-		connection.Show("the server no longer holds session " + named)
+		connection.Show("session " + named + " is no longer on the server")
 	}
 	return model, nil
 }
@@ -782,7 +782,7 @@ func (model *Model) keepTheme(
 ) (tea.Model, tea.Cmd) {
 	problems, applied := model.styles.ApplyThemeByName(name)
 	if !applied {
-		connection.ShowError("there is no theme called " + name)
+		connection.ShowError("unknown theme: " + name)
 		return model, nil
 	}
 	model.problems = append(model.problems, problems...)
@@ -806,8 +806,8 @@ func (model *Model) askStopBackend(
 
 	named := strconv.FormatInt(pid, 10)
 	title, question, said := " stop the statement ",
-		"Stop the statement of session "+named+"?",
-		"asked the server to stop the statement of session "+named
+		"Stop the statement in session "+named+"?",
+		"asked the server to stop the statement in session "+named
 	if ends {
 		title, question, said = " end the session ",
 			"End session "+named+"? Its statement stops and its connection closes.",
@@ -894,7 +894,7 @@ func (model *Model) answerPrompt(
 
 	case app.PromptReplace:
 		if tab.Find.Term == "" {
-			connection.Show("type what to find first")
+			connection.Show("enter search text first")
 			return model, nil
 		}
 		tab.Find.Replacement = written
@@ -1122,7 +1122,7 @@ func (model *Model) readDiagramAnswer(answered diagramMsg) (tea.Model, tea.Cmd) 
 	}
 	lines := answered.Lines
 	if len(lines) == 0 {
-		lines = []string{"nothing joins to this relation"}
+		lines = []string{"no foreign-key relationships to show"}
 	}
 	connection.Overlay = app.Overlay{
 		Kind: app.OverlayDiagram, Title: " diagram · " + answered.Title + " ", Lines: lines,

@@ -13,8 +13,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// What the panel of the chat does: the keys that open it, the keys it returns to, and what one
-// event of a run changes.
+// Chat actions and event handlers.
 
 // openAiChat opens the panel, with the question already in the field.
 func (model *Model) openAiChat(
@@ -64,7 +63,7 @@ func (model *Model) runAiAction(
 				"The query in the editor failed. Explain why, and propose a fix.")
 		}
 		return model.askAi(connection, tab,
-			"The query in the editor does not check out. Explain what is wrong, and fix it.")
+			"Check the query in the editor. Explain any problems and suggest a fix.")
 	case ActionAiCheckPlan:
 		return model.askAiToCheckPlan(connection, tab)
 	}
@@ -78,9 +77,9 @@ func (model *Model) askAiToCheckPlan(
 	if tab.ViewData.Kind != app.DataPlan {
 		return model, nil
 	}
-	heading := "Here is the estimated plan for this query, not run for real:"
+	heading := "Estimated query plan, without executing the query:"
 	if tab.ViewData.Plan.Analyzed {
-		heading = "Here is the plan already run for this query, with actual timings:"
+		heading = "Analyzed query plan, with measured execution times:"
 	}
 	return model.askAi(connection, tab, heading+"\n\n"+tab.ViewData.Plan.Raw)
 }
@@ -108,7 +107,7 @@ func (model *Model) runChatAction(
 			return false, model, nil
 		}
 		chat.Stopped()
-		chat.Notice = "stopped; what it had written is kept"
+		chat.Notice = "reply stopped; received text is kept"
 		return true, model, model.keepConversation(connection)
 	case ActionInsertAiSQL:
 		held, command := model.insertAiSQL(connection, tab)
@@ -142,8 +141,7 @@ func (model *Model) runChatAction(
 	return false, model, nil
 }
 
-// submitChatQuestion sends what the field holds. The field returns this key itself, because a
-// press of Enter alone writes a line into the question.
+// submitChatQuestion sends the question from the chat field.
 func (model *Model) submitChatQuestion(
 	connection *app.Connection, tab *app.Tab,
 ) (tea.Model, tea.Cmd) {
@@ -164,7 +162,7 @@ func (model *Model) submitChatQuestion(
 	return held, command
 }
 
-// insertAiSQL puts the statement of the last reply into the editor.
+// insertAiSQL inserts the last reply's query into the editor.
 func (model *Model) insertAiSQL(
 	connection *app.Connection, tab *app.Tab,
 ) (tea.Model, tea.Cmd) {
@@ -257,7 +255,7 @@ func (model *Model) openConversation(
 
 	turns, err := model.log.ListChatTurns(id)
 	if err != nil {
-		chat.Fail("that conversation cannot be read back")
+		chat.Fail("cannot load the saved conversation")
 		return model.openAiChat(connection, "")
 	}
 	chat.OpenConversation(id, turns)
@@ -310,7 +308,7 @@ func (model *Model) keepConversation(connection *app.Connection) tea.Cmd {
 			// A turn that cannot be stored is still part of the conversation on screen.
 			return conversationKeptMsg{
 				ConnectionID: connectionID,
-				Problem:      "the conversation was not stored: " + db.DescribeError(err),
+				Problem:      "cannot save the conversation: " + db.DescribeError(err),
 			}
 		}
 		return conversationKeptMsg{ConnectionID: connectionID, ID: id}

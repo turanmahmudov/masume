@@ -194,7 +194,7 @@ func (session *mongoSession) runDatabaseCall(
 		return BuildValueResult("dropped", database.Name(), 0, call.Name), nil
 	}
 	return db.QueryResult{}, db.NewDatabaseError(
-		"this client does not run %s on a database", call.Name)
+		"unsupported database call: %s", call.Name)
 }
 
 // readCommandReply runs one command and returns its reply as a result.
@@ -258,7 +258,7 @@ func (session *mongoSession) runCollectionCall(
 		return BuildValueResult("dropped", parsed.Collection, 0, call.Name), nil
 	}
 	return db.QueryResult{}, db.NewDatabaseError(
-		"this client does not run %s on a collection", call.Name)
+		"unsupported collection call: %s", call.Name)
 }
 
 // findPlan is a find with everything the chained calls added to it.
@@ -331,7 +331,7 @@ func (plan *findPlan) take(call MethodCall) error {
 	case "pretty", "toArray", "batchSize", "hint", "allowDiskUse", "collation":
 		// These change how a reply is printed or read, and the grid prints it itself.
 	default:
-		return newSyntaxError(call.Name + " is not a call this client chains onto a find")
+		return newSyntaxError("unsupported find modifier: " + call.Name)
 	}
 	return nil
 }
@@ -350,7 +350,7 @@ func readNumber(written string) (int64, error) {
 	case float64:
 		return int64(held), nil
 	}
-	return 0, newSyntaxError("this argument is a whole number")
+	return 0, newSyntaxError("this argument must be a number")
 }
 
 // buildFindOptions returns the options the plan asks the server for, capped at the rows
@@ -804,10 +804,7 @@ func (session *mongoSession) CountRead(
 // rather than drawn.
 const everyRow = -1
 
-// StreamQuery reads a statement again for an export. A find and an aggregation are read a
-// batch at a time, so an export never holds the whole collection. Every other statement
-// returns one result, and that result is written, so the file holds what the grid showed
-// rather than the documents behind it.
+// StreamQuery exports a read result. Find and aggregation calls stream batches; other reads return one result.
 func (session *mongoSession) StreamQuery(
 	ctx context.Context, buffer string, _ []any, batchSize int,
 	onBatch func(rows [][]any, columns []db.ResultColumn) error,
@@ -820,7 +817,7 @@ func (session *mongoSession) StreamQuery(
 	// repeated. A command is counted as a write, because a command can be anything.
 	if resolveStatementRisk(buffer) != statement.RiskNone {
 		return 0, db.NewDatabaseError(
-			"an export runs the statement again, and only a read may be run twice")
+			"only read statements can be exported")
 	}
 	if batchSize < 1 {
 		batchSize = 1
@@ -868,10 +865,7 @@ func (session *mongoSession) StreamQuery(
 // namedFieldLimit is how many left-out fields a message names before it counts the rest.
 const namedFieldLimit = 5
 
-// streamCursor writes the documents of a cursor a batch at a time. A file carries one
-// header, so the columns are the fields of the first batch. A collection keeps no schema,
-// so a later document can hold a field the header has not: those fields are counted and
-// named at the end, because a file that quietly drops them reads as a whole one.
+// streamCursor exports document batches with the first batch columns. The final error lists fields absent from those columns.
 func (session *mongoSession) streamCursor(
 	ctx context.Context, batchSize int,
 	onBatch func(rows [][]any, columns []db.ResultColumn) error,
@@ -949,8 +943,7 @@ func findLeftOutFields(documents []bson.D, written map[string]bool) []string {
 	return found
 }
 
-// buildLeftOutError reports the fields the file does not carry. The file itself was
-// written, and says so, because the rows in it are the rows that were read.
+// buildLeftOutError reports omitted fields after the export callbacks complete.
 func buildLeftOutError(leftOut []string) error {
 	named := leftOut
 	rest := 0
@@ -963,12 +956,11 @@ func buildLeftOutError(leftOut []string) error {
 		written += fmt.Sprintf(", and %d more", rest)
 	}
 	return db.NewDatabaseError(
-		"the file was written, and holds the fields of the first documents only: "+
-			"%s appeared after those and are not in it", written)
+		"exported rows contain only the first batch columns; "+
+			"later fields were omitted: %s", written)
 }
 
-// CheckStatement returns the fault this client finds in a statement. Only the server
-// knows whether a field exists, and it says so by answering no documents.
+// CheckStatement returns local syntax errors without checking server fields.
 func (session *mongoSession) CheckStatement(
 	_ context.Context, written string,
 ) (db.StatementProblem, bool) {
@@ -1007,15 +999,13 @@ func BuildClientOptions(profile cfg.Profile, password string) *options.ClientOpt
 	return held
 }
 
-// authenticationCodes are the codes the server returns where the connection is not
-// allowed to run a command: it authenticated as nobody, or as a user with no rights.
+// authenticationCodes are the server authentication and authorization error codes.
 var authenticationCodes = []int{
 	13, // Unauthorized
 	18, // AuthenticationFailed
 }
 
-// IsAuthenticationError is true where the server refused a command because of who the
-// connection is.
+// IsAuthenticationError is true for authentication or authorization errors.
 func IsAuthenticationError(err error) bool {
 	var reported mongo.ServerError
 	if !errors.As(err, &reported) {
@@ -1024,23 +1014,19 @@ func IsAuthenticationError(err error) bool {
 	return slices.ContainsFunc(authenticationCodes, reported.HasErrorCode)
 }
 
-// BuildAuthenticationMessage writes why a server refused this profile. A profile that
-// names no user is the common reason, and it says nothing on its own.
+// BuildAuthenticationMessage reports a missing profile user or the connection error.
 func BuildAuthenticationMessage(profile cfg.Profile, err error) string {
 	if profile.User == "" {
-		return fmt.Sprintf("cannot connect to %s: the server needs a user and this "+
-			"profile names none", cfg.DescribeProfileTarget(profile))
+		return fmt.Sprintf("cannot connect to %s: authentication requires a user; the "+
+			"profile user is missing", cfg.DescribeProfileTarget(profile))
 	}
 	return db.BuildConnectMessage(profile, err)
 }
 
-// lastServerError finds the reason a server was not reached. The driver reports that it
-// chose no server and writes the whole topology after it, with the reason of each server
-// buried inside. What the user needs is the reason.
+// lastServerError matches a server error within the driver topology report.
 var lastServerError = regexp.MustCompile(`Last error: ([^}]+?)\s*}`)
 
-// DescribeConnectFailure writes why a connection could not be opened, with the reason of
-// the server rather than the topology around it.
+// DescribeConnectFailure returns the connection error without the driver topology report.
 func DescribeConnectFailure(profile cfg.Profile, err error) string {
 	found := lastServerError.FindStringSubmatch(err.Error())
 	if found == nil {

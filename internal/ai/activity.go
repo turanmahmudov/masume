@@ -6,11 +6,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// A readable description of one tool call: the table it reads, or the statement it runs, and
-// not the name of the tool.
+// Tool activity labels with table names or statements.
 
-// maxShownSQL is long enough to identify a statement and short enough for one line of the
-// panel, next to the step and the run time.
+// maxShownSQL is the statement character limit for activity labels.
 const maxShownSQL = 48
 
 // activityStep holds the text of a step without a subject and the text with a subject.
@@ -29,8 +27,8 @@ var tableSteps = map[string]activityStep{
 		func(table string) string { return "reading the constraints of " + table }},
 	"get_table_ddl": {"reading a definition",
 		func(table string) string { return "reading the definition of " + table }},
-	"list_relationships": {"reading how tables join",
-		func(table string) string { return "reading what joins to " + table }},
+	"list_relationships": {"reading foreign keys",
+		func(table string) string { return "reading foreign keys for " + table }},
 }
 
 // sqlSteps holds the calls that contain a statement.

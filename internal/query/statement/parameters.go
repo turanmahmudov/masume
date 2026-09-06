@@ -18,9 +18,7 @@ type parameterMark struct {
 	end   int
 }
 
-// readParameterMarks returns every `:name`, in order. A `::` is a cast, and the name
-// must follow the colon directly. A colon that closes a key, as in the mongo shell
-// object `{a:true}`, is not a mark.
+// readParameterMarks finds :name parameters, excluding :: casts and adjacent object keys such as {a:true}.
 func readParameterMarks(sql string) []parameterMark {
 	tokens := []syntax.Token{}
 	for _, token := range syntax.Tokenize(sql, syntax.FlavourStandard) {
@@ -51,8 +49,7 @@ func readParameterMarks(sql string) []parameterMark {
 	return marks
 }
 
-// FindQueryParameters returns the parameters of the statement, each one once, in the
-// order written.
+// FindQueryParameters returns unique parameters in statement order.
 func FindQueryParameters(sql string) []string {
 	seen := map[string]bool{}
 	names := []string{}
@@ -67,8 +64,7 @@ func FindQueryParameters(sql string) []string {
 	return names
 }
 
-// closesObjectKey is true where the colon follows a key directly. No SQL statement writes
-// a mark against a name, a string or a number.
+// closesObjectKey detects a colon directly after a word, string, quoted identifier, or number.
 func closesObjectKey(previous syntax.Token, colon syntax.Token) bool {
 	if previous.End != colon.Start {
 		return false
@@ -79,7 +75,7 @@ func closesObjectKey(previous syntax.Token, colon syntax.Token) bool {
 		previous.Kind == syntax.TokenNumber
 }
 
-// ErrParameter marks a fault in the values a statement binds.
+// ErrParameter is the sentinel for parameter errors.
 var ErrParameter = errors.New("parameter")
 
 func newParameterError(format string, parts ...any) error {
@@ -107,8 +103,7 @@ func rewriteParameterMarks(
 	return written.String(), nil
 }
 
-// BindQueryParameters binds every mark. A name written twice is bound twice with the
-// same value, which both servers accept.
+// BindQueryParameters binds each parameter occurrence separately, including repeated names.
 func BindQueryParameters(
 	sql string, values map[string]any, dialect *query.Dialect, firstParamIndex int,
 ) (EffectiveStatement, error) {
@@ -120,8 +115,7 @@ func BindQueryParameters(
 	return EffectiveStatement{SQL: written, Params: bound.Params}, nil
 }
 
-// InlineQueryParameters writes the values into the statement, for the display and for
-// the planner, never for an ordinary run.
+// InlineQueryParameters substitutes literals for display and plan requests.
 func InlineQueryParameters(
 	sql string, values map[string]any, dialect *query.Dialect,
 ) (string, error) {
@@ -130,8 +124,7 @@ func InlineQueryParameters(
 	})
 }
 
-// ResolveParameterValues keys the values in lower case. A name still in the statement
-// keeps its value, and a name that is gone is dropped.
+// ResolveParameterValues keeps current values for requested names, indexed by lowercase names.
 func ResolveParameterValues(names []string, current map[string]any) map[string]any {
 	next := map[string]any{}
 	for _, name := range names {
@@ -145,9 +138,7 @@ func ResolveParameterValues(names []string, current map[string]any) map[string]a
 	return next
 }
 
-// BuildParameterForm writes the form the user fills in: the values as indented JSON.
-// The names keep the order the statement writes them in, so the form reads in the
-// order the user typed.
+// BuildParameterForm builds indented JSON in parameter order.
 func BuildParameterForm(names []string, values map[string]any) string {
 	lines := make([]string, 0, len(names))
 	for _, name := range names {
@@ -168,9 +159,7 @@ func BuildParameterForm(names []string, values map[string]any) string {
 	return "{\n" + strings.Join(lines, ",\n") + "\n}"
 }
 
-// FindFirstFormValue returns where the caret stands when the form opens: inside the value of
-// the first parameter, which is where the first character typed belongs. It returns 0 for a
-// form whose first value is not a written one.
+// FindFirstFormValue returns the first string value offset, or zero when the first value is not a string.
 func FindFirstFormValue(written string) int {
 	at := strings.Index(written, ": ")
 	if at < 0 || at+2 >= len(written) || written[at+2] != '"' {
@@ -179,9 +168,7 @@ func FindFirstFormValue(written string) int {
 	return at + 3
 }
 
-// ReadRowForm reads the form of a whole new row back. The names are the columns of the row,
-// so they keep the case they were written in. A value keeps its JSON type: a number stays a
-// number, and `null` stays a null.
+// ReadRowForm parses a JSON object, preserving column name case and JSON value types.
 func ReadRowForm(text string) (map[string]any, error) {
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(text), &parsed); err != nil || parsed == nil {
@@ -190,12 +177,11 @@ func ReadRowForm(text string) (map[string]any, error) {
 	return parsed, nil
 }
 
-// ReadParameterForm reads the form back. A value keeps its JSON type: a number stays
-// a number, and `null` stays a null.
+// ReadParameterForm parses a JSON object with lowercase parameter names and preserved JSON value types.
 func ReadParameterForm(text string) (map[string]any, error) {
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(text), &parsed); err != nil || parsed == nil {
-		return nil, newParameterError("the values must be a JSON object")
+		return nil, newParameterError("parameter values must be a JSON object")
 	}
 	values := map[string]any{}
 	for name, value := range parsed {

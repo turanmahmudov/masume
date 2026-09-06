@@ -17,13 +17,12 @@ import (
 // Every call an agent can make: the profiles, and the tools of one connection.
 
 // profileField is the argument the server adds to every tool of a connection.
-const profileField = "The name of the connection to work on, as list_profiles reports it."
+const profileField = "The connection profile from list_profiles."
 
 // runQueryToolName is the tool the plan token belongs to.
 const runQueryToolName = "run_query"
 
-// planTokenField is the argument the server adds to run_query, for a client that cannot
-// show a question of its own.
+// planTokenField is the run_query token description for clients without confirmation dialogs.
 const planTokenField = "The `token` of a plan_write answer for this exact statement. " +
 	"Send it only after the user read the plan and agreed to run the statement."
 
@@ -38,17 +37,15 @@ type Tool struct {
 // ToolDeps holds the resources the tools of the server use.
 type ToolDeps struct {
 	AccessDeps
-	// Asker asks the user through the client of the agent before an expensive write.
+	// Asker requests confirmation through the MCP client when required.
 	Asker *Asker
-	// Plans holds the tokens of the writes an agent measured, for a client that cannot be
-	// asked and leaves the agent to ask the user itself.
+	// Plans is the token store for agent-confirmed writes.
 	Plans *PlanTokens
 	// RecordQuery writes the statement into the history the screens read.
 	RecordQuery func(entry hist.HistoryEntry)
 }
 
-// BuildTools returns every call an agent can make: the profiles, and the tools of one
-// connection.
+// BuildTools returns profile discovery and database tools.
 func BuildTools(deps ToolDeps) []Tool {
 	tools := []Tool{buildListProfilesTool(deps)}
 	for _, definition := range agent.Definitions() {
@@ -60,9 +57,8 @@ func BuildTools(deps ToolDeps) []Tool {
 func buildListProfilesTool(deps ToolDeps) Tool {
 	return Tool{
 		Name: "list_profiles",
-		Description: "List the database connections this client opens to an agent: the name " +
-			"to pass as `profile`, the engine, the server it reaches, and what may be run on " +
-			"it. Call this first, before any other tool.",
+		Description: "List connections available through MCP: the `profile` name, engine, " +
+			"server, and access level. Call this before any other tool.",
 		InputSchema: agent.BuildEmptySchema(),
 		Call: func(_ context.Context, _ map[string]any) (any, error) {
 			open := ListOpenProfiles(deps.AccessDeps)
@@ -114,9 +110,7 @@ func buildConnectionTool(deps ToolDeps, definition agent.ToolDefinition) Tool {
 	return Tool{
 		Name: definition.Name, Description: definition.Description, InputSchema: schema,
 		Call: func(ctx context.Context, input map[string]any) (any, error) {
-			// `profile` and `plan_token` are arguments of the server and not of the
-			// tool, and the schema of the tool rejects an unknown field. So they are
-			// read and removed.
+			// Remove server arguments before tool validation.
 			asked := map[string]any{}
 			for name, value := range input {
 				if name != "profile" && name != "plan_token" {
@@ -128,15 +122,13 @@ func buildConnectionTool(deps ToolDeps, definition agent.ToolDefinition) Tool {
 			if err != nil {
 				return nil, err
 			}
-			// From here the call reaches a server, and the next call can start in
-			// parallel.
+			// Allow concurrent calls during database operations.
 			releaseReader(ctx)
 			connection, err := OpenNamedConnection(ctx, deps.AccessDeps, profile)
 			if err != nil {
 				return nil, err
 			}
-			// Only this tool for this connection. The whole catalogue would build
-			// eight tools that nobody calls.
+			// Bind only the requested tool.
 			return definition.Call(ctx, agent.ToolDeps{
 				Session: connection.Session,
 				Tables:  connection.Tables,
@@ -146,14 +138,12 @@ func buildConnectionTool(deps ToolDeps, definition agent.ToolDefinition) Tool {
 	}
 }
 
-// buildRunner returns the runner of a statement for an agent: with a plan of what a write
-// does, a confirmation, a time limit, and a history entry.
+// buildRunner configures write planning, confirmation, timeouts, and history.
 func buildRunner(
 	deps ToolDeps, profile cfg.Profile, connection *Connection, token string,
 ) agent.StatementRunner {
 	session := connection.Session
-	// The undo of the write the user allowed, carried from the question to the run that
-	// reads it inside the transaction of the write.
+	// Keep the approved undo plan until execution.
 	held := &plannedWrite{}
 	runner := agent.StatementRunner{
 		RowLimit: deps.Config.RowLimit,
@@ -201,19 +191,14 @@ func buildRunner(
 	return runner
 }
 
-// askAgentToRun decides whether a statement can run: first the access level of the
-// connection, then the plan of what the write does, and then the `confirm_writes` setting of
-// the profile, with the same question the screens use. The client of the agent shows the
-// question if it can. If it cannot, the statement does not run.
-// plannedWrite carries the undo of one write from the question to the run.
+// plannedWrite is the approved undo plan and statement write classification.
 type plannedWrite struct {
 	undo writeplan.UndoPlan
-	// writes is false for a read, which has nothing to undo.
+	// writes is false for statements classified as read-only.
 	writes bool
 }
 
-// runRead runs a statement that changes nothing. It answers with no undo, because there is
-// nothing to take back.
+// runRead runs a statement classified as read-only without undo capture.
 func runRead(
 	ctx context.Context, session db.Session, deps ToolDeps, sql string, rowLimit int,
 ) (agent.StatementAnswer, error) {
@@ -227,8 +212,7 @@ func runRead(
 	return agent.StatementAnswer{Result: result}, nil
 }
 
-// runWriteWithUndo runs the statement, and reads its undo inside the same transaction where
-// the plan of the write keeps one.
+// runWriteWithUndo runs a statement with transactional undo capture when available.
 func runWriteWithUndo(
 	ctx context.Context, session db.Session, plan writeplan.UndoPlan,
 	run func(context.Context) (db.QueryResult, error),
@@ -257,8 +241,7 @@ func askAgentToRun(
 		return allowed, plan.Undo
 	}
 
-	// A client that can be asked is always asked. A token is what an agent brings back
-	// where there is no other way to reach the user, and never a way around the question.
+	// Tokens apply only when the client cannot show a required confirmation dialog.
 	if !deps.Asker.CanAsk() {
 		if takesPlanToken(deps, profile, token, statements) {
 			return allowed, plan.Undo
@@ -277,7 +260,7 @@ func askAgentToRun(
 		return allowed, plan.Undo
 	}
 	return agent.RunPermission{
-		Refusal: "you were asked to confirm this statement, and did not; nothing ran",
+		Refusal: "confirmation was not received; the statement did not run",
 	}, writeplan.UndoPlan{}
 }
 
@@ -295,20 +278,18 @@ func takesPlanToken(
 	return true
 }
 
-// describeUnaskableRefusal says why a write did not run on a client that cannot show a
-// question, and what to do about it.
+// describeUnaskableRefusal describes a required confirmation that the client cannot request.
 func describeUnaskableRefusal(profile cfg.Profile, risk statement.WriteRisk) string {
-	opening := fmt.Sprintf("%q confirms a statement that %s, and this client cannot ask you",
+	opening := fmt.Sprintf("%q requires confirmation for a statement that %s; this client cannot show a confirmation dialog",
 		profile.Name, statement.DescribeRisk(risk, 1))
 	if profile.ConfirmWrites == cfg.ConfirmAgent {
-		return opening + "; call plan_write for this statement, show the plan to the user, " +
-			"and send the token it answers with as `plan_token`"
+		return opening + "; call plan_write, show the plan to the user, and obtain their approval. " +
+			"Then send the returned token as `plan_token`"
 	}
-	return opening + `; set confirm_writes = "off" on the profile to run it unasked`
+	return opening + `; confirm_writes = "off" on the profile permits execution without confirmation`
 }
 
-// measureForAgent measures one write for the plan_write tool, and issues the token that
-// runs it where the client of the agent cannot be asked.
+// measureForAgent measures a write and issues a token when agent confirmation is enabled without client dialogs.
 func measureForAgent(
 	ctx context.Context, deps ToolDeps, profile cfg.Profile,
 	connection *Connection, sql string,
@@ -321,8 +302,7 @@ func measureForAgent(
 	}
 
 	written := describeMeasuredPlan(plan)
-	// A token is issued only where the client cannot be asked and the profile lets an
-	// agent carry the answer. A client that shows a dialog gets the dialog.
+	// Issue tokens only for agent confirmation without client dialogs.
 	if profile.ConfirmWrites == cfg.ConfirmAgent && !deps.Asker.CanAsk() {
 		written.Token = deps.Plans.Issue(profile.Name, statements[0])
 	}
@@ -349,8 +329,7 @@ func describeMeasuredPlan(plan writeplan.Plan) agent.MeasuredWrite {
 	return written
 }
 
-// buildAgentWritePlan measures the write the agent asked to run, so the person who answers
-// the question reads what it lands on and the agent is handed the undo.
+// buildAgentWritePlan measures one write for confirmation and undo capture.
 func buildAgentWritePlan(
 	ctx context.Context, profile cfg.Profile, connection *Connection,
 	risk statement.WriteRisk, statements []string,

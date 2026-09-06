@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
@@ -34,6 +35,147 @@ func saveProfile(t *testing.T, body string, profile cfg.Profile) string {
 		t.Fatalf("the config file was not read back: %v", err)
 	}
 	return string(written)
+}
+
+func TestSaveProfileToFilePreservesNewProfileSettings(t *testing.T) {
+	for _, replacing := range []string{"", "old-name"} {
+		for _, disabled := range []bool{false, true} {
+			t.Run(replacing+"/"+map[bool]string{false: "enabled", true: "disabled"}[disabled], func(t *testing.T) {
+				profile, err := cfg.BuildProfileFromTarget("postgres://reader@localhost/shop")
+				if err != nil {
+					t.Fatal(err)
+				}
+				profile.McpAccess = cfg.McpOff
+				profile.WritePlan = cfg.PlanUndo
+				profile.UndoRows = 42
+				profile.StatementTimeout = 1250 * time.Millisecond
+				profile.Autocommit = false
+				profile.PageSize = 71
+				profile.Keepalive = 17 * time.Second
+				profile.Command = "ssh -N -L 15432:localhost:5432 bastion"
+				profile.WaitForPort = 15432
+				profile.CommandTimeout = 23 * time.Second
+				if disabled {
+					profile.Environment = cfg.EnvironmentProd
+					profile.WritePlan = cfg.PlanOff
+					profile.UndoRows = 0
+					profile.Keepalive = 0
+					profile.StatementTimeout = 0
+					profile.Autocommit = true
+				}
+				path := writeConfig(t, "# user settings\n[ui]\ntheme = \"dark\"\n")
+				if err := cfg.SaveProfileToFile(profile, replacing, path); err != nil {
+					t.Fatal(err)
+				}
+				loaded := cfg.LoadConfig(path)
+				if len(loaded.Problems) != 0 {
+					t.Fatalf("reload problems: %v", loaded.Problems)
+				}
+				profile.InConfigFile = true
+				if reloaded := findProfile(t, loaded, profile.Name); reloaded != profile {
+					t.Errorf("reloaded profile: %+v\nwant: %+v", reloaded, profile)
+				}
+			})
+		}
+	}
+}
+
+func TestSaveProfileToFilePreservesProjectGuards(t *testing.T) {
+	projectPath := writeProjectFile(t, t.TempDir(), `
+[profile.shop]
+engine = "postgres"
+host = "localhost"
+database = "shop"
+user = "reader"
+env = "prod"
+mode = "read-only"
+confirm_writes = "agent"
+mcp = "off"
+write_plan = "count"
+undo_rows = 37
+statement_timeout_ms = 1500
+autocommit = false
+page_size = 53
+keepalive_s = 0
+`)
+	project := cfg.LoadProjectConfig(projectPath)
+	if len(project.Problems) != 0 {
+		t.Fatalf("project problems: %v", project.Problems)
+	}
+	profile := findProjectProfile(t, project, "shop")
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := cfg.SaveProfileToFile(profile, "", path); err != nil {
+		t.Fatal(err)
+	}
+	loaded := cfg.LoadConfig(path)
+	if len(loaded.Problems) != 0 {
+		t.Fatalf("reload problems: %v", loaded.Problems)
+	}
+	profile.ProjectFile = ""
+	profile.InConfigFile = true
+	if reloaded := findProfile(t, loaded, "shop"); reloaded != profile {
+		t.Errorf("reloaded profile: %+v\nwant: %+v", reloaded, profile)
+	}
+}
+
+func TestSaveProfileToFilePreservesExistingSettingsAndComments(t *testing.T) {
+	for _, operation := range []string{"edit", "rename", "replace"} {
+		t.Run(operation, func(t *testing.T) {
+			body := `
+[profile.shop]
+engine = "postgres"
+host = "localhost"
+database = "shop"
+user = "reader"
+mcp = "off" # no MCP access
+write_plan = "undo" # read the previous rows
+undo_rows = 0 # internal capture ceiling
+statement_timeout_ms = 1250 # statement limit
+autocommit = false # manual commit
+page_size = 71 # rows per page
+keepalive_s = 0 # no keepalive
+command = "start-tunnel" # preconnect
+wait_for_port = 15432 # tunnel port
+command_timeout = 23 # tunnel limit
+`
+			path := writeConfig(t, body)
+			profile := buildStoredProfile()
+			replacing := ""
+			if operation == "rename" {
+				replacing = "shop"
+				profile.Name = "renamed"
+			}
+			if operation == "replace" {
+				body += "\n[profile.old]\nengine = \"sqlite\"\ndatabase = \"old.db\"\n"
+				path = writeConfig(t, body)
+				replacing = "old"
+			}
+			if err := cfg.SaveProfileToFile(profile, replacing, path); err != nil {
+				t.Fatal(err)
+			}
+			written, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, line := range strings.Split(body, "\n") {
+				if strings.Contains(line, " # ") && !strings.Contains(string(written), line) {
+					t.Errorf("missing original line: %s", line)
+				}
+			}
+			loaded := cfg.LoadConfig(path)
+			if len(loaded.Problems) != 0 || len(loaded.Profiles) != 1 {
+				t.Fatalf("reload: %+v", loaded)
+			}
+			reloaded := findProfile(t, loaded, profile.Name)
+			if reloaded.McpAccess != cfg.McpOff || reloaded.WritePlan != cfg.PlanUndo ||
+				reloaded.UndoRows != 0 || reloaded.StatementTimeout != 1250*time.Millisecond ||
+				reloaded.Autocommit || reloaded.PageSize != 71 || reloaded.Keepalive != 0 ||
+				reloaded.Command != "start-tunnel" || reloaded.WaitForPort != 15432 ||
+				reloaded.CommandTimeout != 23*time.Second {
+				t.Errorf("changed settings: %+v", reloaded)
+			}
+		})
+	}
 }
 
 // A password the user cleared must be deleted from the file. A line left behind keeps the

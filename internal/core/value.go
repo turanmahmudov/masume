@@ -1,6 +1,4 @@
-// Package core holds the types every tier above it uses: the text form of a value, the
-// sort and filter of a tab, the staged changes of the grid, and the paths this client
-// writes to.
+// Package core provides shared values, sorting, filters, staged changes, engine metadata, and file paths.
 package core
 
 import (
@@ -19,13 +17,7 @@ import (
 // editor.
 const NullText = "NULL"
 
-// DocumentValue is a value that contains fields or elements instead of one reading: an
-// embedded document, or an array. It holds the text of the whole value and the number of
-// entries, so a cell can show the size without parsing the text again.
-//
-// The text keeps the type of every value. A plain number does not show whether the server
-// stores it in four bytes or eight, and a plain timestamp is not different from a string
-// of the same form, so the document tree would show the wrong type.
+// DocumentValue is a document or array with serialized text and an entry count. The text preserves server value types.
 type DocumentValue struct {
 	Text string
 	// Count is the number of fields in a document, or the number of elements in an array.
@@ -33,9 +25,7 @@ type DocumentValue struct {
 	IsArray bool
 }
 
-// DescribeShape returns a one-line summary of the value for a grid cell. The grid shows
-// the summary and not the text, because a document truncated to the column width shows
-// only the name of its first field.
+// DescribeShape returns the document field count or array element count for a grid cell.
 func (value DocumentValue) DescribeShape() string {
 	if value.IsArray {
 		if value.Count == 1 {
@@ -49,8 +39,7 @@ func (value DocumentValue) DescribeShape() string {
 	return "{ " + strconv.Itoa(value.Count) + " fields }"
 }
 
-// FormatCell converts a server value into text. A statement, an export and the grid all
-// use it, so the text is the same everywhere.
+// FormatCell converts server values to display text for statements, exports, and the grid.
 func FormatCell(value any, dataType string) string {
 	switch held := value.(type) {
 	case nil:
@@ -65,7 +54,7 @@ func FormatCell(value any, dataType string) string {
 		if dataType == "date" {
 			return held.UTC().Format("2006-01-02")
 		}
-		// Always three decimal places, so a column of timestamps is aligned.
+		// Timestamps use three decimal places.
 		return held.UTC().Format("2006-01-02 15:04:05.000")
 	case bool:
 		return strconv.FormatBool(held)
@@ -76,8 +65,7 @@ func FormatCell(value any, dataType string) string {
 	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 		return fmt.Sprintf("%d", held)
 	case json.RawMessage:
-		// A JSON value from the server keeps the order of its fields, so it is written
-		// from its own text and not from a map.
+		// JSON fields retain server order.
 		if value, isJSON := ReadJSON(string(held)); isJSON {
 			return value.Write()
 		}
@@ -93,8 +81,7 @@ func FormatCell(value any, dataType string) string {
 	return string(written)
 }
 
-// documentTypes are the column types that hold a document and not one value: JSON on a
-// SQL server, and the embedded document and array of MongoDB.
+// documentTypes is the set of JSON, document, and array column types.
 var documentTypes = map[string]bool{
 	"json": true, "jsonb": true, "object": true, "array": true,
 }
@@ -104,8 +91,7 @@ func IsDocumentType(dataType string) bool {
 	return documentTypes[dataType]
 }
 
-// IsListValue is true where the driver returned a list of values, such as a Postgres
-// array. Bytes are no list: they are written as their own text.
+// IsListValue is true for arrays and slices, excluding byte slices.
 func IsListValue(value any) bool {
 	switch value.(type) {
 	case nil, string, []byte:
@@ -115,9 +101,7 @@ func IsListValue(value any) bool {
 	return kind == reflect.Slice || kind == reflect.Array
 }
 
-// IsStructuredValue is true if the driver returned the value as a structure: a JSON
-// value, a list, or a record. The full-height viewer indents such a value, whatever the
-// column type is.
+// IsStructuredValue is true for values that the viewer displays as structured data.
 func IsStructuredValue(value any) bool {
 	switch value.(type) {
 	case nil, string, []byte, time.Time, bool, float32, float64,
@@ -163,9 +147,7 @@ func CollapseWhitespace(text string) string {
 	return built.String()
 }
 
-// needsCollapse is true if the text has two blanks together, a blank at the start or the
-// end, or a blank that is not a space. A document can be kilobytes of text with nothing to
-// collapse, and this test returns that text unchanged.
+// needsCollapse detects repeated, leading, trailing, or non-space whitespace.
 func needsCollapse(text string) bool {
 	previousBlank := false
 	for at := 0; at < len(text); at++ {
@@ -178,9 +160,7 @@ func needsCollapse(text string) bool {
 	return false
 }
 
-// isBlankByte is true for a byte that CollapseWhitespace treats as blank. All of them are
-// ASCII, and no byte of a multibyte character is ASCII, so the test reads one byte at a
-// time.
+// isBlankByte is true for ASCII whitespace used by CollapseWhitespace.
 func isBlankByte(held byte) bool {
 	switch held {
 	case ' ', '\t', '\n', '\r', '\v', '\f':
@@ -189,16 +169,12 @@ func isBlankByte(held byte) bool {
 	return false
 }
 
-// FormatClockTime returns a clock time in the time zone of the terminal, because the app
-// read the time.
+// FormatClockTime formats a timestamp in its existing time zone.
 func FormatClockTime(at time.Time) string {
 	return at.Format("2006-01-02 15:04:05.000")
 }
 
-// FormatClock returns how long something has been running, as minutes and seconds, or as
-// hours, minutes and seconds once it passes an hour. Every value under an hour is five
-// characters and every value under a hundred hours is eight, so a column of them holds its
-// width while it refreshes. A time before the start reads as zero.
+// FormatClock returns mm:ss or hh:mm:ss. Negative durations display as zero.
 func FormatClock(elapsed time.Duration) string {
 	seconds := max(int64(elapsed/time.Second), 0)
 	minutes, seconds := seconds/60, seconds%60
@@ -209,9 +185,7 @@ func FormatClock(elapsed time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
 }
 
-// FormatLockMode returns the name of a lock mode as words a reader knows. PostgreSQL names
-// its modes in one word with a Lock suffix, such as AccessExclusiveLock. A name in another
-// shape is answered as it stands, in capitals.
+// FormatLockMode removes the PostgreSQL Lock suffix, separates capitalized words, and returns uppercase text.
 func FormatLockMode(mode string) string {
 	trimmed := strings.TrimSuffix(strings.TrimSpace(mode), "Lock")
 	if trimmed == "" {
@@ -227,9 +201,7 @@ func FormatLockMode(mode string) string {
 	return said.String()
 }
 
-// FormatLargestUnit returns a span of time as its largest unit that is not zero: days, then
-// hours, then minutes, then seconds. A span of less than a second, or one before now, reads
-// as zero seconds.
+// FormatLargestUnit returns whole days, hours, minutes, or seconds. Negative durations display as zero seconds.
 func FormatLargestUnit(elapsed time.Duration) string {
 	seconds := max(int64(elapsed/time.Second), 0)
 	for _, unit := range []struct {
@@ -255,8 +227,7 @@ var byteUnits = []struct {
 	{"TB", 1 << 40}, {"GB", 1 << 30}, {"MB", 1 << 20}, {"kB", 1 << 10},
 }
 
-// FormatByteRate returns how many bytes a second something writes, in the largest size that
-// leaves a whole number in front of the point, with one decimal at most.
+// FormatByteRate returns bytes per second with the largest applicable unit and at most one decimal place.
 func FormatByteRate(perSecond float64) string {
 	if perSecond < 0 {
 		perSecond = 0
@@ -269,8 +240,7 @@ func FormatByteRate(perSecond float64) string {
 	return fmt.Sprintf("%.0fB/s", perSecond)
 }
 
-// FormatRate returns how often something happens in a second: 1.2k for twelve hundred, 940
-// for nine hundred and forty.
+// FormatRate formats a count per second, with a k suffix for thousands.
 func FormatRate(perSecond float64) string {
 	if perSecond < 0 {
 		perSecond = 0
@@ -289,7 +259,7 @@ func FormatShare(share float64) string {
 	return trimTrailingZero(fmt.Sprintf("%.1f", min(max(share, 0), 1)*100)) + "%"
 }
 
-// trimTrailingZero drops a decimal of nothing, so a whole number reads as one.
+// trimTrailingZero removes a trailing .0.
 func trimTrailingZero(written string) string {
 	return strings.TrimSuffix(written, ".0")
 }

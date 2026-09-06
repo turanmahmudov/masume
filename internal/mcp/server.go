@@ -13,8 +13,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// The protocol itself: JSON-RPC 2.0, one message per line, over standard input and standard
-// output. No other code can write to standard output while this runs.
+// JSON-RPC 2.0 uses one message per line on stdin and stdout. stdout is reserved for protocol messages.
 
 const jsonRPCVersion = "2.0"
 
@@ -55,8 +54,7 @@ type errorContent struct {
 	Message string `json:"message"`
 }
 
-// requestMessage is a request the server sends in the other direction. The only one is the
-// question to the client.
+// requestMessage is a server-initiated confirmation request.
 type requestMessage struct {
 	JSONRPC string `json:"jsonrpc"`
 	ID      string `json:"id"`
@@ -110,7 +108,7 @@ type ResponderDeps struct {
 	LogEvent func(message string)
 }
 
-// Responder answers one message at a time. It knows nothing about the transport.
+// Responder handles protocol messages independently of the transport.
 type Responder struct {
 	deps ResponderDeps
 }
@@ -131,9 +129,7 @@ func buildError(id any, code int, message string) any {
 	}
 }
 
-// buildToolResult returns the answer of a tool and whether the call failed.
-// holdsToolError is true for an answer that reports an error of its own, such as a
-// statement the server refused. A client reads the failure from `isError`.
+// holdsToolError is true for tool responses with a nonempty error string.
 func holdsToolError(answered any) bool {
 	named, isObject := answered.(map[string]any)
 	if !isObject {
@@ -149,8 +145,7 @@ func buildToolResult(text string, failed bool) toolResult {
 	}
 }
 
-// castToObject returns the fields of a value that is an object, and no fields for any other
-// value.
+// castToObject returns an object or an empty map for other values.
 func castToObject(value any) map[string]any {
 	named, is := value.(map[string]any)
 	if !is {
@@ -159,8 +154,7 @@ func castToObject(value any) map[string]any {
 	return named
 }
 
-// encodeJSON returns a value as JSON, with an indent if a person reads it. An HTML character
-// is not escaped, because a model reads the statement.
+// encodeJSON encodes JSON with optional indentation and no HTML escaping.
 func encodeJSON(value any, indent string) (string, error) {
 	written := &bytes.Buffer{}
 	encoder := json.NewEncoder(written)
@@ -172,19 +166,17 @@ func encodeJSON(value any, indent string) (string, error) {
 	return strings.TrimRight(written.String(), "\n"), nil
 }
 
-// buildJSONLine returns one message as a line. No message of this server can fail to encode,
-// so an encode error returns the protocol error and not an empty line.
+// buildJSONLine encodes one message, with a protocol error on encoding failure.
 func buildJSONLine(message any) string {
 	line, err := encodeJSON(message, "")
 	if err == nil {
 		return line
 	}
 	return `{"jsonrpc":"2.0","id":null,"error":{"code":-32603,` +
-		`"message":"the answer cannot be written as JSON"}}`
+		`"message":"cannot encode the response as JSON"}}`
 }
 
-// resolveProtocolVersion returns the version the client requested, if this server supports
-// it.
+// resolveProtocolVersion returns a supported requested version or the newest supported version.
 func resolveProtocolVersion(asked any) string {
 	written, is := asked.(string)
 	if is {
@@ -242,8 +234,7 @@ func readIncomingMessage(message any) incoming {
 	}
 }
 
-// AnswerMessage returns the answer to one message, and nothing for a notification or an
-// answer, which need no reply.
+// AnswerMessage handles one message and returns nil when no response is required.
 func (responder *Responder) AnswerMessage(ctx context.Context, message any) any {
 	held := readIncomingMessage(message)
 	switch held.kind {
@@ -263,7 +254,7 @@ func (responder *Responder) answerMethodless(held incoming) any {
 	if !held.wantsAnswer {
 		return nil
 	}
-	return buildError(held.id, invalidRequest, "a message needs a method")
+	return buildError(held.id, invalidRequest, "a request requires a method")
 }
 
 func (responder *Responder) answerSafely(ctx context.Context, held incoming) any {
@@ -314,11 +305,10 @@ func (responder *Responder) startSession(params map[string]any) sessionStart {
 	if !named {
 		client = "a client"
 	}
-	// Whether the client can be asked decides whether a write that needs a confirmation
-	// can run at all, so the log says it once per session.
-	asking := "cannot ask its user, so a write that confirms cannot run"
+	// Record client confirmation support once per session.
+	asking := "confirmation dialogs are unavailable; required confirmations need an allowed plan token"
 	if canAsk {
-		asking = "can ask its user"
+		asking = "confirmation dialogs are available"
 	}
 	responder.deps.LogEvent("> initialize " + client + ": " + asking)
 	return sessionStart{
@@ -360,8 +350,7 @@ func (responder *Responder) callTool(
 			return buildToolResult(written, holdsToolError(answered)), nil
 		}
 	}
-	// A refusal and an error go into the answer and not into a protocol error, so the
-	// agent can read the reason.
+	// Tool failures use an isError response.
 	message := db.DescribeError(err)
 	responder.deps.LogEvent("! tool " + tool.Name + " " + message)
 	return buildToolResult(message, true), nil

@@ -56,8 +56,8 @@ func TestFindAccessRefusal(t *testing.T) {
 		t.Errorf("a full connection refused a statement: %s", refusal)
 	}
 	refusal := FindAccessRefusal(cfg.McpReadOnly, statement.RiskWrite)
-	wanted := "this connection is open to MCP as read-only, and the statement writes to the " +
-		"database; only read-write or above may run it"
+	wanted := "MCP access is read-only; the statement writes to the database " +
+		"and requires read-write access or higher"
 	if refusal != wanted {
 		t.Errorf("the refusal reads %q, wanted %q", refusal, wanted)
 	}
@@ -72,7 +72,7 @@ func TestFindClosedReason(t *testing.T) {
 	profile.McpAccess = cfg.McpOff
 	reason := FindClosedReason(
 		cfg.McpConfig{Profiles: []string{"one"}, Access: cfg.McpFull}, profile)
-	if reason != `"one" sets mcp = "off" on the profile; raise it to read-only or above` {
+	if reason != `"one" has mcp = "off"; MCP access requires read-only or higher` {
 		t.Errorf("the reason reads %q", reason)
 	}
 
@@ -93,11 +93,11 @@ func TestDescribeNoOpenProfiles(t *testing.T) {
 		wanted string
 	}{
 		{cfg.McpConfig{},
-			"no profile is open to MCP; name one under [mcp] profiles in the config file"},
+			"no profiles are enabled for MCP; add a profile under [mcp] profiles in the config file"},
 		{cfg.McpConfig{Profiles: []string{"one"}, Access: cfg.McpOff},
-			`[mcp] access is "off", so no profile is open; raise it to read-only or above`},
+			`[mcp] access is "off"; MCP access requires read-only or higher`},
 		{cfg.McpConfig{Profiles: []string{"one"}, Access: cfg.McpReadOnly},
-			`every profile named under [mcp] profiles sets mcp = "off" of its own`},
+			`no listed MCP profiles are available; check profile names and profile mcp settings`},
 	}
 	for _, held := range cases {
 		if said := DescribeNoOpenProfiles(held.config); said != held.wanted {
@@ -117,11 +117,11 @@ func TestGetNamedProfile(t *testing.T) {
 		t.Errorf("the open profile was refused: %v", err)
 	}
 	if _, err := GetNamedProfile(deps, nil); err == nil ||
-		err.Error() != "name the profile to work on; call list_profiles to see them" {
+		err.Error() != "profile is required; call list_profiles for available profiles" {
 		t.Errorf("a call that names no profile gave %v", err)
 	}
 	if _, err := GetNamedProfile(deps, "three"); err == nil ||
-		err.Error() != `no profile named "three"; call list_profiles to see them` {
+		err.Error() != `no profile named "three"; call list_profiles for available profiles` {
 		t.Errorf("a call that names no known profile gave %v", err)
 	}
 	if _, err := GetNamedProfile(deps, "two"); err == nil {
@@ -134,7 +134,7 @@ func TestGetNamedProfile(t *testing.T) {
 		t.Errorf("the scoped profile was refused: %v", err)
 	}
 	_, err = GetNamedProfile(scoped, "two")
-	wanted := `this server was started for "one" alone, so it cannot reach "two"`
+	wanted := `this server only permits profile "one"; requested "two"`
 	if err == nil || err.Error() != wanted {
 		t.Errorf("the refusal reads %v, wanted %q", err, wanted)
 	}

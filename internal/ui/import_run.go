@@ -12,8 +12,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// The three steps of an import: the file is read, what it would do is checked, and only
-// then are the rows written. Each one runs off the draw loop.
+// Import reads the file, checks the rows, then writes the rows outside the render loop.
 
 // importReadMsg carries what a read of the file found, and the columns of the table the
 // rows go into, or why either could not be read.
@@ -45,13 +44,19 @@ const (
 	intoTableThatIsThere = false
 )
 
+const importTransactionProblem = "commit or roll back the open transaction before importing"
+
 // openImport asks for the file and the mapping rather than writing at once. The table the
 // menu was opened on is the one the rows go into.
 func (model *Model) openImport(
 	connection *app.Connection, table db.TableRef, creating bool,
 ) (tea.Model, tea.Cmd) {
+	if connection.Session.ReadTransactionState() != db.TransactionNone {
+		connection.ShowError(importTransactionProblem)
+		return model, nil
+	}
 	if !connection.Session.Capabilities().WritesDDL {
-		connection.Show("this server cannot import a file")
+		connection.Show("file import is not available for this server")
 		return model, nil
 	}
 
@@ -107,6 +112,10 @@ func (model *Model) stepImport(
 ) (tea.Model, tea.Cmd) {
 	held := &overlay.Import
 	if held.Running {
+		return model, nil
+	}
+	if connection.Session.ReadTransactionState() != db.TransactionNone {
+		overlay.Notice = importTransactionProblem
 		return model, nil
 	}
 	if held.Stage == app.ImportPick {
@@ -216,6 +225,9 @@ func runImport(
 			return importRanMsg{ConnectionID: connectionID, Problem: problem}
 		}
 
+		if session.ReadTransactionState() != db.TransactionNone {
+			return fail(importTransactionProblem)
+		}
 		if err := session.BeginTransaction(ctx); err != nil {
 			return fail(db.DescribeError(err))
 		}
@@ -360,7 +372,7 @@ func (model *Model) readImportRun(answered importRanMsg) (tea.Model, tea.Cmd) {
 	creating := connection.Overlay.Kind == app.OverlayImport &&
 		connection.Overlay.Import.Plan.CreatesTable
 	connection.Overlay = app.Overlay{}
-	connection.Show("wrote " + present.FormatCountOf(int64(answered.Written), "row", "rows"))
+	connection.Show("imported " + present.FormatCountOf(int64(answered.Written), "row", "rows"))
 	if creating {
 		return model, readCatalog(id, connection.Session, quietCatalogRead)
 	}

@@ -8,21 +8,19 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// maxOtherSchemasNamed is the number of other databases the list shows before it is
-// truncated.
+// maxOtherSchemasNamed is the maximum number of other schemas or databases in the summary.
 const maxOtherSchemasNamed = 300
 
-// SchemaContextSource holds the data the schema context is built from.
+// SchemaContextSource is the metadata for the schema summary.
 type SchemaContextSource struct {
 	DialectName string
-	// DefaultSchema is the database of the connection, on a server that has several.
+	// DefaultSchema is the default schema or database, depending on the engine.
 	DefaultSchema string
-	// Tables holds every table this connection can see.
+	// Tables is the loaded table catalog.
 	Tables []db.TableRef
 }
 
-// BuildSchemaContext returns the first part of the prompt: the dialect and the databases. It
-// names no table, because the tools list them.
+// BuildSchemaContext returns the dialect and schema or database names without table names.
 func BuildSchemaContext(source SchemaContextSource) string {
 	held := map[string]bool{}
 	otherSchemas := []string{}
@@ -37,7 +35,7 @@ func BuildSchemaContext(source SchemaContextSource) string {
 
 	lines := []string{
 		"Dialect: " + source.DialectName,
-		"Connected database: " + source.DefaultSchema,
+		"Default schema or database: " + source.DefaultSchema,
 	}
 	if len(otherSchemas) > 0 {
 		named := otherSchemas
@@ -51,7 +49,7 @@ func BuildSchemaContext(source SchemaContextSource) string {
 			written += ", and " + strconv.Itoa(left) + " more"
 		}
 		lines = append(lines, "",
-			"Other databases this connection can also see, named only:", written)
+			"Other schemas or databases in the loaded catalog:", written)
 	}
 	return strings.Join(lines, "\n")
 }

@@ -2,9 +2,7 @@ package query
 
 import "strings"
 
-// The data every tier reads about a result: what a column is, what a statement
-// binds, how a relation points at another, and what a plan holds. The engines build
-// these and the panes draw them, so they sit below both.
+// Shared result columns, bound statements, foreign keys, and query plans.
 
 // ResultColumn is one column of a result.
 type ResultColumn struct {
@@ -26,12 +24,11 @@ type ForeignKey struct {
 	TargetSchema  string
 	TargetTable   string
 	TargetColumns []string
-	// What the server does to this row when the row it points at is removed. It is empty
-	// for a server whose catalog does not say.
+	// The action after a referenced row is deleted, or empty when unknown.
 	DeleteRule DeleteRule
 }
 
-// DeleteRule is what a foreign key does when the row it points at is removed.
+// DeleteRule is the foreign key action after deletion of a referenced row.
 type DeleteRule string
 
 // The rules a server can hold. NoAction and Restrict both refuse the delete.
@@ -44,8 +41,7 @@ const (
 	DeleteRuleSetDefault DeleteRule = "set default"
 )
 
-// ReachesRows is true for a rule that writes to the rows that point at the removed one,
-// rather than refusing the delete.
+// ReachesRows is true for foreign key actions that modify referencing rows.
 func (rule DeleteRule) ReachesRows() bool {
 	return rule == DeleteRuleCascade ||
 		rule == DeleteRuleSetNull || rule == DeleteRuleSetDefault
@@ -56,8 +52,7 @@ var deleteRules = []DeleteRule{
 	DeleteRuleCascade, DeleteRuleSetNull, DeleteRuleSetDefault,
 }
 
-// ParseDeleteRule reads the rule as a catalog writes it. A rule this client does not know
-// is unknown, so nothing is claimed about it.
+// ParseDeleteRule parses a catalog action or returns DeleteRuleUnknown.
 func ParseDeleteRule(written string) DeleteRule {
 	lowered := strings.ToLower(strings.TrimSpace(written))
 	for _, rule := range deleteRules {

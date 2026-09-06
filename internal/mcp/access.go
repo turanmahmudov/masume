@@ -8,8 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// Refusal is a call the server rejected: a closed profile, or a statement above its access
-// level.
+// Refusal is an access error for a profile or statement.
 type Refusal struct {
 	Reason string
 }
@@ -28,13 +27,11 @@ type AccessDeps struct {
 	Profiles []cfg.Profile
 	Config   cfg.McpConfig
 	Sessions *Sessions
-	// ScopedProfile is the profile the server was started for. A caller then sends no
-	// profile name.
+	// ScopedProfile is the only enabled profile for a scoped server.
 	ScopedProfile string
 }
 
-// ListOpenProfiles returns the profiles the config opens to an agent, in the order of the
-// picker. A server started for one profile opens that profile alone.
+// ListOpenProfiles returns enabled profiles in picker order, restricted to the server scope.
 func ListOpenProfiles(deps AccessDeps) []cfg.Profile {
 	open := []cfg.Profile{}
 	for _, profile := range deps.Profiles {
@@ -48,8 +45,7 @@ func ListOpenProfiles(deps AccessDeps) []cfg.Profile {
 	return open
 }
 
-// GetNamedProfile returns the profile of the call, or the profile the server was started
-// for.
+// GetNamedProfile resolves the requested or scoped profile and checks access.
 func GetNamedProfile(deps AccessDeps, named any) (cfg.Profile, error) {
 	written, isText := named.(string)
 	asked, given := deps.ScopedProfile, deps.ScopedProfile != ""
@@ -58,18 +54,18 @@ func GetNamedProfile(deps AccessDeps, named any) (cfg.Profile, error) {
 	}
 	if !given {
 		return cfg.Profile{}, refuse(
-			"name the profile to work on; call list_profiles to see them")
+			"profile is required; call list_profiles for available profiles")
 	}
 	if deps.ScopedProfile != "" && isText && written != deps.ScopedProfile {
 		return cfg.Profile{}, refuse(
-			"this server was started for %q alone, so it cannot reach %q",
+			"this server only permits profile %q; requested %q",
 			deps.ScopedProfile, written)
 	}
 
 	profile, found := findProfileNamed(deps.Profiles, asked)
 	if !found {
 		return cfg.Profile{}, refuse(
-			"no profile named %q; call list_profiles to see them", asked)
+			"no profile named %q; call list_profiles for available profiles", asked)
 	}
 	if closed := FindClosedReason(deps.Config, profile); closed != "" {
 		return cfg.Profile{}, refuse("%s", closed)
@@ -77,10 +73,7 @@ func GetNamedProfile(deps AccessDeps, named any) (cfg.Profile, error) {
 	return profile, nil
 }
 
-// applyAccessMode returns the profile this server connects with. An agent with read access
-// gets a read-only connection, so a write that is not visible in the statement is also
-// blocked, for example a SELECT of a function that writes. An engine that cannot open a
-// read-only connection is used unchanged, because a refusal to connect helps nobody.
+// applyAccessMode requests a read-only connection for MCP read-only access when the engine supports read-only mode.
 func applyAccessMode(config cfg.McpConfig, profile cfg.Profile) cfg.Profile {
 	if ResolveProfileAccess(config, profile) != cfg.McpReadOnly {
 		return profile
@@ -102,8 +95,7 @@ func findProfileNamed(profiles []cfg.Profile, name string) (cfg.Profile, bool) {
 	return cfg.Profile{}, false
 }
 
-// OpenNamedConnection returns the connection of this profile and opens it on the first
-// call.
+// OpenNamedConnection opens or reuses a profile connection and refreshes stale table metadata.
 func OpenNamedConnection(
 	ctx context.Context, deps AccessDeps, profile cfg.Profile,
 ) (*Connection, error) {
@@ -111,10 +103,9 @@ func OpenNamedConnection(
 	if err != nil {
 		return nil, err
 	}
-	// An old list is read again, so a table created during the session becomes visible. A
-	// read that fails keeps the old list, and the log records the error.
+	// Keep cached tables after a refresh failure.
 	if err := connection.RefreshTables(ctx); err != nil {
-		LogEvent("! the relations of " + profile.Name + " were not read again: " + err.Error())
+		LogEvent("! cannot refresh tables for " + profile.Name + ": " + err.Error())
 	}
 	return connection, nil
 }

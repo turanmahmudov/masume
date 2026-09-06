@@ -1,6 +1,4 @@
-// Package writeplan measures what a write does before it runs: the rows it lands on, the
-// columns it changes, the relations it reaches through the server, and the statements that
-// undo it afterwards. Nothing here decides whether a write may run.
+// Package writeplan measures matching rows, assigned columns, triggers, foreign key effects, and undo availability before a write runs.
 package writeplan
 
 import (
@@ -22,21 +20,20 @@ type Source interface {
 // Request is one plan to build.
 type Request struct {
 	SQL string
-	// The relations of the connection, so the name in the statement leads to one of them.
+	// Available tables for target resolution.
 	Tables []db.TableRef
 	Mode   cfg.WritePlan
-	// How many rows the undo may hold. A write over this many rows keeps none.
+	// Maximum rows to capture for undo.
 	UndoRows int
-	// True while the user holds a transaction open, which the write joins.
+	// True when the write uses an existing transaction.
 	InTransaction bool
 }
 
-// Cascade is a relation a write reaches through the server rather than through the
-// statement: a trigger on the relation, or a foreign key that points at it.
+// Cascade is a trigger or foreign key effect associated with a write.
 type Cascade struct {
-	// What reaches the relation, such as `trigger t_order_audit`.
+	// The trigger or foreign key action, such as trigger t_order_audit.
 	Reason string
-	// The relation it reaches, and nothing where that is the relation of the write.
+	// The affected table, or empty for a trigger on the target table.
 	Table   string
 	Rows    int64
 	HasRows bool
@@ -49,30 +46,30 @@ type Plan struct {
 	Table db.TableRef
 	// The columns the write assigns. A delete assigns none.
 	Columns []string
-	// The rows the write lands on, counted on the server and not estimated.
+	// Matching rows counted on the server.
 	Rows    int64
 	HasRows bool
-	// Why the rows were not counted, where they were not.
+	// The reason the row count is unavailable.
 	RowsReason string
-	// The rows the whole relation holds, read only where the write names a subset.
+	// Total table rows, counted separately when the write has a predicate.
 	Total    int64
 	HasTotal bool
 
 	Cascades []Cascade
-	// The relations that block the write while a row of theirs references it.
+	// Tables with references that may block the write.
 	Blockers []Cascade
-	// Whether the write can be undone, and the read that takes the rows of the undo.
+	// Undo availability and the query for the original rows.
 	Undo UndoPlan
-	// True while the user holds a transaction open, which the write joins.
+	// True when the write uses an existing transaction.
 	InTransaction bool
 }
 
-// NamesEveryRow is true where the write lands on the whole relation.
+// NamesEveryRow is true when the write matches every row in a nonempty table.
 func (plan Plan) NamesEveryRow() bool {
 	return plan.HasRows && plan.HasTotal && plan.Rows == plan.Total && plan.Total > 0
 }
 
-// ReadShare returns the share of the relation the write lands on, from 0 to 1.
+// ReadShare returns the matching fraction of table rows, from 0 to 1.
 func (plan Plan) ReadShare() (float64, bool) {
 	if !plan.HasRows || !plan.HasTotal || plan.Total <= 0 {
 		return 0, false
@@ -80,8 +77,7 @@ func (plan Plan) ReadShare() (float64, bool) {
 	return float64(plan.Rows) / float64(plan.Total), true
 }
 
-// Measures is true where this connection measures a write before it runs. Only one
-// statement is measured: a plan names one relation and one set of rows.
+// Measures is true when the profile and server support measurement of a single write statement.
 func Measures(
 	profile cfg.Profile, capabilities core.Capabilities,
 	risk statement.WriteRisk, count int,
@@ -90,8 +86,7 @@ func Measures(
 		risk != statement.RiskNone && count == 1
 }
 
-// Build measures the write. It returns nothing where the statement is no write this client
-// can read as one relation and one predicate, because such a write cannot be counted.
+// Build measures a supported write with one known target table and one predicate.
 func Build(ctx context.Context, session Source, request Request) (Plan, bool) {
 	if request.Mode == cfg.PlanOff || !session.Capabilities().PlansWrites {
 		return Plan{}, false

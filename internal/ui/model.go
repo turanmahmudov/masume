@@ -21,8 +21,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/secret"
 )
 
-// ScreenKind names which screen is active. Each one carries its own data, so no screen can
-// read state that does not belong to it.
+// ScreenKind is the active screen type.
 type ScreenKind string
 
 // The five screens the client draws.
@@ -65,7 +64,7 @@ type Model struct {
 	// The secret stores the config file declares, which a profile names to read its
 	// password from one of them.
 	secrets []cfg.SecretSource
-	// What the config and the theme files got wrong, which the palette lists.
+	// Configuration and theme problems listed in the palette.
 	problems []string
 	// The profile the command line named, which is opened as the client starts instead
 	// of drawing the picker.
@@ -134,7 +133,7 @@ func NewModel(
 	if loaded.Settings.Theme != "" {
 		reported, applied := styles.ApplyThemeByName(loaded.Settings.Theme)
 		if !applied {
-			found = append(found, "there is no theme called \""+loaded.Settings.Theme+"\"")
+			found = append(found, "unknown theme: \""+loaded.Settings.Theme+"\"")
 		}
 		found = append(found, reported...)
 	}
@@ -199,8 +198,7 @@ func (model *Model) Init() tea.Cmd {
 	return tea.Batch(commands...)
 }
 
-// dashboardRefreshWait is how long the dashboard leaves between two reads of the server. It
-// rides the wake the client already asks for rather than a clock of its own.
+// dashboardRefreshWait is the interval between dashboard reads.
 const dashboardRefreshWait = 2 * time.Second
 
 // refreshDashboard reads the server again where the dashboard is open and the last answer
@@ -264,9 +262,7 @@ func (model *Model) Active() *app.Connection { return model.connections.active()
 // ActiveID returns the id of the connection on screen.
 func (model *Model) ActiveID() int { return model.connections.activeID() }
 
-// tabKey names one tab of one connection. A tab is numbered inside its own connection, so the
-// number of the tab alone would let a tab of one connection read what was kept for the tab of
-// another, and the grid would draw the rows of a server nobody asked about.
+// tabKey is a tab ID paired with its connection ID.
 type tabKey struct {
 	connection int
 	tab        int
@@ -277,12 +273,7 @@ func (model *Model) buildTabKey(connection *app.Connection, tab *app.Tab) tabKey
 	return tabKey{connection: model.connections.idOf(connection), tab: tab.ID}
 }
 
-// forgetClosedTabs drops what was kept for a tab or a connection that is no longer open. One
-// entry holds a whole page of rows as text, so a session that opens and closes many tabs would
-// hold on to every page it ever drew.
-//
-// What goes is decided by which tabs are open, and not by a call at each place a tab closes:
-// there are several such places, and one that forgot to call would leak again.
+// forgetClosedTabs clears cached data for closed tabs and connections.
 func (model *Model) forgetClosedTabs() {
 	model.caches.forgetClosed(model.connections.holdsTab)
 }
@@ -693,9 +684,9 @@ func (model *Model) recordUnsavedConnection(profile cfg.Profile) {
 
 // describeSaveOnExit returns the question the card asks.
 func describeSaveOnExit(unsaved []cfg.Profile) string {
-	asked := "Write \"" + unsaved[0].Name + "\" to the config file?"
+	asked := "Save \"" + unsaved[0].Name + "\" to the config file?"
 	if len(unsaved) > 1 {
-		asked = fmt.Sprintf("Write %d connections to the config file?", len(unsaved))
+		asked = fmt.Sprintf("Save %d connections to the config file?", len(unsaved))
 	}
 
 	lines := []string{asked, ""}
@@ -704,11 +695,11 @@ func describeSaveOnExit(unsaved []cfg.Profile) string {
 	}
 	if slices.ContainsFunc(unsaved, holdsWrittenPassword) {
 		if secret.IsAvailable() {
-			lines = append(lines, "", "The password goes into the keyring, not the file.")
+			lines = append(lines, "", "The keyring stores passwords outside the config file.")
 		} else {
 			lines = append(lines, "",
-				"This machine has no keyring, so the password is not kept. "+
-					"The connection will ask for it.")
+				"No keyring is available. Passwords will not be saved. "+
+					"Each connection will ask for a password.")
 		}
 	}
 	return strings.Join(lines, "\n")
@@ -781,7 +772,7 @@ func (model *Model) saveUnsavedConnections(unsaved []cfg.Profile) string {
 				profile.Name, keyringErr.Error(), describeSavedSoFar(written))
 		}
 		if err := cfg.SaveProfileToFile(profile, "", cfg.ResolveConfigPath()); err != nil {
-			return fmt.Sprintf("%s could not be written: %s%s",
+			return fmt.Sprintf("cannot save %s: %s%s",
 				profile.Name, err.Error(), describeSavedSoFar(written))
 		}
 		profile.InConfigFile = true
@@ -798,7 +789,7 @@ func describeSavedSoFar(written int) string {
 	if written == 0 {
 		return ""
 	}
-	return fmt.Sprintf(" (%s already written)", present.FormatCountOf(
+	return fmt.Sprintf(" (%s already saved)", present.FormatCountOf(
 		int64(written), "connection", "connections"))
 }
 
@@ -891,7 +882,7 @@ func (model *Model) readConnected(answered connectedMsg) (tea.Model, tea.Cmd) {
 	saved, held, savedErr := model.log.FindWorkspace(profileName)
 	switch {
 	case savedErr != nil:
-		connection.ShowError("the tabs of this profile could not be read: " + savedErr.Error())
+		connection.ShowError("cannot restore tabs for this profile: " + savedErr.Error())
 	case held:
 		connection.RestoreTabs(saved, func(table db.TableRef) string {
 			return connection.Session.Composer().ComposeRelationRead(
@@ -911,10 +902,7 @@ func (model *Model) readConnected(answered connectedMsg) (tea.Model, tea.Cmd) {
 	return model, tea.Batch(commands...)
 }
 
-// keepTypedPassword writes the password the user typed into the keyring, where they asked for
-// it. The profile is written back as one that reads the keyring, so the next connection needs
-// no password at all. A connection that is in no config file is marked in memory, and the
-// question asked on the way out writes it with the keyring as its source.
+// keepTypedPassword saves the password in the keyring and updates the profile's password source.
 func (model *Model) keepTypedPassword(connection *app.Connection) {
 	asked, typed := model.picker.keepInKeyring, model.picker.password.Text
 	model.picker.keepInKeyring = false
@@ -942,7 +930,7 @@ func (model *Model) keepTypedPassword(connection *app.Connection) {
 		profile.InConfigFile, profile.ProjectFile = true, ""
 		model.profiles = replaceProfile(model.profiles, profile.Name, profile)
 		model.unsaved = dropProfile(model.unsaved, profile.Name)
-		connection.Show("the password of " + profile.Name + " is in the keyring")
+		connection.Show("password saved in the keyring for " + profile.Name)
 		return
 	}
 
@@ -950,7 +938,7 @@ func (model *Model) keepTypedPassword(connection *app.Connection) {
 	// question asked on the way out then writes it without a password in the file.
 	model.profiles = replaceProfile(model.profiles, profile.Name, profile)
 	model.unsaved = replaceProfile(model.unsaved, profile.Name, profile)
-	connection.Show("the password of " + profile.Name + " is in the keyring")
+	connection.Show("password saved in the keyring for " + profile.Name)
 }
 
 // readHealthDue asks the server whether it still returns.
@@ -971,7 +959,7 @@ func (model *Model) readHealthChecked(answered healthCheckedMsg) (tea.Model, tea
 	}
 	if answered.Problem == "" {
 		if connection.Health != app.HealthOk {
-			connection.Show("the server answers again")
+			connection.Show("the server responds again")
 		}
 		connection.Health, connection.HealthFailures, connection.HealthProblem =
 			app.HealthOk, 0, ""
@@ -1019,7 +1007,7 @@ func (model *Model) readReconnected(answered reconnectedMsg) (tea.Model, tea.Cmd
 		}
 		lost := ""
 		if answered.Outcome.TransactionLost {
-			lost = " · the open transaction went with the connection"
+			lost = " · the open transaction was lost with the connection"
 		}
 		connection.ShowError("cannot reconnect: " + problem + lost)
 	}
@@ -1111,8 +1099,7 @@ func (model *Model) readTableDetailAnswer(answered tableDetailMsg) (tea.Model, t
 	return model, nil
 }
 
-// resolveWaitingTargets builds the edit target again for every tab that reads this relation,
-// because a target returns what it returns from the columns of it.
+// resolveWaitingTargets updates edit targets for tabs that use this table.
 func (model *Model) resolveWaitingTargets(connection *app.Connection, tableID string) {
 	for _, tab := range connection.Tabs {
 		if tab.Target.Table.Name == "" ||
@@ -1224,7 +1211,7 @@ func (model *Model) readExportAnswer(answered exportWrittenMsg) (tea.Model, tea.
 		return model, nil
 	}
 	connection.Show(strings.Join([]string{
-		"wrote", present.FormatRowCount(answered.Rows), "to", answered.Path,
+		"exported", present.FormatRowCount(answered.Rows), "to", answered.Path,
 	}, " "))
 	return model, nil
 }

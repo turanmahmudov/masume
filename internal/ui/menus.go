@@ -8,8 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// menuEntry is one row a menu of actions offers: the action it runs, what it is called, and
-// what it does. An entry the server cannot answer, or that has nothing to act on, is left out.
+// menuEntry is an action with a label, detail, and availability flag.
 type menuEntry struct {
 	action ActionID
 	label  string
@@ -18,8 +17,7 @@ type menuEntry struct {
 	offer  bool
 }
 
-// buildActionMenu returns the rows of a menu of actions, with the chord each one is bound to
-// in this scope, so the menu offers what a key also reaches.
+// buildActionMenu returns available actions with their key bindings.
 func (model *Model) buildActionMenu(
 	capabilities core.Capabilities, scope cfg.KeyScope, offered []menuEntry,
 ) []app.MenuAction {
@@ -55,12 +53,12 @@ func (model *Model) openActionMenu(
 	return model, nil
 }
 
-// openTabMenu returns the right button on a tab: what a reader does to the tab itself.
+// openTabMenu opens the tab context menu.
 func (model *Model) openTabMenu(connection *app.Connection) (tea.Model, tea.Cmd) {
 	tab := connection.Active()
 	return model.openActionMenu(connection, " "+tab.Label()+" ", cfg.ScopeGlobal,
 		model.buildActionMenu(connection.Session.Capabilities(), cfg.ScopeGlobal, []menuEntry{
-			{ActionNewQueryTab, "New query tab", "beside this one", cfg.IconQuery, true},
+			{ActionNewQueryTab, "New query tab", "beside this tab", cfg.IconQuery, true},
 			{
 				ActionNameTab, "Rename tab", "name this tab",
 				cfg.IconNote, tab.Kind == app.TabQuery,
@@ -80,24 +78,24 @@ func (model *Model) openTabMenu(connection *app.Connection) (tea.Model, tea.Cmd)
 		}))
 }
 
-// openConnectionMenu returns the right button on a row of the connection list.
+// openConnectionMenu opens the connection context menu.
 func (model *Model) openConnectionMenu(connection *app.Connection) (tea.Model, tea.Cmd) {
 	return model.openActionMenu(connection, " "+connection.Profile().Name+" ",
 		cfg.ScopeGlobal,
 		model.buildActionMenu(connection.Session.Capabilities(), cfg.ScopeGlobal, []menuEntry{
 			{ActionNewQueryTab, "New query tab", "on this connection", cfg.IconQuery, true},
 			{ActionRefreshObjects, "Refresh the object tree", "read the catalog again", cfg.IconRecent, true},
-			{ActionShowActivity, "Server activity", "the load, the locks and the other sessions", cfg.IconRole, true},
+			{ActionShowActivity, "Server activity", "load, locks, and other sessions", cfg.IconRole, true},
 			{
 				ActionToggleAutocommit, "Autocommit", "commit each statement on its own",
 				cfg.IconTrigger, true,
 			},
-			{ActionOpenPicker, "Connections…", "open another one", cfg.IconFolder, true},
+			{ActionOpenPicker, "Connections…", "open another connection", cfg.IconFolder, true},
 			{ActionCloseConnection, "Close connection", "", cfg.IconNote, true},
 		}))
 }
 
-// openEditorMenu returns the right button on the statement.
+// openEditorMenu opens the editor context menu.
 func (model *Model) openEditorMenu(
 	connection *app.Connection, tab *app.Tab,
 ) (tea.Model, tea.Cmd) {
@@ -106,17 +104,17 @@ func (model *Model) openEditorMenu(
 		model.buildActionMenu(connection.Session.Capabilities(), cfg.ScopeEditor, []menuEntry{
 			{ActionRunAtCursor, "Run", "the selection, or the statement at the caret", cfg.IconQuery, written},
 			{ActionRunBatch, "Run every statement", "one result each", cfg.IconQuery, written},
-			{ActionExplain, "Explain", "how the server will run it", cfg.IconPlan, written},
+			{ActionExplain, "Explain", "estimated query plan", cfg.IconPlan, written},
 			{ActionFormatSQL, "Format", "one clause per line", cfg.IconNote, written},
-			{ActionCommentLines, "Comment lines", "the lines the selection covers", cfg.IconNote, written},
+			{ActionCommentLines, "Comment lines", "comment or uncomment selected lines", cfg.IconNote, written},
 			{ActionSelectAll, "Select all", "", cfg.IconColumn, written},
-			{ActionPasteText, "Paste", "what this client last copied", cfg.IconQuery, true},
+			{ActionPasteText, "Paste", "text last copied in this client", cfg.IconQuery, true},
 			{ActionFindInStatement, "Find…", "", cfg.IconRecent, written},
 			{ActionSaveQuery, "Save this query", "under a name", cfg.IconFavourites, written},
 		}))
 }
 
-// openColumnMenu returns the right button on the name of a column.
+// openColumnMenu opens the column context menu.
 func (model *Model) openColumnMenu(
 	connection *app.Connection, tab *app.Tab, shape GridShape,
 ) (tea.Model, tea.Cmd) {
@@ -127,12 +125,12 @@ func (model *Model) openColumnMenu(
 	sorts := connection.Session.Capabilities().SortsRead
 	return model.openActionMenu(connection, name, cfg.ScopeGrid,
 		model.buildActionMenu(connection.Session.Capabilities(), cfg.ScopeGrid, []menuEntry{
-			{ActionSortColumn, "Sort by column", "order the read by it", cfg.IconIndex, sorts},
-			{ActionAddSortColumn, "Add column to sort", "order by it as well", cfg.IconIndex, sorts},
-			{ActionFilterByValues, "Filter by values", "choose which values stay", cfg.IconColumn, len(shape.Text) > 0},
-			{ActionFreezeColumns, "Freeze up to this column", "keep it on screen while the rest scroll", cfg.IconPrimaryKey, true},
+			{ActionSortColumn, "Sort by column", "sort rows by this column", cfg.IconIndex, sorts},
+			{ActionAddSortColumn, "Add column to sort", "add another sort column", cfg.IconIndex, sorts},
+			{ActionFilterByValues, "Filter by values", "choose values to keep", cfg.IconColumn, len(shape.Text) > 0},
+			{ActionFreezeColumns, "Freeze column", "freeze or unfreeze this column", cfg.IconPrimaryKey, true},
 			{ActionGoToColumn, "Go to column…", "by name", cfg.IconRecent, true},
-			{ActionSearchColumns, "Search the columns", "", cfg.IconRecent, true},
+			{ActionSearchColumns, "Search rows", "search loaded rows", cfg.IconRecent, true},
 			{ActionToggleMasking, "Show or hide masked values", "", cfg.IconNote, true},
 		}))
 }

@@ -11,11 +11,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
-// The chat of one connection: the turns said so far, what the reply is doing now, and the
-// conversations of the profile behind it. Nothing here reaches a model; the screen starts a run
-// and feeds what arrives back in.
+// Connection chat state and stored conversations. The UI handles model requests and passes response events to this state.
 
-// ChatStatus says how far the reply got.
+// ChatStatus is the response state.
 type ChatStatus string
 
 // The three states the chat can be in.
@@ -29,18 +27,15 @@ const (
 type ChatMessage struct {
 	Role    string
 	Content string
-	// Context is what the editor held at the time. It is sent with the question, and is not
-	// drawn.
+	// Context is the editor snapshot sent with the question and omitted from display.
 	Context string
 }
 
-// ChatUsage is what the chat spent on this connection. It is counted for the run of the client
-// and not for the conversation, because a conversation read from the file was paid for already.
+// ChatUsage is the connection token usage for the current client session.
 type ChatUsage struct {
 	InputTokens  int
 	OutputTokens int
-	// CachedInputTokens is the part of the input the provider read from its cache, at a tenth
-	// of the price. It is a part of the input count, not a sum beside it.
+	// CachedInputTokens is the cached portion of InputTokens.
 	CachedInputTokens int
 }
 
@@ -55,15 +50,14 @@ func (usage ChatUsage) Add(spent ChatUsage) ChatUsage {
 
 // PendingRun is a statement the chat wants to run, waiting for the user to allow it.
 type PendingRun struct {
-	// Summary is what it would do, in the words the screens use, such as "removes data on
-	// prod".
+	// Summary is the statement risk and environment.
 	Summary string
 	SQL     string
-	// What the write does, one line each, and nothing where none was measured.
+	// The measured write plan as text, or empty when unavailable.
 	Plan []string
 }
 
-// ChatEventKind names what happened while a reply was written.
+// ChatEventKind is the response event category.
 type ChatEventKind string
 
 // The things a run reports.
@@ -79,13 +73,13 @@ const (
 	ChatTableRead ChatEventKind = "table-read"
 	// ChatUndoKept hands over the undo of a write that ran.
 	ChatUndoKept ChatEventKind = "undo-kept"
-	// ChatEnded says the run is over, with what it spent and what went wrong.
+	// ChatEnded is the final event with usage and error details.
 	ChatEnded ChatEventKind = "ended"
 )
 
 // ChatEvent is one thing a run reported.
 type ChatEvent struct {
-	// Run numbers the run it belongs to, so a run that was stopped writes nothing more.
+	// Run is the response sequence for rejecting stale events.
 	Run  int
 	Kind ChatEventKind
 	Text string
@@ -109,31 +103,27 @@ type Chat struct {
 	Activity string
 	Steps    []string
 	Usage    ChatUsage
-	// Pending is the statement that waits for a yes, and nothing between runs.
+	// Pending is the statement awaiting confirmation, or nil.
 	Pending *PendingRun
 	// allowed is where the answer to the waiting statement goes.
 	allowed chan bool
 
-	// Conversations holds the conversations of this profile, the most recent first, and OpenID
-	// the one on screen. An empty chat is no conversation, so the id is zero until the first
-	// turn is written.
+	// Conversations is the profile history, newest first. OpenID is zero until the conversation has a stored turn.
 	Conversations []hist.ChatConversation
 	OpenID        int64
 
-	// Run numbers the run that writes now, so a run that was stopped is told apart from
-	// the one after it.
+	// Run is the current response sequence.
 	Run int
 	// stop ends the run that writes now.
 	stop func()
 
-	// TurnAt is the turn a jump landed on, and HasTurn is false before the first jump.
+	// TurnAt is the selected turn. HasTurn is false before the first turn selection.
 	TurnAt  int
 	HasTurn bool
-	// Offset is how far the conversation is scrolled, and Follow is true while it keeps to the
-	// newest row.
+	// Offset is the scroll position. Follow is true while the newest row remains visible.
 	Offset int
 	Follow bool
-	// StartedAt is when the reply being written began, so the wheel can count the seconds.
+	// StartedAt is the response start time.
 	StartedAt time.Time
 	// Notice is the line under the field, in place of what the chat spent.
 	Notice string
@@ -149,9 +139,7 @@ func (chat *Chat) IsStreaming() bool {
 	return chat.Status == ChatStreaming
 }
 
-// StartTurn adds the question and an empty reply, and returns the turns to send. The editor
-// rides with a question only where it was not sent already, because the conversation carries it
-// from the first question on.
+// StartTurn appends a question and an empty reply. The request includes editor context only when the context changes.
 func (chat *Chat) StartTurn(prompt, context string) []ChatMessage {
 	sent := ""
 	for _, message := range chat.Messages {
@@ -164,9 +152,7 @@ func (chat *Chat) StartTurn(prompt, context string) []ChatMessage {
 		asked.Context = context
 	}
 
-	// The turns are copied once. The request carries them as they stand, and the panel
-	// draws the same turns with the reply that is being written under them, so the history
-	// is capped and the empty reply lands past its end.
+	// Cap request history before the empty reply.
 	held := make([]ChatMessage, 0, len(chat.Messages)+2)
 	held = append(append(held, chat.Messages...), asked)
 	history := held[:len(held):len(held)]
@@ -182,8 +168,7 @@ func (chat *Chat) AppendDelta(delta string) {
 	})
 }
 
-// StartTextBlock parts a block of text from the one before it. A tool step has text on both
-// sides of the call, with no mark between them.
+// StartTextBlock separates response text blocks when the previous text has no trailing whitespace.
 func (chat *Chat) StartTextBlock() {
 	chat.writeReply(func(reply ChatMessage) (ChatMessage, bool) {
 		if reply.Content == "" || endsInBlank.MatchString(reply.Content) {
@@ -197,7 +182,7 @@ func (chat *Chat) StartTextBlock() {
 // endsInBlank matches a reply that already ends in a blank.
 var endsInBlank = regexp.MustCompile(`\s$`)
 
-// DropEmptyReply removes the reply that was never written, so a failure leaves no empty turn.
+// DropEmptyReply removes a trailing empty assistant message.
 func (chat *Chat) DropEmptyReply() {
 	if len(chat.Messages) == 0 {
 		return
@@ -208,7 +193,7 @@ func (chat *Chat) DropEmptyReply() {
 	}
 }
 
-// writeReply rewrites the reply being written, and does nothing where the last turn is not one.
+// writeReply updates the final assistant message when present.
 func (chat *Chat) writeReply(rewrite func(reply ChatMessage) (ChatMessage, bool)) {
 	if len(chat.Messages) == 0 {
 		return
@@ -223,13 +208,12 @@ func (chat *Chat) writeReply(rewrite func(reply ChatMessage) (ChatMessage, bool)
 	}
 }
 
-// StartStep names the call that runs now.
+// StartStep updates the current activity label.
 func (chat *Chat) StartStep(label string) {
 	chat.Activity = label
 }
 
-// FinishStep keeps the call that ran as a step of the reply, so the line does not fall back to
-// what it said before it.
+// FinishStep records the current activity as a completed step.
 func (chat *Chat) FinishStep() {
 	if chat.Activity != "" {
 		chat.Steps = append(chat.Steps, chat.Activity)
@@ -249,7 +233,7 @@ func (chat *Chat) Ask(pending PendingRun, allowed chan bool) {
 	chat.Pending, chat.allowed = &held, allowed
 }
 
-// AnswerPending returns the waiting statement. A no does not run it.
+// AnswerPending sends the confirmation response and clears the pending request.
 func (chat *Chat) AnswerPending(confirmed bool) {
 	if chat.allowed == nil {
 		return
@@ -267,7 +251,7 @@ func (chat *Chat) Fail(problem string) {
 
 // Stopped ends the run that writes now, and keeps what it had written.
 func (chat *Chat) Stopped() {
-	// A waiting statement does not run, so the tool returns instead of waiting for ever.
+	// Refuse pending execution before cancelling the response.
 	chat.AnswerPending(false)
 	if chat.stop != nil {
 		chat.stop()
@@ -279,8 +263,7 @@ func (chat *Chat) Stopped() {
 	chat.Status = ChatIdle
 }
 
-// Begin opens a run: it numbers it, keeps the way to stop it, and returns the channel the run
-// reports through.
+// Begin starts a response and returns its sequence and event channel.
 func (chat *Chat) Begin(stop func()) (int, chan ChatEvent) {
 	chat.Run++
 	chat.stop = stop
@@ -290,14 +273,11 @@ func (chat *Chat) Begin(stop func()) (int, chan ChatEvent) {
 	chat.Problem = ""
 	chat.ClearSteps()
 	chat.Status = ChatStreaming
-	// The channel belongs to the run, not to the chat: a run that was stopped goes on
-	// reporting until the provider notices, and it must not reach the run after it.
+	// Each response has a separate event channel.
 	return chat.Run, make(chan ChatEvent, ChatEventRoom)
 }
 
-// ChatEventRoom is how many events a run may report before it waits for the screen to read
-// them. A reply arrives in small pieces, and the screen takes every piece that is waiting
-// before it draws.
+// ChatEventRoom is the response event buffer capacity.
 const ChatEventRoom = 256
 
 // End closes the run, and does nothing for a run that is not the one writing.
@@ -342,8 +322,7 @@ func (chat *Chat) FindLastReply() (string, bool) {
 	return "", false
 }
 
-// DescribeUsage writes what the chat spent, and nothing while it has spent nothing. The log
-// holds the exact figure of every message.
+// DescribeUsage summarizes session token usage, or returns an empty string before usage is recorded.
 func (chat *Chat) DescribeUsage() string {
 	if chat.Usage.InputTokens == 0 && chat.Usage.OutputTokens == 0 {
 		return ""

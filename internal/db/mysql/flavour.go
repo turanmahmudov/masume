@@ -8,8 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/result"
 )
 
-// Flavour holds the parts each MySQL-protocol server does differently. They share
-// the wire, `information_schema` and the SQL, so they share one adapter.
+// Flavour is the engine-specific configuration for the shared MySQL adapter.
 type Flavour struct {
 	// MySQL returns a tree in one cell, MariaDB returns JSON, and TiDB returns one row
 	// per operator.
@@ -21,8 +20,7 @@ type Flavour struct {
 	BuildKillStatement func(pid int64, terminate bool) string
 }
 
-// ReadFirstCell returns the first cell of the first row, where a server writes the whole
-// plan.
+// ReadFirstCell returns a plan stored in the first result cell.
 func ReadFirstCell(answered db.QueryResult) string {
 	if len(answered.Rows) == 0 || len(answered.Rows[0]) == 0 {
 		return ""
@@ -30,8 +28,7 @@ func ReadFirstCell(answered db.QueryResult) string {
 	return core.FormatCell(answered.Rows[0][0], "")
 }
 
-// ReadNamedPlanRows returns the plan rows keyed by column name, for a server that writes
-// one row per operator.
+// ReadNamedPlanRows returns plan rows keyed by column name.
 func ReadNamedPlanRows(answered db.QueryResult) ([]map[string]any, []string) {
 	order := make([]string, 0, len(answered.Columns))
 	for _, column := range answered.Columns {

@@ -8,8 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// The tree of which session waits for which. The server answers one row per waiter and the
-// session that blocks it, and the dashboard draws that as a tree.
+// Lock wait relationships displayed as a session tree.
 
 // BlockingNode is one row of the tree, already flattened in the order it is drawn.
 type BlockingNode struct {
@@ -25,11 +24,7 @@ type BlockingNode struct {
 	Waiting bool
 }
 
-// BuildBlockingTree returns the rows of the tree the waits describe, in the order they are
-// drawn. A session that blocks one waiter and waits for another appears once, under the
-// session it waits for.
-//
-// A cycle has no session that waits for nothing, so its lowest PID is taken as its root.
+// BuildBlockingTree flattens lock waits into display order. Each session appears once. Cycles start at the lowest remaining blocking PID.
 func BuildBlockingTree(waits []db.LockWait) []BlockingNode {
 	if len(waits) == 0 {
 		return nil
@@ -41,8 +36,7 @@ func BuildBlockingTree(waits []db.LockWait) []BlockingNode {
 		waitingFor[wait.BlockingPID] = append(waitingFor[wait.BlockingPID], wait)
 		blocked[wait.BlockedPID] = true
 	}
-	// The session that has waited longest is drawn first, and two that have waited the
-	// same go by PID, so the same state draws the same tree every refresh.
+	// Sort by longest wait, then PID.
 	for holder := range waitingFor {
 		slices.SortStableFunc(waitingFor[holder], func(first, second db.LockWait) int {
 			if longest := cmp.Compare(second.Waiting, first.Waiting); longest != 0 {
@@ -60,7 +54,7 @@ func BuildBlockingTree(waits []db.LockWait) []BlockingNode {
 		}
 		rows = appendBlockingRows(rows, holder, waitingFor, drawn, 0)
 	}
-	// The rest is a cycle, or a chain hanging off one, rooted at its lowest PID.
+	// Process remaining cycles and dependent sessions in PID order.
 	for _, holder := range listHolders(waitingFor) {
 		if drawn[holder] {
 			continue
@@ -80,8 +74,7 @@ func listHolders(waitingFor map[int64][]db.LockWait) []int64 {
 	return holders
 }
 
-// appendBlockingRows writes the session and everything waiting under it. A session already
-// drawn is not walked again, which is what stops a cycle.
+// appendBlockingRows appends a session and its waiters, skipping previously visited sessions.
 func appendBlockingRows(
 	rows []BlockingNode, holder int64, waitingFor map[int64][]db.LockWait,
 	drawn map[int64]bool, depth int,
@@ -119,8 +112,7 @@ func buildHolderRow(holder int64, waits []db.LockWait) BlockingNode {
 	return row
 }
 
-// CountBlockedSessions returns how many sessions are waiting for a lock, counting one
-// blocked by several holders once.
+// CountBlockedSessions returns the unique blocked session count.
 func CountBlockedSessions(waits []db.LockWait) int {
 	blocked := map[int64]bool{}
 	for _, wait := range waits {

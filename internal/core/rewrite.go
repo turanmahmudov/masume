@@ -21,10 +21,7 @@ type SortState struct {
 	Direction SortDirection `json:"direction"`
 }
 
-// ApplySortColumn returns the new sort after the user selected this column. A column that
-// is already in the sort reverses its direction and keeps its position, because a move would
-// change which column sorts first. A new column is added at the end, where it has the least
-// effect. If add is false, the sort is replaced by this one column.
+// ApplySortColumn reverses an existing sort key or appends a new key. With add false, the column replaces all keys.
 func ApplySortColumn(sort []SortState, column string, add bool) []SortState {
 	turned := TurnSortDirection(FindSortDirection(sort, column))
 	if !add {
@@ -58,8 +55,7 @@ func FindSortDirection(sort []SortState, column string) SortDirection {
 	return ""
 }
 
-// TurnSortDirection returns the next direction. A column that is not sorted yet starts
-// with ascending order, which is what the user expects from the first key press.
+// TurnSortDirection reverses ascending order; all other values become ascending.
 func TurnSortDirection(held SortDirection) SortDirection {
 	if held == SortAscending {
 		return SortDescending
@@ -67,8 +63,7 @@ func TurnSortDirection(held SortDirection) SortDirection {
 	return SortAscending
 }
 
-// FilterTest is the test applied to a cell. A null needs its own test, because
-// `= null` matches nothing.
+// FilterTest is the cell comparison. Null values use IS NULL or IS NOT NULL.
 type FilterTest string
 
 // The tests a compare step can use.
@@ -98,8 +93,7 @@ type FilterStep struct {
 	Text   string     `json:"text,omitempty"`
 }
 
-// resolveBindValue keeps a type that the driver can send unchanged. Only a type the
-// driver cannot send becomes text, so a date keeps the offset that the display omits.
+// resolveBindValue preserves scalar types, formats timestamps as UTC RFC3339Nano, and converts other values to text.
 func resolveBindValue(value any) any {
 	switch held := value.(type) {
 	case nil:

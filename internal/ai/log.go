@@ -1,5 +1,4 @@
-// Package ai holds what the chat of one connection needs: the system prompt, the providers
-// it can send to, and the run that answers one question.
+// Package ai provides chat prompts, provider clients, and tool execution.
 package ai
 
 import (

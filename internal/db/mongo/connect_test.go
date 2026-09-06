@@ -52,7 +52,7 @@ func TestBuildAuthenticationMessageNamesTheMissingUser(t *testing.T) {
 	err := errors.New("(Unauthorized) Command buildInfo requires authentication")
 
 	written := BuildAuthenticationMessage(buildProbeProfile(""), err)
-	if !strings.Contains(written, "the server needs a user and this profile names none") {
+	if !strings.Contains(written, "authentication requires a user; the profile user is missing") {
 		t.Errorf("the message reads %q", written)
 	}
 	// A profile that does name a user is told what the server said.

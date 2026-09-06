@@ -5,8 +5,7 @@ import (
 	"sync"
 )
 
-// IsAvailable reports whether this machine has a keyring masume can reach. macOS always has
-// the Keychain, so the test only looks for the tool that reaches it.
+// IsAvailable checks for the macOS security tool used to access Keychain.
 var IsAvailable = sync.OnceValue(func() bool {
 	_, err := exec.LookPath("security")
 	return err == nil

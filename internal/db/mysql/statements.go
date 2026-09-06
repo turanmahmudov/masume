@@ -4,8 +4,7 @@ import (
 	"strings"
 )
 
-// The name is lowered before the comparison, because TiDB reports these in capitals
-// and compares a schema name byte for byte.
+// TiDB reports uppercase system schemas and compares schema names case-sensitively. The filter lowercases names before comparison.
 var mysqlSystemSchemaList = func() string {
 	named := make([]string, 0, 4)
 	for _, schema := range []string{"mysql", "information_schema", "performance_schema", "sys"} {
@@ -76,7 +75,7 @@ var listMysqlRelationshipsSQL = `
    order by k.table_schema, k.table_name, k.constraint_name
 `
 
-// MySQL has no roles apart from its users, so the grantees are listed.
+// The role list uses privilege grantees.
 const listMysqlRolesSQL = `
   select grantee as name,
          group_concat(distinct privilege_type order by privilege_type separator ', ') as detail
@@ -147,9 +146,7 @@ const listMysqlConstraintsSQL = `
    order by tc.constraint_type, tc.constraint_name
 `
 
-// The load the server itself is carrying. The connection count and the uptime are status
-// variables and the limit is a system variable, so one statement reads all three out of
-// the tables that hold them rather than through three SHOW commands.
+// The load query reads connection count, uptime, and the connection limit from status and system variables.
 const readMysqlServerLoadSQL = `
   select (select cast(variable_value as unsigned)
             from performance_schema.global_status

@@ -10,9 +10,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 )
 
-// The applied key bindings: the chosen preset with the chords of the config file over it. A
-// key that only moves the cursor is not an action, and the list on screen reads it from the
-// registry too.
+// The key registry combines a preset with configured key bindings.
 
 // ActionBinding is one chord sequence bound to one action in one scope.
 type ActionBinding struct {
@@ -22,12 +20,7 @@ type ActionBinding struct {
 	Chords cfg.ChordSequence
 }
 
-// dialogGroups say which actions each card and each screen of the dialog scope returns. A
-// card is named after its overlay, and the two screens after themselves. The matcher reads it,
-// because the scope binds one chord to more than one action, such as `ctrl+l` to both
-// `set-null` and `new-ai-chat`, and the card on show says which of them it takes. The conflict
-// check reads it too: two actions of one card that share a chord clash, and two actions of
-// different cards do not.
+// dialogGroups contains each dialog's actions for key matching and conflict checks.
 var dialogGroups = map[string][]ActionID{
 	"confirm": {ActionClose, ActionAnswerYes, ActionAnswerNo, ActionChooseRow},
 	"picker": {
@@ -91,7 +84,7 @@ func readChordChoices(written map[string][]string) (cfg.ChordChoices, []string) 
 			sequence, parsed := cfg.ParseChordSequence(text)
 			if !parsed {
 				problems = append(problems, fmt.Sprintf(
-					"%s ships the unreadable chord %q", actionKey, text))
+					"%s has an invalid preset chord: %q", actionKey, text))
 				continue
 			}
 			sequences = append(sequences, sequence)
@@ -154,7 +147,7 @@ func findUnknownActions(choices cfg.ChordChoices) []string {
 		}
 		scope, id := cfg.SplitActionKey(actionKey)
 		unknown = append(unknown, fmt.Sprintf(
-			"keys.%s.%s is not an action of this scope", scope, id))
+			"keys.%s.%s is not an action in this scope", scope, id))
 	}
 	slices.Sort(unknown)
 	return unknown

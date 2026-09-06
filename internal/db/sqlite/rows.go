@@ -25,8 +25,7 @@ func readValueType(value any) string {
 	return "blob"
 }
 
-// readColumns returns one result column per column of the statement. A name the
-// result gives twice is numbered, so two columns of one name stay apart.
+// readColumns returns result columns with unique names. Repeated names receive numeric suffixes.
 func readColumns(names []string, types []*sql.ColumnType, first []any) []db.ResultColumn {
 	seen := map[string]int{}
 	for _, name := range names {

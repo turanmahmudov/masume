@@ -528,8 +528,8 @@ func TestServerWithAuthenticationRefusesAProfileWithNoUser(t *testing.T) {
 		_ = session.Close()
 		t.Fatal("a connection with no credentials opened on a server that authenticates")
 	}
-	if described := db.DescribeError(err); !strings.Contains(described, "names none") {
-		t.Errorf("the refusal reads %q, and does not say the profile names no user", described)
+	if described := db.DescribeError(err); !strings.Contains(described, "profile user is missing") {
+		t.Errorf("the error is %q; expected a missing profile user", described)
 	}
 }
 
@@ -857,9 +857,7 @@ func countOrders(t *testing.T, session db.Session) int64 {
 	return db.ReadNonNegativeCount(answered.Rows[0][0])
 }
 
-// A collection keeps no schema, and a file carries one header. A document read after the
-// header is settled can hold a field the header has not, and a file that quietly drops it
-// reads as a whole one. The export says which fields it could not write.
+// Exports report fields absent from the first batch columns.
 func TestServerReportsTheFieldsAnExportCouldNotWrite(t *testing.T) {
 	session := openOrders(t)
 	dbtest.RunStatements(t, session,
@@ -876,7 +874,7 @@ func TestServerReportsTheFieldsAnExportCouldNotWrite(t *testing.T) {
 		t.Fatal("the export dropped two fields and reported nothing")
 	}
 	described := db.DescribeError(err)
-	for _, wanted := range []string{"refunded", "note", "was written"} {
+	for _, wanted := range []string{"refunded", "note", "exported rows", "were omitted"} {
 		if !strings.Contains(described, wanted) {
 			t.Errorf("the message does not name %q: %s", wanted, described)
 		}

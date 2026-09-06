@@ -10,10 +10,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// The connections of the server itself. $currentOp lists what is running, and killOp
-// ends one of them.
+// $currentOp lists running operations. killOp stops an operation.
 
-// ListActivity returns what the server is running now.
+// ListActivity returns running server operations.
 func (session *mongoSession) ListActivity(ctx context.Context) ([]db.Activity, error) {
 	admin := session.client.Database("admin")
 	documents, err := session.readCursor(ctx, func() (*mongo.Cursor, error) {
@@ -93,8 +92,7 @@ func readOperationCommand(fields map[string]any) string {
 	return WriteExtendedJSON(command)
 }
 
-// CancelBackend ends one running operation. The server has no second word for
-// terminating, so a kill is a kill.
+// CancelBackend stops an operation with killOp. The terminate argument has no effect.
 func (session *mongoSession) CancelBackend(
 	ctx context.Context, pid int64, _ bool,
 ) (bool, error) {
@@ -108,8 +106,7 @@ func (session *mongoSession) CancelBackend(
 	return true, nil
 }
 
-// CancelRunningQuery is refused: the client stops waiting through its own context, and no
-// second connection knows the operation id to kill.
+// CancelRunningQuery is unsupported. Context cancellation stops the driver call; a second connection lacks the operation ID.
 func (session *mongoSession) CancelRunningQuery(context.Context) (bool, error) {
 	return false, db.NewUnsupportedError("cancel a running statement")
 }

@@ -9,20 +9,18 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// Dialect says how a name and a value are written into a call. MongoDB has no SQL, so
-// the rest of a dialect is for the object menu, which this engine does not offer.
+// Dialect is the MongoDB name and value syntax configuration.
 var Dialect = &query.Dialect{
 	Engine: core.EngineMongo, Syntax: syntax.FlavourStandard, SchemaWord: "database",
 	StatementLanguage: "MongoDB shell calls", FenceTag: "js",
 	StatementHint: "db.collection.find({…})",
-	StatementExample: "One statement is one call of the shell, such as " +
+	StatementExample: "One statement is one shell call chain, such as " +
 		"`db.orders.find({status: \"new\"}).sort({total: -1}).limit(20)`, " +
 		"`db.orders.aggregate([{$group: {_id: \"$status\", n: {$sum: 1}}}])` or " +
 		"`db.getSiblingDB(\"shop\").orders.countDocuments({})`. " +
-		"There is no SQL and no join: a document holds what a join would fetch, " +
-		"or another collection is read by a second call.",
-	// A collection is named after a dot, and a name of any other shape is named by a
-	// call instead.
+		"Use MongoDB shell calls, not SQL. " +
+		"Read related data from embedded documents or another collection.",
+	// Plain collection names follow a dot. Other names use getCollection.
 	NamesWithoutQuotes: isPlainName,
 	QuoteIdentifier:    strconv.Quote,
 	// A call carries its own arguments, so nothing is bound.
@@ -35,10 +33,10 @@ var Dialect = &query.Dialect{
 		return BuildStatementText(schema, "", "dropDatabase()")
 	},
 	DropTrigger: func(*query.Dialect, string, string, string) string {
-		return "// mongodb keeps no trigger"
+		return "// MongoDB triggers are unsupported"
 	},
 	DropRoutine: func(*query.Dialect, string, string, string) string {
-		return "// mongodb keeps no stored routine"
+		return "// MongoDB stored routines are unsupported"
 	},
 }
 

@@ -5,20 +5,15 @@ import (
 	"time"
 )
 
-// A time limit on every statement of one profile, from `statement_timeout_ms`. It sits
-// above the driver, so the limit holds for every engine and not only for the two that
-// have a timeout of their own. The driver cancels the statement on the server when the
-// limit passes, because the context it was given is done.
+// The profile statement_timeout_ms setting is the context time limit passed to driver operations.
 
-// timeLimitedSession is one session with a limit on each statement it runs. It embeds the
-// session it wraps, so a call that runs no statement passes straight through.
+// timeLimitedSession is a session wrapper with per-operation timeouts. Other methods use the embedded session.
 type timeLimitedSession struct {
 	Session
 	timeout time.Duration
 }
 
-// MakeTimeLimited returns the session with the limit its profile named. A profile that
-// named none, or named zero, is answered as it is.
+// MakeTimeLimited applies a positive profile timeout. Other sessions remain unchanged.
 func MakeTimeLimited(inner Session) Session {
 	timeout := inner.Describe().Profile.StatementTimeout
 	if timeout <= 0 {
@@ -27,12 +22,10 @@ func MakeTimeLimited(inner Session) Session {
 	return &timeLimitedSession{Session: inner, timeout: timeout}
 }
 
-// unwrapSession returns the session inside, so a reader that looks for one kind of
-// session can look through this one.
+// unwrapSession returns the wrapped session.
 func (session *timeLimitedSession) unwrapSession() Session { return session.Session }
 
-// buildLimitedContext returns the context one statement runs under, and what gives its
-// time back.
+// buildLimitedContext returns a timed context and its cancellation function.
 func (session *timeLimitedSession) buildLimitedContext(
 	ctx context.Context,
 ) (context.Context, context.CancelFunc) {

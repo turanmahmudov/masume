@@ -13,7 +13,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
-// OverlayKind names what is drawn over the workspace.
+// OverlayKind is the workspace overlay category.
 type OverlayKind string
 
 // The overlays the client draws.
@@ -53,8 +53,7 @@ const WholeRow = -1
 type MenuAction struct {
 	ID    string
 	Label string
-	// The glyph of what the entry acts on, or nothing for an entry that acts on the thing
-	// the menu was opened on.
+	// The optional action target icon.
 	Icon cfg.IconKind
 	// The key this row is bound to, so the menu offers what a key also reaches.
 	Chord       string
@@ -78,7 +77,7 @@ type PaletteAction struct {
 	Chord string
 }
 
-// PromptKind names what a one-line prompt is asking for.
+// PromptKind is the one-line input category.
 type PromptKind string
 
 // The prompts the workspace opens.
@@ -93,14 +92,12 @@ const (
 	PromptReplace    PromptKind = "replace"
 )
 
-// ListState is where a list overlay stands. Every kind that draws rows of its own uses it,
-// so the keys that walk a list are written once.
+// ListState is the shared selection, scroll, and filter state for overlay lists.
 type ListState struct {
 	// The cursor of the list an overlay draws, and how far it has scrolled.
 	Cursor int
 	Offset int
-	// True while the wheel moved the rows away from the cursor, so the cursor may stand
-	// off screen until it moves again.
+	// True after scrolling independently of the cursor.
 	Rolled bool
 	// The term the field at the top of a list holds.
 	Term string
@@ -119,8 +116,7 @@ type CellTarget struct {
 	Value       any
 	RowIndex    int
 	ColumnIndex int
-	// The values the column takes. A cell with a list is picked, not typed, so the
-	// editor draws the list and holds no field.
+	// Allowed values for selection instead of text input.
 	Choices []string
 }
 
@@ -130,8 +126,7 @@ type ExportRequest struct {
 	Format   result.ExportFormat
 	CSV      result.CSVOptions
 	RowCount int
-	// True where the export writes every row the read returns, not only the rows read
-	// so far.
+	// True for the complete query result instead of loaded rows only.
 	WholeRead bool
 }
 
@@ -154,7 +149,7 @@ type ImportRequest struct {
 	Stage       ImportStage
 	Plan        load.Plan
 	TargetNames []string
-	// True once the user chose the format, so the name of a file no longer chooses it.
+	// True after an explicit format choice disables filename-based detection.
 	FormatChosen    bool
 	DelimiterChosen bool
 	Report          load.CheckReport
@@ -163,13 +158,10 @@ type ImportRequest struct {
 	Written         int
 }
 
-// AnswerCommand is the work an answer starts, handed back to the caller that ran the answer.
-// It is the shape of a command of the draw loop, named here so this package stays free of it.
+// AnswerCommand is a deferred command returned to the UI loop.
 type AnswerCommand func() any
 
-// OverlayAnswers is what the answer of an overlay runs. Each kind sets the one it asks with,
-// and the caller sets it when it opens the overlay. An answer hands its work back rather than
-// starting it, because only the draw loop may start one.
+// OverlayAnswers is the overlay response callbacks. Each callback returns a deferred command for the UI loop.
 type OverlayAnswers struct {
 	// What the answer of a question runs.
 	Answer func(bool) AnswerCommand
@@ -181,10 +173,7 @@ type OverlayAnswers struct {
 	Values func(map[string]any) AnswerCommand
 }
 
-// Overlay is the card on top of the workspace, or none where nothing is drawn over it. One
-// struct holds the state of every kind, so a field a kind does not use stands empty rather
-// than being read from somewhere else. Kind says which one it is, and each kind reads the
-// fields its own shape needs.
+// Overlay is the active workspace dialog state. Kind is the dialog category; unused fields remain empty.
 type Overlay struct {
 	Kind  OverlayKind
 	Title string
@@ -213,8 +202,7 @@ type Overlay struct {
 	Import  ImportRequest
 	Answers OverlayAnswers
 
-	// The rows the card gives its content, read when it opens, so the card does not
-	// grow while the user types.
+	// The content height fixed when the dialog opens.
 	ContentRows int
 	// What a key of the card reported, drawn before the keys.
 	Notice string
@@ -228,16 +216,15 @@ type Overlay struct {
 	// The `:name` marks of the statement, and the values the user filled in.
 	Names []string
 
-	// Which field of a form holds the caret.
+	// The active form field index.
 	Field int
 
-	// The scope the entries of a menu of actions are run in. An entry the scope does not
-	// bind is run in the global scope.
+	// The action menu key scope, with global fallback for unbound actions.
 	Scope cfg.KeyScope
 
 	// The prompt a one-line field is asking for.
 	Prompt PromptKind
-	// The hint under the prompt, which says what the field is for.
+	// The input hint below the prompt.
 	Hint string
 }
 
@@ -247,7 +234,7 @@ const (
 	PanelSlow     = "slow"
 )
 
-// DashboardPanels lists the panels, so a key that folds them folds every one.
+// DashboardPanels is the list of collapsible dashboard panels.
 var DashboardPanels = []string{PanelBlocking, PanelSlow}
 
 // ServerReading is what one read of the server answered.
@@ -255,18 +242,17 @@ type ServerReading struct {
 	Load  db.ServerLoad
 	Locks []db.LockWait
 	Slow  []db.StatementStat
-	// Which parts the server answered for. A part it does not report is left out.
+	// Available parts of the server response.
 	HasLoad  bool
 	HasLocks bool
 	HasSlow  bool
 	ReadAt   time.Time
 }
 
-// DashboardView is what the card keeps across a refresh: what the reader has done to it,
-// and the reading a rate is measured against.
+// DashboardView is the retained panel state and previous sample for rate calculations.
 type DashboardView struct {
 	Folded map[string]bool
-	// True while a read is on its way, so a slow server is asked once and not once per frame.
+	// True while a server request is pending.
 	Reading bool
 	// The reading before the one on screen, which a rate is measured against.
 	Previous    db.ServerLoad
@@ -274,8 +260,7 @@ type DashboardView struct {
 	HasPrevious bool
 }
 
-// ResolveCounterRate returns how fast a counter counted up between two readings, per
-// second. It reports false where no time passed, or where the counter fell.
+// ResolveCounterRate returns the increase per second, or false for nonpositive duration or a decreasing counter.
 func ResolveCounterRate(before, after int64, span time.Duration) (float64, bool) {
 	if span <= 0 || after < before {
 		return 0, false
@@ -301,7 +286,7 @@ func (overlay Overlay) IsOpen() bool {
 	return overlay.Kind != OverlayNone && overlay.Kind != ""
 }
 
-// The ids of the object menu, so a typo is a build error rather than a row that runs nothing.
+// Object menu action IDs.
 const (
 	ObjectGenerateSelect = "gen-select"
 	ObjectGenerateInsert = "gen-insert"
@@ -325,11 +310,10 @@ var generateSelect = MenuAction{
 	Icon: cfg.IconQuery,
 }
 
-// Each entry carries the glyph of what it acts on, and an entry that removes something
-// carries the mark of a warning, so a menu is read by its marks as well as by its words.
+// Table actions include target icons and destructive action markers.
 var tableActions = []MenuAction{
 	{
-		ID: ObjectErDiagram, Label: "ER diagram", Detail: "the tables it relates to",
+		ID: ObjectErDiagram, Label: "ER diagram", Detail: "related tables",
 		Icon: cfg.IconForeignKey,
 	},
 	generateSelect,
@@ -388,15 +372,12 @@ var schemaActions = []MenuAction{
 	},
 }
 
-// objectActionNeeds says which capability an entry of the object menu asks of the server.
-// An action the server has no statement for is not offered.
+// objectActionNeeds is the server capability check for each restricted action.
 var objectActionNeeds = map[string]func(core.Capabilities) bool{
 	ObjectTruncate: func(capabilities core.Capabilities) bool { return capabilities.TruncatesTable },
 }
 
-// BuildObjectActions returns what the object menu offers on this node. Every entry ends in a
-// statement, written into the editor or run, so a server that takes commands instead of SQL
-// has none of them.
+// BuildObjectActions returns actions for a tree node when the server supports DDL generation.
 func BuildObjectActions(node present.TreeNode, capabilities core.Capabilities) []MenuAction {
 	if !capabilities.WritesDDL {
 		return nil
@@ -428,7 +409,7 @@ func BuildObjectActions(node present.TreeNode, capabilities core.Capabilities) [
 	return nil
 }
 
-// BuildObjectTitle names what the object menu was opened on.
+// BuildObjectTitle returns the object menu title.
 func BuildObjectTitle(node present.TreeNode) string {
 	switch node.Kind {
 	case present.NodeSchema:

@@ -7,11 +7,10 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// WriteRisk is how much a statement risks, from none to the highest.
+// WriteRisk is the statement risk classification.
 type WriteRisk string
 
-// The four levels of risk. They are ordered, so one statement of a batch is enough
-// to raise the whole batch.
+// Risk levels in ascending order.
 const (
 	RiskNone     WriteRisk = "none"
 	RiskWrite    WriteRisk = "write"
@@ -30,8 +29,7 @@ func indexOfRisk(risk WriteRisk) int {
 	return 0
 }
 
-// ResolveStrongestRisk returns the highest risk of a set, because one statement is
-// enough.
+// ResolveStrongestRisk returns the highest risk in a set.
 func ResolveStrongestRisk(risks []WriteRisk) WriteRisk {
 	strongest := RiskNone
 	for _, risk := range risks {
@@ -56,19 +54,13 @@ var plainObjectKeywords = map[string]bool{
 	"extension": true, "policy": true,
 }
 
-// writingOpeners name the words a statement starts with to do work instead of
-// reading rows. Only the first word counts: `replace` is also a function, and
-// `copy` and `call` can be column names.
+// writingOpeners is the set of opening keywords classified as writes.
 var writingOpeners = map[string]bool{"copy": true, "refresh": true, "call": true, "do": true}
 
-// destructiveOpeners name the words that remove data first. MySQL removes the
-// conflicting row before it writes the new one.
+// destructiveOpeners is the set of destructive opening keywords. MySQL REPLACE deletes conflicting rows before insertion.
 var destructiveOpeners = map[string]bool{"replace": true}
 
-// readingOpeners name the words that open a statement which returns rows, or touches only
-// this session. Any other opening word is weighed as a write: a statement this client does
-// not know may be one the server writes with, such as MySQL `LOAD DATA`, and a statement
-// read as a read passes every check this client makes.
+// readingOpeners is the set of opening keywords eligible for read-only classification. Unknown opening keywords are writes.
 var readingOpeners = map[string]bool{
 	"select": true, "with": true, "values": true, "table": true, "show": true,
 	"describe": true, "desc": true, "explain": true, "lock": true, "pragma": true,
@@ -77,49 +69,41 @@ var readingOpeners = map[string]bool{
 	"declare": true, "fetch": true, "close": true, "deallocate": true,
 }
 
-// serverSettingScopes name the words that carry a SET past this session and into the
-// server, which every later connection then reads.
+// serverSettingScopes is the set of server-wide SET scopes.
 var serverSettingScopes = map[string]bool{"global": true, "persist": true, "persist_only": true}
 
-// sessionScopes name the words that keep a SET inside this session or this transaction,
-// and that stand between SET and the name of the setting.
+// sessionScopes is the set of session-local SET scopes.
 var sessionScopes = map[string]bool{"session": true, "local": true}
 
-// sessionSettings name the settings a SET or a RESET may touch and still count as a read.
-// They change how the session answers and nothing else.
+// sessionSettings is the allowlist for read-only SET and RESET classification, in addition to planner switches.
 //
-// A name that is not here is a write. A setting this client does not know may be one that
-// lets a later read write, and two of them do exactly that: `default_transaction_read_only`
-// in PostgreSQL and `transaction_read_only` in MySQL both turn a read-only session back
-// into one that writes, and every statement after that reads as safe.
+// PostgreSQL default_transaction_read_only and MySQL transaction_read_only can permit writes and are excluded.
 var sessionSettings = map[string]bool{
-	// How a value is written back.
+	// Value formatting and encoding.
 	"datestyle": true, "intervalstyle": true, "extra_float_digits": true,
 	"bytea_output": true, "client_encoding": true, "timezone": true, "time_zone": true,
 	"names": true, "character_set_client": true, "character_set_connection": true,
 	"character_set_results": true, "collation_connection": true,
 	"lc_monetary": true, "lc_numeric": true, "lc_time": true, "lc_messages": true,
-	// What the connection is called, and how much the server says.
+	// Session name and message level.
 	"application_name": true, "client_min_messages": true,
-	// How long the server gives a statement.
+	// Statement and session timeouts.
 	"statement_timeout": true, "lock_timeout": true, "max_execution_time": true,
 	"idle_in_transaction_session_timeout": true, "wait_timeout": true,
 	"innodb_lock_wait_timeout": true,
-	// Where an unqualified name is looked for.
+	// Schema search path.
 	"search_path": true,
-	// What the planner is given to work with.
+	// Planner and query settings.
 	"work_mem": true, "jit": true, "random_page_cost": true, "cpu_tuple_cost": true,
 	"effective_cache_size": true, "effective_io_concurrency": true,
 	"group_concat_max_len": true, "sql_select_limit": true, "optimizer_switch": true,
 	"profiling": true,
 }
 
-// plannerSettingPrefix opens the name of every planner switch, of which there are dozens
-// and each one only decides how a read is run.
+// plannerSettingPrefix is the prefix accepted for planner switches.
 const plannerSettingPrefix = "enable_"
 
-// holdsReadWritePhrase is true for the `read write` of a transaction mode, which takes a
-// read-only session back to one that writes.
+// holdsReadWritePhrase detects a READ WRITE transaction mode.
 func holdsReadWritePhrase(tokens []syntax.CodeToken) bool {
 	for at, token := range tokens {
 		if token.Text != "write" || !syntax.IsWordKind(token.Kind) {
@@ -132,8 +116,7 @@ func holdsReadWritePhrase(tokens []syntax.CodeToken) bool {
 	return false
 }
 
-// readOpeningWordInside returns the word the statement opens with, past the brackets a read
-// may open with, as `(select 1) union (select 2)` does.
+// readOpeningWordInside returns the first word after any opening parentheses.
 func readOpeningWordInside(tokens []syntax.CodeToken) string {
 	for _, token := range tokens {
 		if syntax.IsWordKind(token.Kind) {
@@ -146,10 +129,7 @@ func readOpeningWordInside(tokens []syntax.CodeToken) string {
 	return ""
 }
 
-// isSettingStatement is true for a SET, a RESET or a PRAGMA that only reads or only
-// touches this session. `set global` reaches the server, a PRAGMA with a value written to
-// it changes the file, and a setting this client does not know may be one that opens the
-// session to writes.
+// isSettingStatement checks SET, RESET, and PRAGMA forms eligible for read-only classification.
 func isSettingStatement(tokens []syntax.CodeToken, opening string) bool {
 	if opening == "pragma" {
 		return !syntax.IsOperatorAnywhere(tokens, "=")
@@ -172,9 +152,7 @@ func isSettingStatement(tokens []syntax.CodeToken, opening string) bool {
 	if !present {
 		return false
 	}
-	// A transaction mode names no setting. It is a read unless it asks to write, which
-	// `set transaction read write` and `set session characteristics as transaction read
-	// write` both do.
+	// Transaction modes with READ WRITE are classified as writes.
 	if named.Text == "transaction" || named.Text == "characteristics" {
 		return !holdsReadWritePhrase(tokens)
 	}
@@ -189,9 +167,7 @@ func isSettingStatement(tokens []syntax.CodeToken, opening string) bool {
 	return sessionSettings[setting] || strings.HasPrefix(setting, plannerSettingPrefix)
 }
 
-// definesRoutine is true where a routine body is stored, not run, so a DELETE in it
-// removes nothing. Only MySQL reaches this, because a PostgreSQL body is a
-// dollar-quoted string.
+// definesRoutine detects stored routine definitions. MySQL bodies contain code tokens; PostgreSQL bodies commonly use dollar-quoted strings.
 func definesRoutine(tokens []syntax.CodeToken) bool {
 	opening := syntax.ReadOpeningWord(tokens)
 	if opening != "create" && opening != "alter" {
@@ -211,22 +187,18 @@ func definesRoutine(tokens []syntax.CodeToken) bool {
 	return false
 }
 
-// unqualifiedWriteOpeners name the words a statement starts with to change rows it
-// may not have named.
+// unqualifiedWriteOpeners is the set of writes checked for a missing WHERE clause.
 var unqualifiedWriteOpeners = map[string]bool{"update": true, "delete": true, "truncate": true}
 
-// lockClauseWords are the words of a locking clause between `for` and `update`, as
-// in `for no key update`.
+// lockClauseWords is the optional words between FOR and UPDATE in a locking clause.
 var lockClauseWords = map[string]bool{"no": true, "key": true}
 
-// isCalledAsFunction is true where the word is a call, as MySQL `truncate(1.234, 2)`
-// is. A keyword followed by a bracket names a function, not the statement.
+// isCalledAsFunction detects a following parenthesis, as in MySQL truncate(1.234, 2).
 func isCalledAsFunction(tokens []syntax.CodeToken, hit syntax.KeywordHit) bool {
 	return syntax.IsOperator(tokens, hit.Index+syntax.CountKeywordTokens(hit.Keyword), "(")
 }
 
-// belongsToLockClause is true where the word belongs to `select … for update`, which
-// locks and writes nothing.
+// belongsToLockClause detects UPDATE in a SELECT locking clause.
 func belongsToLockClause(tokens []syntax.CodeToken, hit syntax.KeywordHit) bool {
 	for at := hit.Index - 1; at >= 0 && at >= hit.Index-3; at-- {
 		token, present := syntax.TokenAt(tokens, at)
@@ -244,8 +216,7 @@ func belongsToLockClause(tokens []syntax.CodeToken, hit syntax.KeywordHit) bool 
 	return false
 }
 
-// keepStatementHits returns the hits that are the statement itself, not a call and
-// not a lock.
+// keepStatementHits excludes function calls and locking clauses.
 func keepStatementHits(tokens []syntax.CodeToken, hits []syntax.KeywordHit) []syntax.KeywordHit {
 	kept := make([]syntax.KeywordHit, 0, len(hits))
 	for _, hit := range hits {
@@ -256,8 +227,7 @@ func keepStatementHits(tokens []syntax.CodeToken, hits []syntax.KeywordHit) []sy
 	return kept
 }
 
-// readActingWord returns the word the statement acts with: the opening one, or the
-// first one after a CTE list.
+// readActingWord returns the opening keyword or the first top-level write keyword after WITH.
 func readActingWord(tokens []syntax.CodeToken) string {
 	opening := syntax.ReadOpeningWord(tokens)
 	if opening != "with" {
@@ -274,8 +244,7 @@ func readActingWord(tokens []syntax.CodeToken) string {
 	return hits[0].Keyword
 }
 
-// isUnqualifiedWrite is true for a write without a top-level WHERE. A WHERE in
-// brackets belongs to a subquery.
+// isUnqualifiedWrite detects TRUNCATE and UPDATE or DELETE without a top-level WHERE.
 func isUnqualifiedWrite(tokens []syntax.CodeToken) bool {
 	acting := readActingWord(tokens)
 	if !unqualifiedWriteOpeners[acting] {
@@ -287,8 +256,7 @@ func isUnqualifiedWrite(tokens []syntax.CodeToken) bool {
 	return len(syntax.FindKeywordsIn(tokens, []string{"where"})) == 0
 }
 
-// ResolveWriteRisk weighs the statement. DELETE, DROP and TRUNCATE are one group,
-// and a write without a WHERE ranks higher.
+// ResolveWriteRisk classifies statement risk from tokens. Unqualified writes have the highest risk.
 func ResolveWriteRisk(sql string, flavour syntax.SyntaxFlavour) WriteRisk {
 	tokens := syntax.ReadCodeTokens(sql, flavour)
 	opening := syntax.ReadOpeningWord(tokens)
@@ -318,7 +286,7 @@ func ResolveWriteRisk(sql string, flavour syntax.SyntaxFlavour) WriteRisk {
 	if writingOpeners[opening] || syntax.SelectsIntoTarget(tokens) {
 		return RiskWrite
 	}
-	// A buffer of nothing but comments runs nothing.
+	// Empty or comment-only input has no write risk.
 	if len(tokens) == 0 {
 		return RiskNone
 	}
@@ -329,8 +297,7 @@ func ResolveWriteRisk(sql string, flavour syntax.SyntaxFlavour) WriteRisk {
 	if !isSettingStatement(tokens, acting) {
 		return RiskWrite
 	}
-	// `begin read write` and `start transaction read write` open a transaction that
-	// writes, whatever the connection was set read-only for.
+	// READ WRITE transaction modes are classified as writes.
 	if transactionOpeners[acting] && holdsReadWritePhrase(tokens) {
 		return RiskWrite
 	}
@@ -340,12 +307,12 @@ func ResolveWriteRisk(sql string, flavour syntax.SyntaxFlavour) WriteRisk {
 type riskVerb struct{ one, many string }
 
 var riskVerbs = map[WriteRisk]riskVerb{
-	RiskNone:   {"reads only", "read only"},
+	RiskNone:   {"is classified as read-only", "are classified as read-only"},
 	RiskWrite:  {"writes to the database", "write to the database"},
 	RiskDelete: {"removes data", "remove data"},
 	RiskEveryRow: {
-		"names no rows, so it lands on every row",
-		"name no rows, so they land on every row",
+		"has no WHERE clause and may affect every row",
+		"include a write without a WHERE clause that may affect every row",
 	},
 }
 
@@ -364,8 +331,7 @@ type Confirmation struct {
 	Body  string
 }
 
-// BuildConfirmation writes the question. The profile and the environment are named,
-// because the risk depends on them.
+// BuildConfirmation builds a confirmation with the profile, environment, risk, and statement text.
 func BuildConfirmation(
 	profileName, environment string, risk WriteRisk, statements []string,
 ) Confirmation {

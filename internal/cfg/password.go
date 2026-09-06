@@ -11,15 +11,12 @@ import (
 	"github.com/turanmahmudov/masume/internal/secret"
 )
 
-// The password of a profile: the value in the file, the value of an environment variable,
-// or the output of a command. A command that fails is reported, so a locked keyring does not
-// become a login error.
+// Password sources include memory, environment variables, commands, and the system keyring.
 
-// passwordCommandTimeout is the time a locked keyring has to ask the user to unlock it.
+// passwordCommandTimeout is the password command time limit.
 const passwordCommandTimeout = 30 * time.Second
 
-// readFirstLine returns the first line of the output of a command, so a store that prints
-// more than one line still works.
+// readFirstLine returns the first output line without its line ending.
 func readFirstLine(output string) string {
 	line := output
 	if before, _, ok := strings.Cut(output, "\n"); ok {
@@ -28,21 +25,18 @@ func readFirstLine(output string) string {
 	return strings.TrimSuffix(line, "\r")
 }
 
-// runPasswordCommand runs the command a profile reads its password with and returns its
-// output. The source is what the command is called in a report: the password command of the
-// profile, or the store it names.
+// runPasswordCommand returns the password command output. The source is the command label in errors.
 func runPasswordCommand(source, name, written string) (string, error) {
 	ctx, stop := context.WithTimeout(context.Background(), passwordCommandTimeout)
 	defer stop()
 
-	// Without stdin, a command that prompts in the terminal fails instead of drawing
-	// over the interface.
+	// The command has no terminal input.
 	command := exec.CommandContext(ctx, "sh", "-c", written)
 	command.Stdin = nil
 	printed, err := command.Output()
 
 	if ctx.Err() != nil {
-		return "", fmt.Errorf("the %s for %s did not answer within %.0fs: %s",
+		return "", fmt.Errorf("the %s for %s exceeded the %.0fs time limit: %s",
 			source, name, passwordCommandTimeout.Seconds(), written)
 	}
 	if err != nil {
@@ -51,7 +45,7 @@ func runPasswordCommand(source, name, written string) (string, error) {
 			if said := readFirstLine(strings.TrimSpace(string(reported.Stderr))); said != "" {
 				reason = said
 			}
-			return "", fmt.Errorf("the %s for %s failed with code %d: %s",
+			return "", fmt.Errorf("the %s for %s failed with exit code %d: %s",
 				source, name, reported.ExitCode(), reason)
 		}
 		return "", fmt.Errorf("the %s for %s failed: %w", source, name, err)
@@ -59,14 +53,12 @@ func runPasswordCommand(source, name, written string) (string, error) {
 
 	password := readFirstLine(string(printed))
 	if password == "" {
-		return "", fmt.Errorf("the %s for %s printed nothing: %s", source, name, written)
+		return "", fmt.Errorf("the %s for %s returned an empty password: %s", source, name, written)
 	}
 	return password, nil
 }
 
-// ResolveProfilePassword returns the password of the profile, or an empty value if the user
-// is the only source. A keyring that holds nothing for the profile answers with an empty
-// value as well, because the first connection of such a profile is typed.
+// ResolveProfilePassword returns the profile password, or an empty string if a prompt is necessary.
 func ResolveProfilePassword(profile Profile) (string, error) {
 	switch profile.Auth {
 	case AuthCommand:

@@ -9,15 +9,12 @@ import (
 	"time"
 )
 
-// Some gateways are behind a network device that resets the connection instead of answering
-// a hello that offers TLS 1.3. The handshake fails before the client writes a request, so the
-// client opens the connection again with TLS 1.2 as the maximum and stores the host.
+// Some network devices reset TLS 1.3 handshakes. A successful TLS 1.2 retry records the host for later connections.
 
 // handshakeTimeout is the time limit of one attempt to open a connection.
 const handshakeTimeout = 20 * time.Second
 
-// responseHeaderTimeout is the time a provider has to send its headers. The body after them
-// has no time limit, because a model can write a long reply.
+// responseHeaderTimeout is the response header timeout. The response body has no transport timeout.
 const responseHeaderTimeout = 2 * time.Minute
 
 // tlsFallback stores the hosts that answer only with TLS 1.2 as the maximum.
@@ -45,8 +42,7 @@ func (fallback *tlsFallback) keepOldTLS(address string) {
 
 var oldTLSHosts = &tlsFallback{}
 
-// buildTLSConfig returns the configuration of one attempt. It lists the protocols, so the
-// transport can still use HTTP/2 if the server supports it.
+// buildTLSConfig configures TLS and advertises HTTP/2 and HTTP/1.1 through ALPN.
 func buildTLSConfig(host string, ceiling uint16) *tls.Config {
 	config := &tls.Config{
 		ServerName: host,
@@ -63,8 +59,7 @@ func buildTLSConfig(host string, ceiling uint16) *tls.Config {
 func shakeHands(
 	ctx context.Context, dialer *net.Dialer, network, address, host string, ceiling uint16,
 ) (net.Conn, error) {
-	// The end of this context does not affect a completed handshake, so the connection
-	// stays open after it.
+	// Cancelling the handshake context does not close an established connection.
 	ctx, cancel := context.WithTimeout(ctx, handshakeTimeout)
 	defer cancel()
 
@@ -80,9 +75,7 @@ func shakeHands(
 	return held, nil
 }
 
-// dialTLS opens the connection of one request. If a host resets a hello that offered TLS
-// 1.3, the client tries again with TLS 1.2 as the maximum. The client writes no part of the
-// request before the handshake, so the second attempt sends nothing a second time.
+// dialTLS retries a failed connection with TLS 1.2 unless the context is cancelled. HTTP request data follows the handshake.
 func dialTLS(ctx context.Context, network, address string) (net.Conn, error) {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {

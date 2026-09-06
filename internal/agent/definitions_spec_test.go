@@ -229,8 +229,8 @@ func TestExplainQueryEstimatesAWriteAfterItIsAllowed(t *testing.T) {
 		t.Fatalf("the answer was %T, wanted a map", answered)
 	}
 	note, _ := held["note"].(string)
-	if !strings.Contains(note, "nothing ran") {
-		t.Errorf("the answer reads %v and does not say nothing ran", answered)
+	if !strings.Contains(note, "without statement execution") {
+		t.Errorf("the answer does not confirm that the statement was not executed: %v", answered)
 	}
 }
 

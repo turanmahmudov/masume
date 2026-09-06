@@ -61,11 +61,7 @@ func readFlag(value any) bool {
 	return held && isFlag
 }
 
-// readTimestamp returns a timestamp column as a time. A column the server left null, or
-// one the driver gave in another shape, reads as the zero time, which every caller here
-// takes as "the server reported nothing".
-// readOptionalFloat reads a number the server can leave unset, and reports whether it was
-// there. A server that answers nothing for a measure has not measured zero.
+// readOptionalFloat reads a numeric measurement and distinguishes missing values from zero.
 func readOptionalFloat(value any) (float64, bool) {
 	switch held := value.(type) {
 	case nil:
@@ -81,14 +77,11 @@ func readOptionalFloat(value any) (float64, bool) {
 	case int:
 		return float64(held), true
 	case string:
-		// A numeric of the server arrives as its own text where the driver has no type
-		// for it. Read as nothing it would turn a measure the server did make into one
-		// it did not.
+		// Drivers can return numeric values as text.
 		read, err := strconv.ParseFloat(held, 64)
 		return read, err == nil
 	}
-	// Anything else carries its value in a form only its own type knows, and the text of
-	// it is what every other reader of this package falls back to.
+	// Other numeric types use their text representation.
 	if written := db.ReadAnyText(value); written != "" {
 		read, err := strconv.ParseFloat(written, 64)
 		return read, err == nil
@@ -104,8 +97,7 @@ func readTimestamp(value any) time.Time {
 	return held
 }
 
-// RenderTableDDL builds a CREATE TABLE from the catalog rows the detail tabs already
-// read, because PostgreSQL keeps no statement of its own for a table.
+// RenderTableDDL builds CREATE TABLE SQL from catalog metadata.
 func RenderTableDDL(
 	detail db.TableDetail, indexes []db.IndexDetail, constraints []db.ConstraintDetail,
 	dialect *query.Dialect,

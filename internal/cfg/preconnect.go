@@ -8,8 +8,7 @@ import (
 	"time"
 )
 
-// The command a profile runs before the client connects to the server, for example an SSH
-// tunnel or a cloud proxy. The command runs as long as the connection is open.
+// A pre-connect command starts a tunnel or proxy before the database connection opens.
 
 // pollInterval is the time between two tests of the port while the command starts.
 const pollInterval = 100 * time.Millisecond
@@ -23,13 +22,11 @@ const stopGrace = 2 * time.Second
 // PreConnectHandle is a running pre-connect command and the data needed to stop it.
 type PreConnectHandle struct {
 	command *exec.Cmd
-	// exited is closed after the wait on the command. Until then the process keeps an
-	// entry in the process table, so no other process can use its id.
+	// exited closes after Wait. The process ID remains reserved until Wait returns.
 	exited chan struct{}
 }
 
-// Stop stops the command if it still runs. It stops the whole process group, because the
-// shell can pass the work to a child process such as ssh.
+// Stop stops the command and its process group, including child processes such as ssh.
 func (handle *PreConnectHandle) Stop() {
 	if handle == nil || handle.command == nil || handle.command.Process == nil {
 		return
@@ -65,8 +62,7 @@ func isPortOpen(host string, port int) bool {
 	return true
 }
 
-// waitForPort waits until a process accepts a connection on the port. A tunnel or a proxy
-// is ready only when it listens, which is later than the start of the command.
+// waitForPort waits for a TCP listener, command exit, or timeout.
 func waitForPort(host string, port int, timeout time.Duration, exited <-chan struct{}) bool {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -75,8 +71,7 @@ func waitForPort(host string, port int, timeout time.Duration, exited <-chan str
 		}
 		select {
 		case <-exited:
-			// A command that goes to the background exits as soon as it listens, so
-			// the port is tested one more time before the wait fails.
+			// A command can exit after starting a background listener.
 			return isPortOpen(host, port)
 		default:
 		}
@@ -87,19 +82,18 @@ func waitForPort(host string, port int, timeout time.Duration, exited <-chan str
 	}
 }
 
-// StartPreConnectCommand runs the pre-connect command of a profile. It returns a handle
-// that the caller must stop when the connection closes.
+// StartPreConnectCommand starts the profile command. The caller must stop the handle when the connection closes.
 func StartPreConnectCommand(profile Profile) (*PreConnectHandle, error) {
 	if profile.Command == "" {
 		return &PreConnectHandle{}, nil
 	}
 
-	// A separate process group, so every child process can be stopped later.
+	// The command and its children share a separate process group.
 	command := exec.Command("sh", "-c", profile.Command)
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := command.Start(); err != nil {
 		return nil, fmt.Errorf(
-			"the command for %s did not start: %w", profile.Name, err)
+			"the pre-connect command for %s failed to start: %w", profile.Name, err)
 	}
 	handle := &PreConnectHandle{command: command, exited: make(chan struct{})}
 	go func() {
@@ -116,6 +110,6 @@ func StartPreConnectCommand(profile Profile) (*PreConnectHandle, error) {
 
 	handle.Stop()
 	return nil, fmt.Errorf(
-		"the command for %s did not open port %d within %.0fs: %s",
+		"the pre-connect command for %s did not open port %d within %.0fs: %s",
 		profile.Name, profile.WaitForPort, profile.CommandTimeout.Seconds(), profile.Command)
 }

@@ -10,11 +10,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// Reads what one value of a file holds, and what a column of them holds. A file carries
-// text, so the kind of a column is read from the values in it.
+// Import column types come from the sampled values.
 
-// timestampLayouts are the forms a timestamp in a data file is written in, the most exact
-// first.
+// timestampLayouts are the supported timestamp formats, with the most precise first.
 var timestampLayouts = []string{
 	time.RFC3339Nano,
 	time.RFC3339,
@@ -28,14 +26,13 @@ var timestampLayouts = []string{
 	"02/01/2006",
 }
 
-// booleanWords give the value of every word a data file writes a boolean with.
+// booleanWords are the supported boolean strings and their values.
 var booleanWords = map[string]bool{
 	"true": true, "false": false, "t": true, "f": false,
 	"yes": true, "no": false, "y": true, "n": false, "1": true, "0": false,
 }
 
-// ReadValueKind returns the kind of one value of a file. A value that is not there belongs
-// to no kind.
+// ReadValueKind returns the type of an import value, or false for null.
 func ReadValueKind(value any) (core.ColumnKind, bool) {
 	switch held := value.(type) {
 	case nil:
@@ -56,8 +53,7 @@ func ReadValueKind(value any) (core.ColumnKind, bool) {
 	return core.KindText, true
 }
 
-// readTextKind returns the kind the text of a field holds. A number written with a leading
-// zero is read as text, because a code such as `007` is not the number seven.
+// readTextKind infers a field type. Numbers with leading zeros remain text.
 func readTextKind(written string) core.ColumnKind {
 	trimmed := strings.TrimSpace(written)
 	if trimmed == "" {
@@ -83,8 +79,7 @@ func readTextKind(written string) core.ColumnKind {
 	return core.KindText
 }
 
-// holdsDigitOnly is true for text of digits alone. `1` and `0` are the two words a boolean
-// and a number share, and a column of them is read as a number.
+// holdsDigitOnly is true for non-empty text containing only digits.
 func holdsDigitOnly(written string) bool {
 	for _, held := range written {
 		if held < '0' || held > '9' {
@@ -94,9 +89,7 @@ func holdsDigitOnly(written string) bool {
 	return written != ""
 }
 
-// holdsLeadingZero is true for a number written with a zero in front of it, such as a
-// postal code or a product code. A column of them is text, because the zero is part of the
-// value and a number would drop it.
+// holdsLeadingZero is true for a signed or unsigned number with a leading zero before another non-decimal character.
 func holdsLeadingZero(written string) bool {
 	held := strings.TrimPrefix(strings.TrimPrefix(written, "-"), "+")
 	return len(held) > 1 && held[0] == '0' && held[1] != '.'
@@ -112,8 +105,7 @@ func ReadTimestamp(written string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// ResolveColumnKind returns the kind that holds every value of a column. A column of nothing
-// but values that are not there is text.
+// ResolveColumnKind returns a type for all column values. An all-null column uses text.
 func ResolveColumnKind(values []any) core.ColumnKind {
 	resolved := core.ColumnKind("")
 	for _, value := range values {
@@ -132,13 +124,12 @@ func ResolveColumnKind(values []any) core.ColumnKind {
 	return resolved
 }
 
-// ValueError is a value of a file that the column it is mapped to cannot hold.
+// ValueError is an import value conversion error.
 type ValueError struct{ Reason string }
 
 func (err ValueError) Error() string { return err.Reason }
 
-// CastValue returns the value as the kind of its column holds it. A value the kind cannot
-// hold is reported with the reason.
+// CastValue converts an import value to the target column type.
 func CastValue(value any, kind core.ColumnKind) (any, error) {
 	if value == nil {
 		return nil, nil
@@ -154,7 +145,7 @@ func CastValue(value any, kind core.ColumnKind) (any, error) {
 		if kind == core.KindBoolean || kind == core.KindText {
 			return castBoolean(held, kind), nil
 		}
-		return nil, failValue("%v is no %s", held, kind)
+		return nil, failValue("cannot convert %v to %s", held, kind)
 	default:
 		return value, nil
 	}
@@ -180,25 +171,25 @@ func castText(written string, kind core.ColumnKind) (any, error) {
 	case core.KindInteger:
 		held, err := strconv.ParseInt(written, 10, 64)
 		if err != nil {
-			return nil, failValue("%q is no whole number", written)
+			return nil, failValue("invalid integer %q", written)
 		}
 		return held, nil
 	case core.KindNumber:
 		held, err := strconv.ParseFloat(written, 64)
 		if err != nil {
-			return nil, failValue("%q is no number", written)
+			return nil, failValue("invalid number %q", written)
 		}
 		return held, nil
 	case core.KindBoolean:
 		held, known := booleanWords[strings.ToLower(written)]
 		if !known {
-			return nil, failValue("%q is no yes or no", written)
+			return nil, failValue("invalid boolean %q", written)
 		}
 		return held, nil
 	case core.KindTimestamp:
 		held, read := ReadTimestamp(written)
 		if !read {
-			return nil, failValue("%q is no date or time", written)
+			return nil, failValue("invalid date or time %q", written)
 		}
 		return held, nil
 	}
@@ -209,8 +200,7 @@ func failValue(format string, parts ...any) error {
 	return ValueError{Reason: fmt.Sprintf(format, parts...)}
 }
 
-// holdsWholeDigits is true for a whole number written in digits alone. One too large for 64
-// bits is kept as text, which keeps its last digits.
+// holdsWholeDigits is true for a signed or unsigned integer string.
 func holdsWholeDigits(written string) bool {
 	digits := strings.TrimPrefix(strings.TrimPrefix(written, "-"), "+")
 	if digits == "" {

@@ -1,8 +1,4 @@
-// Package headless runs one statement without a screen and writes the result to a stream,
-// so a script, a Makefile or a CI job uses the same profiles, timeouts and access limits as
-// the client.
-//
-// Nothing here draws. The exit code is the answer for a caller that reads no output.
+// Package headless runs statements without a screen, writes results to a stream, and returns an exit code.
 package headless
 
 import (
@@ -23,16 +19,16 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// The exit codes. A caller that reads no output tells the four apart by these.
+// Process exit codes.
 const (
 	CodeOK = 0
-	// CodeStatement is written when the server refused a statement, or it could not bind.
+	// CodeStatement is a statement, parameter, plan, or output failure.
 	CodeStatement  = 1
 	CodeConnection = 2
 	CodeRefused    = 3
 )
 
-// connectTimeout is how long the server has to accept the connection.
+// connectTimeout is the connection timeout.
 const connectTimeout = 30 * time.Second
 
 // Format is how a result is written.
@@ -62,14 +58,14 @@ func FindFormat(written string) (Format, bool) {
 	return core.FindAllowed(Formats, strings.ToLower(strings.TrimSpace(written)))
 }
 
-// Options is what one run was asked to do.
+// Options is a headless request.
 type Options struct {
 	Profile  cfg.Profile
 	Password string
 	// The statements to run, as one text.
 	Statement string
 	Format    Format
-	// How many rows one statement returns. Zero reads every row the statement returns.
+	// Row limit. Zero uses the profile page size unless the statement has a limit.
 	RowLimit int
 	Params   map[string]any
 	Explain  bool
@@ -85,9 +81,9 @@ func (options Options) report(format string, parts ...any) {
 // Run opens the connection, runs every statement, and returns the exit code of the run.
 func Run(ctx context.Context, adapters engines.Adapters, options Options) int {
 	if cfg.NeedsPasswordPrompt(options.Profile) && options.Password == "" {
-		options.report("%s needs a password, and a run without a screen cannot ask for one; "+
-			"set password_env, password_command or a [secret] store on the profile, or "+
-			"open it once in the client so the keyring holds its password",
+		options.report("%s requires a password; headless mode cannot prompt for passwords. "+
+			"Set password_env, password_command, or a [secret] store on the profile, or "+
+			"save the password in the keyring through the interactive client",
 			options.Profile.Name)
 		return CodeConnection
 	}
@@ -104,13 +100,13 @@ func Run(ctx context.Context, adapters engines.Adapters, options Options) int {
 	held := session.Language()
 	statements := held.SplitStatements(options.Statement)
 	if len(statements) == 0 {
-		options.report("there is no statement to run")
+		options.report("no statement to run")
 		return CodeStatement
 	}
 
 	if options.Format == FormatJSON && len(statements) > 1 {
-		options.report("json holds one result, and this run has %d statements; "+
-			"use csv or table, or run them one at a time", len(statements))
+		options.report("json output supports one statement per run; received %d statements. "+
+			"Use csv or table, or run each statement separately", len(statements))
 		return CodeStatement
 	}
 
@@ -122,8 +118,7 @@ func Run(ctx context.Context, adapters engines.Adapters, options Options) int {
 	return CodeOK
 }
 
-// resolveRowLimit returns how many rows one read returns: the number the caller asked for,
-// or one page of the profile.
+// resolveRowLimit returns the requested row limit or the profile page size.
 func resolveRowLimit(options Options) int {
 	if options.RowLimit > 0 {
 		return options.RowLimit
@@ -182,8 +177,7 @@ func runOneStatement(
 		return CodeStatement
 	}
 
-	// A statement that bounds its own result is read whole. Any other is read one page at
-	// a time, the same as in the client.
+	// Stream queries with their own limit unless an explicit output limit applies.
 	if writes || options.RowLimit > 0 || !held.HoldsRowLimit(sql) {
 		return writeOneRead(ctx, session, options, bound, writes)
 	}
@@ -201,7 +195,7 @@ func writeOneRead(
 		return CodeStatement
 	}
 	if len(answered.Columns) == 0 && !answered.HoldsResultSet {
-		// The output stream holds the document alone, so this goes to the error stream.
+		// Write statement status to stderr.
 		options.report("%s", describeChange(answered))
 		return CodeOK
 	}
@@ -209,12 +203,12 @@ func writeOneRead(
 	sink := createRowSink(options.Format, options.Out)
 	if len(answered.Rows) > 0 {
 		if err := sink.TakeRows(answered.Rows, answered.Columns); err != nil {
-			options.report("the result could not be written: %v", err)
+			options.report("cannot write the result: %v", err)
 			return CodeStatement
 		}
 	}
 	if err := sink.Finish(answered.Columns); err != nil {
-		options.report("the result could not be written: %v", err)
+		options.report("cannot write the result: %v", err)
 		return CodeStatement
 	}
 
@@ -222,17 +216,17 @@ func writeOneRead(
 		return CodeOK
 	}
 	if options.RowLimit > 0 {
-		options.report("the first %d rows of a longer result, which is the number asked for",
+		options.report("returned the first %d rows; the result exceeds the requested limit",
 			len(answered.Rows))
 		return CodeOK
 	}
 	if writes {
-		options.report("only the first %d rows of a longer result: a statement that "+
-			"changes something is never run twice", len(answered.Rows))
+		options.report("returned only the first %d rows; write results are incomplete. "+
+			"The write was not repeated. Do not automatically retry the write", len(answered.Rows))
 		return CodeStatement
 	}
-	options.report("the first %d rows of a longer result; add a limit to the statement, "+
-		"or --limit, to read more", len(answered.Rows))
+	options.report("returned the first %d rows; the result exceeds the page size. Add a statement limit "+
+		"or --limit to read more", len(answered.Rows))
 	return CodeOK
 }
 
@@ -253,11 +247,10 @@ func streamWholeRead(
 		return CodeStatement
 	}
 
-	// The statement is not read again for the columns: one this client reads as changing
-	// nothing can still take a lock, `select … for update` among them.
+	// Do not repeat the query for column metadata. SELECT FOR UPDATE can acquire locks.
 
 	if err := sink.Finish(columns); err != nil {
-		options.report("the result could not be written: %v", err)
+		options.report("cannot write the result: %v", err)
 		return CodeStatement
 	}
 	return CodeOK
@@ -272,11 +265,11 @@ func writePlan(
 		return CodeStatement
 	}
 	if !session.Capabilities().PlansEveryStatement && !held.CanExplain(sql) {
-		options.report("the server has no plan for this statement")
+		options.report("the server does not support plans for this statement")
 		return CodeStatement
 	}
 
-	// A server does not plan a statement that still holds a placeholder.
+	// Replace named parameters before requesting a plan.
 	shown, err := statement.InlineQueryParameters(sql, options.Params, session.Dialect())
 	if err != nil {
 		options.report("%s", err)
@@ -302,8 +295,7 @@ func writePlan(
 	})
 }
 
-// describePlanNode returns one node of a plan. A count the server did not measure or
-// estimate is written as null, not as zero.
+// describePlanNode returns a plan node with null for unavailable counts and times.
 func describePlanNode(row result.PlanRow) map[string]any {
 	var estimatedRows, actualRows, selfMs any
 	if row.Node.HasEstimatedRows {
@@ -326,12 +318,12 @@ func describePlanNode(row result.PlanRow) map[string]any {
 func writeJSON(options Options, written any) int {
 	encoded, err := json.MarshalIndent(written, "", "  ")
 	if err != nil {
-		options.report("the answer could not be written as JSON: %v", err)
+		options.report("cannot encode the result as JSON: %v", err)
 		return CodeStatement
 	}
-	// A closed pipe would otherwise tell a script its output is whole when it is not.
+	// Output failures return a nonzero exit code.
 	if _, err := fmt.Fprintln(options.Out, string(encoded)); err != nil {
-		options.report("the answer could not be written: %v", err)
+		options.report("cannot write the result: %v", err)
 		return CodeStatement
 	}
 	return CodeOK

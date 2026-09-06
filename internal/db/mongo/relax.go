@@ -7,13 +7,9 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-// The shell writes a document the way JavaScript writes an object: a bare key, a single
-// quote, a regular expression between slashes, and a helper such as ObjectId. The driver
-// reads extended JSON only, so the text is written again here before it is read.
+// Shell values use unquoted keys, single quotes, regular expressions, and BSON helpers. The parser converts these to Extended JSON.
 
-// shellHelpers name the helper functions of the shell, and the extended JSON field each
-// one becomes. A helper that takes a number keeps the number as text, which is what
-// extended JSON asks for.
+// shellHelpers is the map of shell helper names to Extended JSON fields. Numeric helper values remain strings.
 var shellHelpers = map[string]string{
 	"ObjectId":      "$oid",
 	"ISODate":       "$date",
@@ -28,8 +24,7 @@ var shellHelpers = map[string]string{
 // jsonWords are the three bare words that stay bare, because JSON reads them itself.
 var jsonWords = map[string]bool{"true": true, "false": true, "null": true}
 
-// ReadValue reads one value of a statement: a document, an array, or a single value. It
-// is wrapped in a document first, because extended JSON is read from a document only.
+// ReadValue parses a shell value inside a document wrapper required by the Extended JSON decoder.
 func ReadValue(written string) (any, error) {
 	relaxed, err := RelaxValue(written)
 	if err != nil {
@@ -57,7 +52,7 @@ func ReadDocument(written string) (bson.D, error) {
 	}
 	document, isDocument := value.(bson.D)
 	if !isDocument {
-		return nil, newSyntaxError("this argument is not a document")
+		return nil, newSyntaxError("this argument must be a document")
 	}
 	return document, nil
 }
@@ -73,7 +68,7 @@ func ReadArray(written string) (bson.A, error) {
 	}
 	array, isArray := value.(bson.A)
 	if !isArray {
-		return nil, newSyntaxError("this argument is not an array")
+		return nil, newSyntaxError("this argument must be an array")
 	}
 	return array, nil
 }
@@ -177,7 +172,7 @@ func (relax *relaxer) writeSlash() error {
 		case '*':
 			closed := strings.Index(relax.source[relax.at+2:], "*/")
 			if closed == -1 {
-				return newSyntaxError("this comment never closes")
+				return newSyntaxError("missing closing comment delimiter")
 			}
 			relax.at += closed + 4
 			return nil
@@ -206,12 +201,12 @@ func (relax *relaxer) writeRegex() error {
 			break
 		}
 		if character == '\n' {
-			return newSyntaxError("this regular expression never closes")
+			return newSyntaxError("missing closing regular expression delimiter")
 		}
 		index++
 	}
 	if index >= len(relax.source) {
-		return newSyntaxError("this regular expression never closes")
+		return newSyntaxError("missing closing regular expression delimiter")
 	}
 
 	pattern := relax.source[relax.at+1 : index]
@@ -251,7 +246,7 @@ func (relax *relaxer) writeString() error {
 		text.WriteByte(character)
 		index++
 	}
-	return newSyntaxError("this quote never closes")
+	return newSyntaxError("missing closing quote")
 }
 
 // readEscape returns what the shell escape stands for.
@@ -294,7 +289,7 @@ func (relax *relaxer) writeWord() error {
 func (relax *relaxer) writeHelper(field string, open int) error {
 	closed := strings.IndexByte(relax.source[open:], ')')
 	if closed == -1 {
-		return newSyntaxError("this call never closes")
+		return newSyntaxError("missing closing parenthesis")
 	}
 	inside := strings.TrimSpace(relax.source[open+1 : open+closed])
 	relax.at = open + closed + 1
@@ -303,7 +298,7 @@ func (relax *relaxer) writeHelper(field string, open int) error {
 	// extended JSON reads.
 	unquoted := strings.Trim(inside, `"'`)
 	if inside == "" && field == "$date" {
-		return newSyntaxError("Date needs the date it stands for")
+		return newSyntaxError("Date requires a date value")
 	}
 	relax.built.WriteString(`{"` + field + `":` + writeJSONString(unquoted) + "}")
 	return nil

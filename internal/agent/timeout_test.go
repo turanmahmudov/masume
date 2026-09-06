@@ -64,17 +64,17 @@ func TestRunStatementWithinStopsALongStatement(t *testing.T) {
 		wanted  string
 	}{
 		{"a server that cannot be told to stop", false, false, nil,
-			"the statement was still running after 10 ms, and this engine cannot be told " +
-				"to stop it, so it may be running yet; narrow it, or give it a LIMIT"},
+			"the statement was still running after 10 ms; this engine does not support cancellation, " +
+				"and the statement may still be running; use a more specific predicate or a query LIMIT where appropriate"},
 		{"a server that stopped it", true, true, nil,
 			"the statement was still running after 10 ms and was cancelled; " +
-				"narrow it, or give it a LIMIT"},
+				"use a more specific predicate or a query LIMIT where appropriate"},
 		{"a server that refused to stop it", true, false, nil,
-			"the statement was still running after 10 ms and was left running, since the " +
-				"server refused to cancel it; narrow it, or give it a LIMIT"},
+			"the statement was still running after 10 ms; server cancellation failed, " +
+				"and the statement may still be running; use a more specific predicate or a query LIMIT where appropriate"},
 		{"a server that failed to stop it", true, true, errors.New("no"),
-			"the statement was still running after 10 ms and was left running, since the " +
-				"server refused to cancel it; narrow it, or give it a LIMIT"},
+			"the statement was still running after 10 ms; server cancellation failed, " +
+				"and the statement may still be running; use a more specific predicate or a query LIMIT where appropriate"},
 	}
 	for _, held := range cases {
 		session := &stoppableSession{

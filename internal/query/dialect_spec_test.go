@@ -257,7 +257,7 @@ func TestBuildDropRoutineWritesTheWordTheServerReads(t *testing.T) {
 		{"mysql names a procedure", mysql.Dialect, "procedure:sch.fn",
 			"drop procedure `sch`.`fn`;"},
 		{"sqlite keeps none", sqlite.Dialect, "function:sch.fn",
-			"-- sqlite keeps no stored routine"},
+			"-- SQLite stored routines are unsupported"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			if got := held.dialect.BuildDropRoutine("sch", "fn", held.identity); got != held.want {

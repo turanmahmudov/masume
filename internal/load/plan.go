@@ -8,10 +8,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// The plan of one import: which column of the file goes into which column of the table,
-// what every row would do, and the statements that write them.
+// An import plan contains column mappings, row validation, and generated statements.
 
-// SampleRows is how many rows of the head of a file a sample reads.
+// SampleRows is the maximum rows per sample.
 const SampleRows = 200
 
 // BatchRows is the most rows one insert writes.
@@ -31,18 +30,18 @@ type SourceColumn struct {
 	Kind   core.ColumnKind
 	Filled int
 	Empty  int
-	// The first value of the sample that is there, which the form shows as an example.
+	// The first non-null sample value, displayed in the form.
 	Example string
 }
 
-// Sample is the head of a file, read to learn what it holds.
+// Sample is the first file rows and their column types.
 type Sample struct {
 	Columns []SourceColumn
 	Rows    []Row
 	More    bool
 }
 
-// ReadSample reads the head of a file and returns what its columns hold.
+// ReadSample reads the first file rows and infers their column types.
 func ReadSample(path string, options ReadOptions) (Sample, error) {
 	sample := Sample{}
 	names := []string{}
@@ -81,7 +80,7 @@ func ReadSample(path string, options ReadOptions) (Sample, error) {
 
 func isStopWalk(err error) bool { return err == ErrStopWalk }
 
-// buildSourceColumn returns what one column of the sample holds.
+// buildSourceColumn returns the type, null count, and example for a sample column.
 func buildSourceColumn(name string, values []any) SourceColumn {
 	column := SourceColumn{Name: name, Kind: ResolveColumnKind(values)}
 	for _, value := range values {
@@ -101,16 +100,15 @@ func buildSourceColumn(name string, values []any) SourceColumn {
 type TargetColumn struct {
 	Name     string
 	DataType string
-	// True where a row that leaves the column out is written.
+	// True if an insert can omit the column.
 	Optional bool
-	// True where the column holds a value that is not there.
+	// True if the column accepts null.
 	TakesNull bool
-	// True where the server fills the column itself, so a mapping onto it is refused.
+	// True for a server-generated column that imports cannot map.
 	Generated bool
 }
 
-// Mapping is what one column of the file does: the column of the table it is written into,
-// or nothing where it is left out.
+// Mapping is a source column and its target column. An empty target omits the source column.
 type Mapping struct {
 	Source string
 	Target string
@@ -118,7 +116,7 @@ type Mapping struct {
 	Kind core.ColumnKind
 }
 
-// Plan is one import as it stands: the file, the table, and what each column does.
+// Plan is the import file, target table, and column mappings.
 type Plan struct {
 	Path         string
 	Options      ReadOptions
@@ -139,9 +137,7 @@ func findTargetColumn(target []TargetColumn, name string) (TargetColumn, bool) {
 	return TargetColumn{}, false
 }
 
-// BuildPlan returns the import of that sample into that table. A column of the file whose
-// name a column of the table holds is mapped onto it, and any other column is left out for
-// the user to map or to leave.
+// BuildPlan maps matching column names and leaves unmatched source columns unmapped.
 func BuildPlan(
 	path string, options ReadOptions, sample Sample,
 	table query.QualifiedName, target []TargetColumn,
@@ -164,8 +160,7 @@ func BuildPlan(
 	return plan
 }
 
-// MapColumn writes one column of the file onto one column of the table, or leaves it out
-// where the name is empty. The kind follows the column it is written into.
+// MapColumn sets a column mapping and target type. An empty target removes the mapping.
 func (plan *Plan) MapColumn(source, target string) {
 	for at, mapping := range plan.Mappings {
 		if mapping.Source != source {
@@ -189,8 +184,7 @@ func (plan *Plan) MapColumn(source, target string) {
 	}
 }
 
-// ListMappedColumns returns the columns of the table the import writes, in the order the
-// file holds them.
+// ListMappedColumns returns mapped columns in source order.
 func (plan Plan) ListMappedColumns() []Mapping {
 	mapped := make([]Mapping, 0, len(plan.Mappings))
 	for _, mapping := range plan.Mappings {
@@ -201,18 +195,18 @@ func (plan Plan) ListMappedColumns() []Mapping {
 	return mapped
 }
 
-// FindPlanProblem returns why the import cannot run, and nothing where it can.
+// FindPlanProblem returns a validation error, or an empty string for a valid plan.
 func (plan Plan) FindPlanProblem(dialect *query.Dialect) string {
 	if plan.Table.Name == "" {
-		return "the table cannot be empty"
+		return "the table name is missing"
 	}
 	if len(plan.ListMappedColumns()) == 0 {
-		return "no column of the file is written into the table"
+		return "no source columns are mapped to the table"
 	}
 
 	if held := len(plan.ListMappedColumns()); held > dialect.ResolveBindLimit() {
 		return fmt.Sprintf(
-			"the import writes %d columns and this server binds %d values to one statement",
+			"the import has %d columns; the statement parameter limit is %d",
 			held, dialect.ResolveBindLimit())
 	}
 
@@ -220,7 +214,7 @@ func (plan Plan) FindPlanProblem(dialect *query.Dialect) string {
 	for _, mapping := range plan.ListMappedColumns() {
 		key := strings.ToLower(mapping.Target)
 		if taken[key] {
-			return fmt.Sprintf("two columns of the file are written into %q", mapping.Target)
+			return fmt.Sprintf("multiple source columns are mapped to %q", mapping.Target)
 		}
 		taken[key] = true
 	}
@@ -229,7 +223,7 @@ func (plan Plan) FindPlanProblem(dialect *query.Dialect) string {
 		if column.Optional || column.Generated || taken[strings.ToLower(column.Name)] {
 			continue
 		}
-		return fmt.Sprintf("%s takes no empty value and no column of the file fills it",
+		return fmt.Sprintf("required column %s has no source mapping",
 			column.Name)
 	}
 	return ""
@@ -242,8 +236,7 @@ type RowProblem struct {
 	Reason string
 }
 
-// CheckReport is what a dry run found: how many rows the file holds, and the rows the
-// import cannot write.
+// CheckReport is the row count and validation errors from a dry run.
 type CheckReport struct {
 	Rows int
 	// The rows that cannot be written. The list stops at MaxRowProblems.
@@ -251,7 +244,7 @@ type CheckReport struct {
 	Refused  int
 }
 
-// MaxRowProblems is how many refused rows a report lists.
+// MaxRowProblems is the maximum reported row errors.
 const MaxRowProblems = 20
 
 // CheckFile reads the whole file and reports the rows the import cannot write.
@@ -260,7 +253,7 @@ func (plan Plan) CheckFile() (CheckReport, error) {
 	mapped := plan.ListMappedColumns()
 	indexes := plan.buildSourceIndexes()
 
-	// A file of documents can name a column after the sample was read.
+	// Later documents can add columns absent from the sample.
 	named := len(plan.Sample.Columns)
 	err := WalkFile(plan.Path, plan.Options,
 		func(read []string) error {
@@ -282,14 +275,14 @@ func (plan Plan) CheckFile() (CheckReport, error) {
 	return report, nil
 }
 
-// findRowProblem returns why one row cannot be written, and false where it can be.
+// findRowProblem returns the first row error, or false for a valid row.
 func (plan Plan) findRowProblem(
 	row Row, mapped []Mapping, indexes map[string]int, named int,
 ) (RowProblem, bool) {
 	if len(row.Values) > named {
 		return RowProblem{
 			Line: row.Line,
-			Reason: fmt.Sprintf("the row holds %d fields and the file names %d",
+			Reason: fmt.Sprintf("the row has %d fields; expected at most %d",
 				len(row.Values), named),
 		}, true
 	}
@@ -308,14 +301,14 @@ func (plan Plan) findRowProblem(
 		if value == nil && !plan.holdsNullFor(mapping.Target) {
 			return RowProblem{
 				Line: row.Line, Column: mapping.Source,
-				Reason: mapping.Target + " holds no empty value",
+				Reason: mapping.Target + " does not accept null",
 			}, true
 		}
 	}
 	return RowProblem{}, false
 }
 
-// holdsNullFor is true where the column of the table takes a value that is not there.
+// holdsNullFor is true if the target column accepts null.
 func (plan Plan) holdsNullFor(target string) bool {
 	if plan.CreatesTable {
 		return true
@@ -324,15 +317,14 @@ func (plan Plan) holdsNullFor(target string) bool {
 	return !found || held.TakesNull
 }
 
-// HoldsWritableRow is true where every value of the row can be written into the column it
-// is mapped to.
+// HoldsWritableRow is true if the row passes import validation.
 func (plan Plan) HoldsWritableRow(row Row, named int) bool {
 	_, refused := plan.findRowProblem(
 		row, plan.ListMappedColumns(), plan.buildSourceIndexes(), named)
 	return !refused
 }
 
-// appendProblem keeps the first problems and counts the rest.
+// appendProblem keeps errors up to MaxRowProblems.
 func (plan Plan) appendProblem(report *CheckReport, problem RowProblem) {
 	if len(report.Problems) < MaxRowProblems {
 		report.Problems = append(report.Problems, problem)
@@ -348,11 +340,11 @@ func (plan Plan) buildSourceIndexes() map[string]int {
 	return indexes
 }
 
-// DescribeReport returns what a dry run found, in one line.
+// DescribeReport returns the row validation summary.
 func DescribeReport(report CheckReport) string {
 	if report.Refused == 0 {
-		return fmt.Sprintf("%d rows, and every one of them can be written", report.Rows)
+		return fmt.Sprintf("%d rows; all rows passed validation", report.Rows)
 	}
-	return fmt.Sprintf("%d rows, and %d of them cannot be written",
+	return fmt.Sprintf("%d rows; %d rows failed validation",
 		report.Rows, report.Refused)
 }

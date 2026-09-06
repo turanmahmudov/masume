@@ -6,22 +6,19 @@ import (
 	"strings"
 )
 
-// The secret stores of the user, declared once under `[secret.NAME]` and named by a profile.
-// One store is a command that prints one secret. masume knows no tool: `op`, `vault`, `sops`,
-// `pass` and a script of the user all fit the same shape.
+// A `[secret.NAME]` store is a command that prints one secret.
 
-// secretReferenceMark is what a store command holds where the reference of the profile goes.
+// secretReferenceMark is the placeholder for the profile secret reference.
 const secretReferenceMark = "{{ref}}"
 
 // SecretSource is one store the user declared.
 type SecretSource struct {
 	Name string
-	// The command that prints the secret. It holds secretReferenceMark one time or more.
+	// The command that prints the secret, with at least one secretReferenceMark placeholder.
 	Command string
 }
 
-// ParseSecretSources reads the `[secret]` section. A store that cannot be read is reported
-// and skipped, so one bad entry does not stop the app.
+// ParseSecretSources reads `[secret]` and reports invalid stores without loading them.
 func ParseSecretSources(document Table) ([]SecretSource, []ProfileProblem) {
 	written, present := FindSection(document, "secret")
 	if !present {
@@ -50,11 +47,9 @@ func ParseSecretSources(document Table) ([]SecretSource, []ProfileProblem) {
 				Reason: fmt.Sprintf("%q must be a non-empty string", "command")})
 			continue
 		}
-		if !strings.Contains(command, secretReferenceMark) {
+		if err := validateSecretCommand(command); err != nil {
 			problems = append(problems, ProfileProblem{
-				Name: name, Reason: fmt.Sprintf(
-					"%q must hold %s, which is where the reference of a profile goes",
-					"command", secretReferenceMark)})
+				Name: name, Reason: err.Error()})
 			continue
 		}
 		sources = append(sources, SecretSource{Name: name, Command: command})
@@ -81,21 +76,78 @@ func ListSecretSourceNames(sources []SecretSource) []string {
 	return names
 }
 
-// quoteForShell returns the value as one argument of a shell command. A reference is data,
-// so it is quoted rather than pasted in: a reference with a blank or a quote in it must not
-// become a second argument or a second command.
+// quoteForShell quotes a value as one literal shell argument.
 func quoteForShell(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
-// BuildSecretCommand returns the command that reads one reference out of the store.
-func BuildSecretCommand(source SecretSource, reference string) string {
-	return strings.ReplaceAll(source.Command, secretReferenceMark, quoteForShell(reference))
+func validateSecretCommand(command string) error {
+	invalid := fmt.Errorf("command requires standalone unquoted %s arguments; use literal arguments, quoted flags and optional pipelines", secretReferenceMark)
+	var quote byte
+	inWord, hasCommand, hasReference := false, false, false
+	for at := 0; at < len(command); at++ {
+		character := command[at]
+		if strings.ContainsRune("\x00\r\n", rune(character)) {
+			return invalid
+		}
+		if strings.HasPrefix(command[at:], secretReferenceMark) {
+			end := at + len(secretReferenceMark)
+			if quote != 0 || inWord || !hasCommand ||
+				(end < len(command) && command[end] != ' ' && command[end] != '\t') {
+				return invalid
+			}
+			hasReference, inWord = true, true
+			at = end - 1
+			continue
+		}
+		if quote == '\'' {
+			if character == quote {
+				quote = 0
+			}
+			continue
+		}
+		if strings.ContainsRune("$`\\", rune(character)) {
+			return invalid
+		}
+		if quote == '"' {
+			if character == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch character {
+		case '\'', '"':
+			quote = character
+			inWord = true
+		case ' ', '\t':
+			hasCommand = hasCommand || inWord
+			inWord = false
+		case '|':
+			if !hasCommand && !inWord {
+				return invalid
+			}
+			hasCommand, inWord = false, false
+		case ';', '&', '<', '>', '(', ')', '{', '}', '#':
+			return invalid
+		default:
+			inWord = true
+		}
+	}
+	if quote != 0 || !hasReference || (!hasCommand && !inWord) {
+		return invalid
+	}
+	return nil
 }
 
-// ApplySecretCommand returns the profile with the command of its store built into it. A
-// profile the form made carries the name and the reference only, so the command is built
-// here as well as when the file is read.
+// BuildSecretCommand returns the command that reads one reference out of the store.
+func BuildSecretCommand(source SecretSource, reference string) (string, error) {
+	if err := validateSecretCommand(source.Command); err != nil {
+		return "", err
+	}
+	return strings.ReplaceAll(source.Command, secretReferenceMark, quoteForShell(reference)), nil
+}
+
+// ApplySecretCommand builds the profile command from the store and secret reference.
 func ApplySecretCommand(profile Profile, sources []SecretSource) (Profile, error) {
 	if profile.Auth != AuthSecret {
 		profile.SecretCommand = ""
@@ -109,11 +161,10 @@ func ApplySecretCommand(profile Profile, sources []SecretSource) (Profile, error
 	return profile, nil
 }
 
-// resolveSecretCommand returns the command the profile reads its password with, and the
-// reason it has none.
+// resolveSecretCommand returns the password command or a store configuration error.
 func resolveSecretCommand(profile Profile, sources []SecretSource) (string, error) {
 	if profile.Secret == "" {
-		return "", failProfile("%q must name a [secret] store when %q is secret",
+		return "", failProfile("%q must be a [secret] store name when %q is secret",
 			"secret", "auth")
 	}
 	if profile.SecretRef == "" {
@@ -121,8 +172,8 @@ func resolveSecretCommand(profile Profile, sources []SecretSource) (string, erro
 	}
 	source, found := FindSecretSource(sources, profile.Secret)
 	if !found {
-		return "", failProfile("there is no [secret.%s] store in the config file",
+		return "", failProfile("[secret.%s] store is missing from the config file",
 			profile.Secret)
 	}
-	return BuildSecretCommand(source, profile.SecretRef), nil
+	return BuildSecretCommand(source, profile.SecretRef)
 }

@@ -31,19 +31,15 @@ type postgresSession struct {
 	transaction         db.TransactionMark
 	side                *db.SideConnection[*pgx.Conn]
 
-	// typeNames names every type the server holds, read once at connect, because the
-	// map the driver ships knows the standard types only and a server also holds its
-	// own enums, domains and composites.
+	// Server type names by OID, including custom enums, domains, and composites.
 	typeNames map[uint32]string
 
-	// One queue per connection, because the driver refuses a second call on a
-	// connection that is still answering the first.
+	// Each connection requires serialized driver calls.
 	mainQueue *db.CallQueue
 	sideQueue *db.CallQueue
 }
 
-// Capabilities returns what this connection does. Every entry is a fact of the engine except
-// the count of statements, which holds only where the extension is installed.
+// Capabilities returns engine support plus statement statistics availability from the connected server.
 func (session *postgresSession) Capabilities() core.Capabilities {
 	held := session.Support.Capabilities
 	held.ReportsStatementStats = session.holdsStatementStats
@@ -60,8 +56,7 @@ func (session *postgresSession) markTransactionFailed() {
 	session.transaction.MarkFailed()
 }
 
-// resolveCatalogConnection returns the connection a catalog read uses. Inside a
-// transaction it must be the same one, or it reads stale data.
+// resolveCatalogConnection uses the user connection during transactions and the side connection otherwise.
 func (session *postgresSession) resolveCatalogConnection() (*pgx.Conn, error) {
 	if session.transaction.ReadState() != db.TransactionNone {
 		return session.connection, nil
@@ -69,8 +64,7 @@ func (session *postgresSession) resolveCatalogConnection() (*pgx.Conn, error) {
 	return session.side.Read()
 }
 
-// holdCatalog waits for its turn on the connection a catalog read uses, and returns what
-// gives the turn back.
+// holdCatalog reserves the catalog connection and returns a release callback.
 func (session *postgresSession) holdCatalog(
 	ctx context.Context,
 ) (*pgx.Conn, func(), error) {
@@ -163,10 +157,7 @@ func (session *postgresSession) runOn(
 	return result, nil
 }
 
-// runBatch reads a buffer of several statements over the simple protocol, and returns
-// the result of the last one. Each result is read as it arrives and only the last one is
-// kept, and a result past the row limit is read to its end without being held, so a buffer
-// that returns millions of rows never puts them all in memory.
+// runBatch executes statements through the simple protocol and returns the final result. Rows beyond the limit are discarded.
 func (session *postgresSession) runBatch(
 	ctx context.Context, connection *pgx.Conn, sql string, rowLimit int, startedAt time.Time,
 ) (db.QueryResult, error) {
@@ -213,8 +204,7 @@ func (session *postgresSession) runBatch(
 	return result, nil
 }
 
-// decodeRawRow reads one row of a simple-protocol result. The reader hands out the bytes
-// of a row only until it moves to the next one, so each cell is copied before it is read.
+// decodeRawRow copies and decodes simple-protocol cells. Driver row bytes expire at the next row.
 func decodeRawRow(
 	connection *pgx.Conn, fields []pgconn.FieldDescription, row [][]byte,
 ) []any {
@@ -247,8 +237,7 @@ func decodeRawValue(
 	return value
 }
 
-// readCommandName returns the command word of a tag the server sent, in the case the server
-// wrote it, which is upper case.
+// readCommandName returns the server command tag word in its original case.
 func readCommandName(tag string) string {
 	if tag == "" {
 		return ""
@@ -274,9 +263,7 @@ func (session *postgresSession) RunQuery(
 	return result, nil
 }
 
-// markTransactionFromServer reads the transaction status the server sends with every
-// answer. A `begin` or a `commit` written into the editor never reaches BeginTransaction,
-// and the server knows what the connection is in whichever way it was asked.
+// markTransactionFromServer updates state from the server transaction status, including statements from the editor.
 func (session *postgresSession) markTransactionFromServer() {
 	switch session.connection.PgConn().TxStatus() {
 	case 'I':
@@ -300,13 +287,11 @@ func (session *postgresSession) CountRead(
 	return db.CountSQLRead(ctx, session.RunQuery, read, session.Support.Dialect)
 }
 
-// CheckStatement sends Parse and stops, so the server parses the statement, resolves
-// every name and plans it, and runs nothing.
+// CheckStatement asks the server to describe the statement without executing the statement.
 func (session *postgresSession) CheckStatement(
 	ctx context.Context, sql string,
 ) (db.StatementProblem, bool) {
-	// A statement PostgreSQL refuses to read throws the open transaction away, and a
-	// check the user did not ask for must never cost work already done in one.
+	// PostgreSQL parse errors abort an open transaction. Background checks skip open transactions.
 	if session.transaction.ReadState() != db.TransactionNone {
 		return db.StatementProblem{}, false
 	}
@@ -615,7 +600,7 @@ func (session *postgresSession) ExplainQuery(
 	}
 	if analyze && !session.Support.Capabilities.MeasuresPlan {
 		return db.QueryPlan{}, db.NewDatabaseError(
-			"this server plans without measuring, so only the estimate is read")
+			"measured query plans are unsupported; request an estimated plan")
 	}
 	if err := db.RefuseSeveralPlans(sql, session.Support.Dialect.Syntax); err != nil {
 		return db.QueryPlan{}, err
@@ -740,7 +725,7 @@ func (session *postgresSession) ApplyChanges(ctx context.Context, changes []db.C
 
 func (session *postgresSession) ListActivity(ctx context.Context) ([]db.Activity, error) {
 	if !session.Support.Capabilities.HasServerSessions {
-		return nil, db.NewUnsupportedError("list its sessions")
+		return nil, db.NewUnsupportedError("list sessions")
 	}
 	rows, err := session.readRows(ctx, listActivitySQL)
 	if err != nil {
@@ -762,7 +747,7 @@ func (session *postgresSession) ListActivity(ctx context.Context) ([]db.Activity
 
 func (session *postgresSession) ListLockWaits(ctx context.Context) ([]db.LockWait, error) {
 	if !session.Support.Capabilities.ReportsLockWaits {
-		return nil, db.NewUnsupportedError("report which sessions wait for a lock")
+		return nil, db.NewUnsupportedError("report lock waits")
 	}
 	rows, err := session.readRows(ctx, listLockWaitsSQL)
 	if err != nil {
@@ -788,7 +773,7 @@ func (session *postgresSession) ListLockWaits(ctx context.Context) ([]db.LockWai
 
 func (session *postgresSession) ReadServerLoad(ctx context.Context) (db.ServerLoad, error) {
 	if !session.Support.Capabilities.ReportsServerLoad {
-		return db.ServerLoad{}, db.NewUnsupportedError("report the load it is under")
+		return db.ServerLoad{}, db.NewUnsupportedError("report server load")
 	}
 	rows, err := session.readRows(ctx, readServerLoadSQL)
 	if err != nil {
@@ -822,13 +807,12 @@ func (session *postgresSession) ReadServerLoad(ctx context.Context) (db.ServerLo
 	return load, nil
 }
 
-// ListSlowStatements returns the statements this server spent the most time in, the slowest
-// by mean time first, narrowed to the database of this connection.
+// ListSlowStatements returns current database statistics, sorted by mean execution time.
 func (session *postgresSession) ListSlowStatements(
 	ctx context.Context, limit int,
 ) ([]db.StatementStat, error) {
 	if !session.Capabilities().ReportsStatementStats {
-		return nil, db.NewUnsupportedError("report the statements it spends its time in")
+		return nil, db.NewUnsupportedError("report slow statements")
 	}
 	if limit < 1 {
 		return nil, nil
@@ -853,8 +837,7 @@ func (session *postgresSession) ListSlowStatements(
 	return held, nil
 }
 
-// CancelBackend stops another session on the second connection, because the one of the
-// user can be busy.
+// CancelBackend stops another session through the side connection.
 func (session *postgresSession) CancelBackend(
 	ctx context.Context, pid int64, terminate bool,
 ) (bool, error) {
@@ -869,15 +852,14 @@ func (session *postgresSession) CancelBackend(
 	return len(rows) > 0 && readFlag(rows[0]["ok"]), nil
 }
 
-// CancelRunningQuery uses a second connection, because the one running the query cannot
-// answer until the query ends.
+// CancelRunningQuery sends cancellation through the side connection.
 func (session *postgresSession) CancelRunningQuery(ctx context.Context) (bool, error) {
 	if !session.Support.Capabilities.CancelsRunningQuery {
 		return false, db.NewUnsupportedError("cancel a running statement")
 	}
 	if session.backendPID <= 0 {
 		return false, db.NewDatabaseError(
-			"the server did not name this connection, so its statement cannot be cancelled")
+			"cannot cancel the statement: the connection ID is unavailable")
 	}
 	connection, err := session.side.Read()
 	if err != nil {
@@ -905,10 +887,7 @@ func (session *postgresSession) CancelRunningQuery(ctx context.Context) (bool, e
 	return len(values) > 0 && readFlag(values[0]), nil
 }
 
-// Ping asks which backend answered. The driver reopens a dropped socket itself, so
-// inside a transaction a statement can reach a connection the transaction was never
-// opened on, which the server already rolled back. A connection that is still answering
-// a call of its own is left alone: it is answering, so the server is there.
+// Ping checks the backend ID for connection replacement during transactions. Busy user connections skip the check.
 func (session *postgresSession) Ping(ctx context.Context) error {
 	if session.transaction.ReadState() == db.TransactionNone {
 		connection, err := session.resolveCatalogConnection()
@@ -943,20 +922,17 @@ func (session *postgresSession) Ping(ctx context.Context) error {
 		}
 	}
 	rows.Close()
-	// Without an id of its own there is nothing to compare, and a connection that answers
-	// at all is the server saying it is there.
+	// An unavailable original ID prevents the replacement check.
 	if session.backendPID <= 0 || answered == session.backendPID {
 		return nil
 	}
 
 	session.transaction.WriteState(db.TransactionNone)
 	return db.NewDatabaseError(
-		"the connection was replaced, so the open transaction was rolled back by the server")
+		"the connection was replaced; the previous transaction is no longer available")
 }
 
-// closeWait is how long a close is given to reach the server. A connection still
-// answering a call is waited for, and a server that never answers must not hold the
-// client open.
+// closeWait is the time limit for waiting to close the connection.
 const closeWait = 5 * time.Second
 
 // pgx refuses a second caller on a connection that is still answering.
@@ -1064,7 +1040,7 @@ func (adapter *postgresAdapter) Connect(
 	}, nil
 }
 
-// The compiler reports a part of the port this session has not answered for.
+// Compile-time Session interface check.
 var _ db.Session = (*postgresSession)(nil)
 
 // buildIdentityStatement returns the statement that reads the identity of the connection.

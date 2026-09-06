@@ -13,14 +13,11 @@ import (
 	"github.com/turanmahmudov/masume/internal/hist"
 )
 
-// The client without a screen: the same profiles and the same reads, for an agent over the
-// Model Context Protocol. Only the protocol writes to standard output, so every message of
-// this file goes to standard error.
+// MCP startup diagnostics use stderr. stdout is reserved for protocol messages.
 
 const serverName = "masume"
 
-// RunServer serves an agent until the client closes the stream, and returns the exit code of
-// the process.
+// RunServer serves an MCP client until the stream closes and returns an exit code.
 func RunServer(argv []string, version string) int {
 	configPath := cfg.ResolveConfigPath()
 	if _, err := cfg.EnsureConfigFile(configPath); err != nil {
@@ -41,11 +38,11 @@ func RunServer(argv []string, version string) int {
 	scoped, check, argumentErr := ReadServerArguments(argv)
 	if argumentErr != nil {
 		fmt.Fprintf(os.Stderr, "%s mcp: %s\n", serverName, argumentErr.Error())
-		fmt.Fprintln(os.Stderr, "run masume --help to see the arguments it reads")
+		fmt.Fprintln(os.Stderr, "run masume --help for usage")
 		return 2
 	}
 	if scoped != "" && !namesProfile(loaded.Mcp, scoped) {
-		fmt.Fprintf(os.Stderr, "%s mcp: profile %q is not named under [mcp] profiles\n",
+		fmt.Fprintf(os.Stderr, "%s mcp: profile %q is not listed under [mcp] profiles\n",
 			serverName, scoped)
 		return 1
 	}
@@ -64,11 +61,9 @@ func RunServer(argv []string, version string) int {
 	return serveClient(ctx, deps, version)
 }
 
-// serveClient answers every message of one client, from the first one to the end of the
-// stream.
+// serveClient processes one MCP client stream.
 func serveClient(ctx context.Context, deps AccessDeps, version string) int {
-	// The history file is opened in every case: a server that cannot write its history
-	// can still open every connection.
+	// A history failure does not stop startup.
 	history, err := hist.Open(hist.DefaultPath())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, serverName+" mcp: history: "+err.Error())
@@ -80,19 +75,16 @@ func serveClient(ctx context.Context, deps AccessDeps, version string) int {
 		AccessDeps: deps,
 		Asker:      asker,
 		Plans:      CreatePlanTokens(),
-		// The statements of the agent go into the same history the screens read, so the
-		// user can see later what ran.
+		// Record agent statements in the shared query history.
 		RecordQuery: func(entry hist.HistoryEntry) { _ = history.Record(entry) },
 	})
 
-	// One line at a time, because a question to the user is written in parallel with an
-	// answer.
+	// Serialize responses and confirmation requests on stdout.
 	writing := sync.Mutex{}
 	writeLine := func(line string) {
 		writing.Lock()
 		defer writing.Unlock()
-		// A write error means the client closed the stream. The read of the next
-		// message stops the server, so this only records the reason.
+		// Log output failures. Input EOF stops the server.
 		if _, err := fmt.Fprintln(os.Stdout, line); err != nil {
 			LogEvent("! cannot write to standard output: " + err.Error())
 		}
@@ -111,9 +103,7 @@ func serveClient(ctx context.Context, deps AccessDeps, version string) int {
 	return 0
 }
 
-// ReadServerArguments returns the profile the server was started for and whether it must
-// check and exit. An unknown argument is an error and not a default: a misspelled `--profile`
-// would otherwise open every profile of the config file.
+// ReadServerArguments parses the optional profile and check mode. Unknown arguments are errors.
 func ReadServerArguments(argv []string) (string, bool, error) {
 	scoped, check := "", false
 	for at := 0; at < len(argv); at++ {
@@ -124,17 +114,17 @@ func ReadServerArguments(argv []string) (string, bool, error) {
 			check = true
 		case argument == "--profile":
 			if at+1 >= len(argv) || strings.HasPrefix(argv[at+1], "-") {
-				return "", false, errors.New("--profile needs the name of a profile")
+				return "", false, errors.New("--profile requires a profile name")
 			}
 			at++
 			scoped = argv[at]
 		case strings.HasPrefix(argument, "--profile="):
 			scoped = strings.TrimPrefix(argument, "--profile=")
 			if scoped == "" {
-				return "", false, errors.New("--profile= names no profile")
+				return "", false, errors.New("--profile requires a profile name")
 			}
 		default:
-			return "", false, errors.New(argument + " is not an argument this command reads")
+			return "", false, errors.New("unknown MCP argument: " + argument)
 		}
 	}
 	return scoped, check, nil
@@ -164,8 +154,7 @@ func describeServing(deps AccessDeps) string {
 	return "serving " + strings.Join(names, ", ")
 }
 
-// reportConfigLine writes one line about the config file, under the same prefix as every
-// other line of the server.
+// reportConfigLine writes a prefixed configuration diagnostic to stderr.
 func reportConfigLine(written string) {
 	fmt.Fprintf(os.Stderr, "%s mcp: %s\n", serverName, written)
 }
@@ -178,15 +167,13 @@ func describeStartedProfiles(deps AccessDeps) string {
 	return strings.Join(deps.Config.Profiles, ", ")
 }
 
-// reportStart writes the profiles the server opened, so the log of a client shows the result
-// of the config.
+// reportStart reports enabled profiles and the log path.
 func reportStart(deps AccessDeps) {
 	fmt.Fprintf(os.Stderr, "%s mcp: %s\n%s mcp: calls are logged to %s\n",
 		serverName, describeServing(deps), serverName, ResolveLogPath())
 }
 
-// reportCheck connects one time to every open profile and reports the result, without a
-// client.
+// reportCheck checks enabled profiles and reports connection results.
 func reportCheck(ctx context.Context, deps AccessDeps) int {
 	checks := CheckOpenProfiles(ctx, deps)
 	if len(checks) == 0 {

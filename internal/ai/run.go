@@ -7,11 +7,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// One question and its answer: the client sends the question, runs the calls the model
-// requests, and sends the results back, until the model writes a reply or reaches the step
-// limit.
+// Chat execution sends tool results to the model until the model stops requesting tools or reaches the step limit.
 
-// MaxToolSteps is the number of calls after which a run must answer with the data it has.
+// MaxToolSteps is the maximum number of model responses per run.
 const MaxToolSteps = 25
 
 // RunHooks are the callbacks the caller gets during a run.
@@ -29,15 +27,13 @@ type RunHooks struct {
 
 // RunResult is the result of a whole run.
 type RunResult struct {
-	// ReceivedChars is the number of characters received, so an empty reply can be
-	// reported.
+	// ReceivedChars is the received text character count.
 	ReceivedChars int
 	FinishReason  string
 	Usage         Usage
 }
 
-// RunChat sends the question, runs the calls the model requests, and returns after the
-// model writes a reply.
+// RunChat sends a question and executes requested tools until completion, cancellation, or the step limit.
 func RunChat(
 	ctx context.Context, model Model, request Request, hooks RunHooks,
 ) (RunResult, error) {
@@ -49,7 +45,7 @@ func RunChat(
 		asked.Messages = messages
 
 		answer, err := model.Stream(ctx, asked, func(event Event) {
-			// A run the caller stopped writes nothing more. The stop cancels ctx.
+			// Ignore text events after cancellation.
 			if ctx.Err() != nil {
 				return
 			}
@@ -104,20 +100,19 @@ func addUsage(total, step Usage) Usage {
 	}
 }
 
-// FindEmptyReplyProblem returns the reason a run wrote no reply, and an empty string if it
-// wrote one.
+// FindEmptyReplyProblem describes an empty reply with an abnormal finish reason.
 func FindEmptyReplyProblem(received int, finishReason string) string {
 	if received > 0 {
 		return ""
 	}
 	// A run that stops at a tool call without text reached the step limit.
 	if finishReason == FinishToolCalls {
-		return "ran out of turns after " + strconv.Itoa(MaxToolSteps) + " tool calls, before " +
-			"it could answer; try asking again, or narrow the question"
+		return "the model reached the limit of " + strconv.Itoa(MaxToolSteps) + " steps without a text reply; " +
+			"ask a more specific question or try again"
 	}
 	// No error and no text: the model stopped early, often at a content filter.
 	if finishReason != FinishStop {
-		return "the model answered nothing (" + finishReason + ")"
+		return "the model returned no text (" + finishReason + ")"
 	}
 	return ""
 }

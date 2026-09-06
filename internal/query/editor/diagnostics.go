@@ -9,24 +9,23 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// Diagnostic is a fault in the statement, and its place in the buffer.
+// Diagnostic is a statement error and its buffer range.
 type Diagnostic struct {
 	Message string
 	Start   int
 	End     int
 }
 
-// SchemaKnowledge is what a tab knows of the catalog.
+// SchemaKnowledge is the loaded catalog metadata for a tab.
 type SchemaKnowledge struct {
-	// False until the catalog is read. Nothing is reported against an empty catalog.
+	// False until the catalog is loaded. Unknown table checks require a loaded catalog.
 	Loaded       bool
 	IsKnownTable func(reference statement.TableReference) bool
-	// Keyed in lower case, under the table name and any alias. A relation not yet
-	// read is missing.
+	// Columns indexed by lowercase table names and aliases. Unloaded tables are absent.
 	ColumnsByQualifier map[string][]string
 }
 
-// NothingKnown reports nothing, because the catalog has not been read.
+// NothingKnown returns unloaded catalog metadata.
 func NothingKnown() SchemaKnowledge {
 	return SchemaKnowledge{
 		IsKnownTable:       func(statement.TableReference) bool { return true },
@@ -34,10 +33,10 @@ func NothingKnown() SchemaKnowledge {
 	}
 }
 
-// runNames name each kind of unclosed token, for its message.
+// runNames is the diagnostic label for each unterminated token kind.
 var runNames = map[syntax.TokenKind]string{
 	syntax.TokenString:  "string",
-	syntax.TokenQuoted:  "quoted name",
+	syntax.TokenQuoted:  "quoted identifier",
 	syntax.TokenComment: "block comment",
 }
 
@@ -49,10 +48,10 @@ func findUnterminatedRuns(sql string, tokens []syntax.Token) []Diagnostic {
 		}
 		name, named := runNames[token.Kind]
 		if !named {
-			name = "quoted run"
+			name = "quoted token"
 		}
 		found = append(found, Diagnostic{
-			Message: "this " + name + " is never closed", Start: token.Start, End: len(sql),
+			Message: "unterminated " + name, Start: token.Start, End: len(sql),
 		})
 	}
 	return found
@@ -62,8 +61,7 @@ func isOperatorToken(sql string, token syntax.Token, text string) bool {
 	return token.Kind == syntax.TokenOperator && sql[token.Start:token.End] == text
 }
 
-// findUnbalancedBrackets counts only a bracket the scanner read as an operator, so
-// one inside a string is content.
+// findUnbalancedBrackets checks parentheses outside strings and comments.
 func findUnbalancedBrackets(sql string, tokens []syntax.Token) []Diagnostic {
 	found := []Diagnostic{}
 	opened := []syntax.Token{}
@@ -78,7 +76,7 @@ func findUnbalancedBrackets(sql string, tokens []syntax.Token) []Diagnostic {
 		}
 		if len(opened) == 0 {
 			found = append(found, Diagnostic{
-				Message: "no ( is open for this )", Start: token.Start, End: token.End,
+				Message: "unexpected closing parenthesis )", Start: token.Start, End: token.End,
 			})
 			continue
 		}
@@ -87,7 +85,7 @@ func findUnbalancedBrackets(sql string, tokens []syntax.Token) []Diagnostic {
 
 	for _, token := range opened {
 		found = append(found, Diagnostic{
-			Message: "this ( is never closed", Start: token.Start, End: token.End,
+			Message: "unclosed parenthesis (", Start: token.Start, End: token.End,
 		})
 	}
 	return found
@@ -114,7 +112,7 @@ func findUnknownTables(
 			written = reference.Schema + "." + reference.Name
 		}
 		found = append(found, Diagnostic{
-			Message: "no table called " + written, Start: reference.Start, End: reference.End,
+			Message: "unknown table: " + written, Start: reference.Start, End: reference.End,
 		})
 	}
 	return found
@@ -128,8 +126,7 @@ func isNameKind(kind syntax.TokenKind) bool {
 	return kind == syntax.TokenIdentifier || kind == syntax.TokenQuoted
 }
 
-// findUnknownColumns checks only a qualified name, because a bare word can be an
-// alias, a function or a subquery column.
+// findUnknownColumns checks qualified names against loaded table columns.
 func findUnknownColumns(sql string, tokens []syntax.Token, knowledge SchemaKnowledge) []Diagnostic {
 	found := []Diagnostic{}
 
@@ -146,8 +143,7 @@ func findUnknownColumns(sql string, tokens []syntax.Token, knowledge SchemaKnowl
 			continue
 		}
 
-		// A schema before a table also arrives here, but the map never holds it, so
-		// it is skipped.
+		// Skip qualifiers without loaded columns.
 		columns, known := knowledge.ColumnsByQualifier[strings.ToLower(readName(sql, qualifier))]
 		if !known {
 			continue
@@ -167,7 +163,7 @@ func findUnknownColumns(sql string, tokens []syntax.Token, knowledge SchemaKnowl
 		}
 
 		found = append(found, Diagnostic{
-			Message: fmt.Sprintf("%s has no column called %s", readName(sql, qualifier), column),
+			Message: fmt.Sprintf("unknown column: %s.%s", readName(sql, qualifier), column),
 			Start:   named.Start,
 			End:     named.End,
 		})
@@ -176,8 +172,7 @@ func findUnknownColumns(sql string, tokens []syntax.Token, knowledge SchemaKnowl
 	return found
 }
 
-// FindLocalDiagnostics returns the faults one scan of the buffer finds, without the
-// server.
+// FindLocalDiagnostics checks the buffer without a server request.
 func FindLocalDiagnostics(
 	sql string, knowledge SchemaKnowledge, flavour syntax.SyntaxFlavour,
 ) []Diagnostic {
@@ -187,8 +182,7 @@ func FindLocalDiagnostics(
 
 	tokens := syntax.Tokenize(sql, flavour)
 	unterminated := findUnterminatedRuns(sql, tokens)
-	// An unclosed token takes the rest of the buffer, so the brackets and names
-	// after it would hide the one fault that matters.
+	// Stop after unterminated tokens.
 	if len(unterminated) > 0 {
 		return unterminated
 	}

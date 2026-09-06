@@ -5,12 +5,9 @@ import (
 	"strings"
 )
 
-// A reply of a model, split into what to read and what to run. The prompt asks for one fenced
-// block, so the first one is the statement it proposed.
+// Model replies contain prose and proposed statements in code blocks.
 
-// statementFences name the languages a fenced block of a proposed statement is opened
-// with. Only the languages this client speaks are read as a statement, so a block of
-// anything else stays text the user reads rather than a statement offered to run.
+// statementFences is the set of code block language tags recognized as statements.
 const statementFences = "sql|js|javascript|mongodb|mongosh"
 
 // fencedBlock matches one fenced block, with or without the language named.

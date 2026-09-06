@@ -6,14 +6,12 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// The statements the object menu writes into the editor. Each one is a starting
-// point the user reads and changes, so the wording stays the same for every engine
-// and only the dialect writes the names.
+// Editable SQL templates for the object menu.
 
-// TemplateColumn is one column of a relation, as a template reads it.
+// TemplateColumn is a table column for template generation.
 type TemplateColumn struct {
 	Name string
-	// True where the server fills the column in, so an insert leaves it out.
+	// True when the column has a server default.
 	HasDefault bool
 }
 
@@ -22,7 +20,7 @@ type TemplateObject struct {
 	Schema string
 	Name   string
 	Kind   string
-	// A trigger is dropped from the table this names.
+	// The trigger target table.
 	Detail string
 	// A DDL lookup identifies a function by its argument types.
 	Identity string
@@ -39,14 +37,12 @@ const (
 	TemplateTrigger          = "trigger"
 )
 
-// GenerateSelect writes the read of one relation, capped so a large table cannot
-// fill the pane by accident.
+// GenerateSelect builds a query with a 100-row limit.
 func GenerateSelect(table query.QualifiedName, dialect *query.Dialect) string {
 	return "select *\n  from " + dialect.BuildQualifiedName(table) + "\n limit 100;"
 }
 
-// GenerateInsert writes an INSERT that names the columns the user fills in. A column
-// the server has a default for is left out, unless every column has one.
+// GenerateInsert builds an INSERT with named parameters. Columns with defaults are omitted unless every column has a default.
 func GenerateInsert(
 	table query.QualifiedName, columns []TemplateColumn, dialect *query.Dialect,
 ) string {
@@ -76,30 +72,29 @@ func GenerateAddColumn(table query.QualifiedName, dialect *query.Dialect) string
 	return "alter table " + dialect.BuildQualifiedName(table) + "\n  add column new_column text;"
 }
 
-// buildDerivedName names an object after another one. A name built from another is
-// quoted like any other, because the server changes the case of a bare name.
+// buildDerivedName appends a suffix and quotes the identifier when required.
 func buildDerivedName(name, suffix string, dialect *query.Dialect) string {
 	return dialect.QuoteIdentifierIfNeeded(name + suffix)
 }
 
-// GenerateCreateIndex writes the CREATE INDEX of one relation.
+// GenerateCreateIndex builds a CREATE INDEX template for a table.
 func GenerateCreateIndex(table query.QualifiedName, dialect *query.Dialect) string {
 	index := buildDerivedName(table.Name, "_new_idx", dialect)
 	return "create index " + index + "\n    on " + dialect.BuildQualifiedName(table) + " (column_name);"
 }
 
-// GenerateRenameTable writes the ALTER that renames a relation.
+// GenerateRenameTable builds an ALTER TABLE rename template.
 func GenerateRenameTable(table query.QualifiedName, dialect *query.Dialect) string {
 	renamed := buildDerivedName(table.Name, "_renamed", dialect)
 	return "alter table " + dialect.BuildQualifiedName(table) + "\n  rename to " + renamed + ";"
 }
 
-// GenerateTruncate writes the TRUNCATE of one relation.
+// GenerateTruncate builds a TRUNCATE TABLE statement.
 func GenerateTruncate(table query.QualifiedName, dialect *query.Dialect) string {
 	return "truncate table " + dialect.BuildQualifiedName(table) + ";"
 }
 
-// GenerateDrop writes the DROP of a relation, which names the kind it removes.
+// GenerateDrop builds a DROP statement for a table or view.
 func GenerateDrop(table query.QualifiedName, kind string, dialect *query.Dialect) string {
 	qualified := dialect.BuildQualifiedName(table)
 	switch kind {
@@ -128,8 +123,7 @@ func GenerateDropSchema(schema string, dialect *query.Dialect) string {
 	return dialect.BuildDropSchema(schema)
 }
 
-// GenerateDropObject writes the DROP of one object of a schema. A trigger is dropped
-// from its table. The others are dropped by name.
+// GenerateDropObject builds a DROP statement for a schema object.
 func GenerateDropObject(object TemplateObject, dialect *query.Dialect) string {
 	qualified := dialect.BuildQualifiedName(
 		query.QualifiedName{Schema: object.Schema, Name: object.Name})

@@ -34,8 +34,7 @@ const (
 	IconAi               IconKind = "ai"
 	IconProblem          IconKind = "problem"
 
-	// The icons of a control and not of a kind of object: the action of a row, the
-	// result of a key press on it, and the state the client waits for.
+	// Icons for controls, actions, and states.
 	IconFoldClosed IconKind = "fold-closed"
 	IconFoldOpen   IconKind = "fold-open"
 	IconField      IconKind = "field"
@@ -70,11 +69,10 @@ func IsIconKind(written string) bool {
 	return false
 }
 
-// IconSetName is the name of the glyph set the tree draws.
+// IconSetName is the tree glyph set.
 type IconSetName string
 
-// The two sets included in the app. A set selects which glyphs are drawn, not whether
-// glyphs are drawn at all: an empty glyph in `[ui.icon_glyphs]` disables one kind.
+// An empty glyph in `[ui.icon_glyphs]` hides one icon kind in either set.
 const (
 	IconsPlain IconSetName = "plain"
 	IconsASCII IconSetName = "ascii"
@@ -83,14 +81,14 @@ const (
 // IconSetNames lists the sets a config file can use.
 var IconSetNames = []IconSetName{IconsPlain, IconsASCII}
 
-// DescribeIconSetNames returns the valid set names, so an error message can list them.
+// DescribeIconSetNames returns the supported sets and the instruction to hide an icon.
 func DescribeIconSetNames() string {
 	written := make([]string, 0, len(IconSetNames))
 	for _, name := range IconSetNames {
 		written = append(written, string(name))
 	}
 	return "The sets are " + strings.Join(written, " and ") +
-		". A glyph written as nothing turns one kind off."
+		". An empty glyph hides one icon kind."
 }
 
 // FindIconSetName parses the text as a set name.
@@ -98,8 +96,7 @@ func FindIconSetName(written string) (IconSetName, bool) {
 	return core.FindAllowed(IconSetNames, written)
 }
 
-// UISettings holds everything under `[ui]`. These settings belong to the app and not to a
-// profile.
+// UISettings is the app configuration under `[ui]`.
 type UISettings struct {
 	IconSet IconSetName
 	// A glyph the user selected for one kind, for example a Nerd Font glyph.
@@ -111,13 +108,11 @@ type UISettings struct {
 	Colors ThemeTables
 	// The colour settings under `[ui]` that could not be read.
 	ColorProblems []string
-	// The settings under `[ui]` that name something the client does not have, for
-	// example an icon kind or an icon set. An unknown name is reported and not ignored,
-	// so the user sees a spelling error.
+	// Unsupported icon kinds or sets under `[ui]`.
 	Problems []string
 }
 
-// DefaultUISettings holds the settings the app starts with.
+// DefaultUISettings returns the default interface settings.
 func DefaultUISettings() UISettings {
 	return UISettings{
 		IconSet:           IconsPlain,
@@ -127,8 +122,7 @@ func DefaultUISettings() UISettings {
 	}
 }
 
-// ParseUISettings reads `[ui]`. An invalid setting uses the default, so a spelling error
-// does not stop the app.
+// ParseUISettings reads `[ui]` with defaults for invalid settings.
 func ParseUISettings(document Table) UISettings {
 	settings := DefaultUISettings()
 	ui, present := FindSection(document, "ui")
@@ -141,8 +135,8 @@ func ParseUISettings(document Table) UISettings {
 			settings.IconSet = set
 		} else {
 			settings.Problems = append(settings.Problems,
-				"icons: \""+written+"\" is not a set there is, so "+
-					string(settings.IconSet)+" is drawn. "+DescribeIconSetNames())
+				"icons: unsupported set \""+written+"\". Using "+
+					string(settings.IconSet)+". "+DescribeIconSetNames())
 		}
 	}
 
@@ -154,7 +148,7 @@ func ParseUISettings(document Table) UISettings {
 			}
 			if !IsIconKind(kind) {
 				settings.Problems = append(settings.Problems,
-					"icon_glyphs: \""+kind+"\" is not a kind there is")
+					"icon_glyphs: unsupported icon kind \""+kind+"\"")
 				continue
 			}
 			settings.IconGlyphs[IconKind(kind)] = written

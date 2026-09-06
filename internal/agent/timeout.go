@@ -8,19 +8,15 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// A time limit for a statement started by a model. Both callers of the tools need it,
-// because no user watches the connection.
+// Time limits for statements started by a model.
 
-// StoppableSession is the part of a connection a time limit needs: the capabilities of the
-// server, and the call that stops a statement above the limit.
+// StoppableSession is the connection interface for statement cancellation.
 type StoppableSession interface {
 	db.SessionInfo
 	db.ServerAdmin
 }
 
-// RunStatementWithin runs a statement with the time limit of the caller and then stops it on
-// the server. A long statement holds the only connection of its profile, and every later
-// call waits for it, so a limit in the client alone would leave the connection busy.
+// RunStatementWithin runs a statement with a timeout and requests server cancellation when the timeout expires.
 func RunStatementWithin(
 	ctx context.Context, session StoppableSession, timeout time.Duration,
 	run func(ctx context.Context) (db.QueryResult, error),
@@ -29,13 +25,11 @@ func RunStatementWithin(
 		result db.QueryResult
 		err    error
 	}
-	// The statement runs on its own context, so the limit stops it in the driver and on
-	// the server. Without this the call keeps the only connection of the profile, and
-	// every later call waits for a statement that nobody reads.
+	// Driver cancellation uses a separate context from server cancellation.
 	running, drop := context.WithCancel(ctx)
 	defer drop()
 
-	// Buffered, so a statement above its limit can still finish.
+	// The buffered channel accepts a response after timeout.
 	ran := make(chan answer, 1)
 	go func() {
 		result, err := run(running)
@@ -48,8 +42,7 @@ func RunStatementWithin(
 	case held := <-ran:
 		return held.result, held.err
 	case <-timer.C:
-		// The server is stopped first, on the context of the caller, because the cancel
-		// opens a second connection and the context above is about to be cancelled.
+		// Server cancellation opens a second connection and requires an active context.
 		refusal := stopRunningStatement(ctx, session, timeout)
 		drop()
 		waitForDroppedStatement(ran)
@@ -57,13 +50,10 @@ func RunStatementWithin(
 	}
 }
 
-// droppedStatementWait is the time the client waits for a cancelled statement to finish. A
-// driver that returns in that time gives the connection back. A driver that does not is left
-// to finish on its own, and the caller is told the statement can still be running.
+// droppedStatementWait is the maximum wait for the driver after cancellation.
 const droppedStatementWait = 5 * time.Second
 
-// waitForDroppedStatement waits for the goroutine of a cancelled statement, so its
-// connection is free before the next call needs it.
+// waitForDroppedStatement waits for the statement goroutine until the cancellation timeout.
 func waitForDroppedStatement[T any](ran <-chan T) {
 	timer := time.NewTimer(droppedStatementWait)
 	defer timer.Stop()
@@ -73,21 +63,20 @@ func waitForDroppedStatement[T any](ran <-chan T) {
 	}
 }
 
-// stopRunningStatement asks the server to stop a statement above its limit and returns the
-// result.
+// stopRunningStatement requests server cancellation and returns a timeout error.
 func stopRunningStatement(
 	ctx context.Context, session StoppableSession, timeout time.Duration,
 ) error {
 	waited := fmt.Sprintf("the statement was still running after %d ms", timeout.Milliseconds())
-	advice := "; narrow it, or give it a LIMIT"
+	advice := "; use a more specific predicate or a query LIMIT where appropriate"
 	if !session.Capabilities().CancelsRunningQuery {
 		return db.NewDatabaseError("%s", waited+
-			", and this engine cannot be told to stop it, so it may be running yet"+advice)
+			"; this engine does not support cancellation, and the statement may still be running"+advice)
 	}
 	stopped, err := session.CancelRunningQuery(ctx)
 	if err != nil || !stopped {
 		return db.NewDatabaseError("%s", waited+
-			" and was left running, since the server refused to cancel it"+advice)
+			"; server cancellation failed, and the statement may still be running"+advice)
 	}
 	return db.NewDatabaseError("%s", waited+" and was cancelled"+advice)
 }

@@ -52,8 +52,7 @@ func splitCommaList(value any) []string {
 	return parts
 }
 
-// FindDefinition reads the statement a SHOW CREATE answered. It names its column after
-// the object, so the result is read by content.
+// FindDefinition finds the CREATE statement in a SHOW CREATE result. The result column name varies by object type.
 func FindDefinition(row map[string]any) string {
 	for key, value := range row {
 		lowered := strings.ToLower(key)
@@ -77,8 +76,7 @@ func readMysqlForeignKey(row map[string]any) db.ForeignKey {
 	}
 }
 
-// RenderIndexDefinition builds a statement the server accepts, because MySQL keeps no
-// text of an index.
+// RenderIndexDefinition builds index SQL from catalog metadata.
 func RenderIndexDefinition(
 	table db.TableRef, name string, isPrimary, isUnique bool, columns any, dialect *query.Dialect,
 ) string {

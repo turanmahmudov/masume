@@ -10,8 +10,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// Dialect writes SQL the way SQLite reads it. What it calls a schema is an
-// attached database, and `main` is the file itself.
+// Dialect is the SQLite syntax configuration. Schemas are attached databases; main is the primary database file.
 var Dialect = &query.Dialect{
 	Engine: core.EngineSqlite, Syntax: syntax.FlavourStandard, SchemaWord: "database",
 	StatementLanguage: "SQL", FenceTag: "sql", StatementHint: "select … from …",
@@ -28,8 +27,7 @@ var Dialect = &query.Dialect{
 	BindLimit:      32766,
 	ColumnTypes: map[core.ColumnKind]string{
 		core.KindText: "text", core.KindInteger: "integer", core.KindNumber: "real",
-		// SQLite holds neither a boolean nor a timestamp of its own: a boolean is a
-		// number of zero or one, and a timestamp is the text of its own form.
+		// SQLite booleans use integers; timestamps use text.
 		core.KindBoolean: "integer", core.KindTimestamp: "text",
 	},
 	IdentityColumn: "id integer primary key autoincrement",
@@ -42,7 +40,7 @@ var Dialect = &query.Dialect{
 			dialect.BuildQualifiedName(query.QualifiedName{Schema: schema, Name: name}) + ";"
 	},
 	DropRoutine: func(*query.Dialect, string, string, string) string {
-		return "-- sqlite keeps no stored routine"
+		return "-- SQLite stored routines are unsupported"
 	},
 }
 

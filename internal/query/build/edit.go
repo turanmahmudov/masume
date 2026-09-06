@@ -9,8 +9,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// WriteTarget is the relation a write targets, and how this engine writes its names
-// and values.
+// WriteTarget is the target table, result columns, key columns, and SQL dialect.
 type WriteTarget struct {
 	Table   query.QualifiedName
 	Columns []query.ResultColumn
@@ -19,8 +18,7 @@ type WriteTarget struct {
 	Dialect    *query.Dialect
 }
 
-// resolveBindValue returns the bind value of a chosen value. DEFAULT is a keyword, so
-// it is never bound.
+// resolveBindValue converts a cell value to a parameter. DEFAULT requires literal SQL.
 func resolveBindValue(value core.CellValue) (any, error) {
 	switch value.Kind {
 	case core.CellNull:
@@ -30,7 +28,7 @@ func resolveBindValue(value core.CellValue) (any, error) {
 	case core.CellText:
 		return value.Text, nil
 	}
-	return nil, core.NewEditError("DEFAULT is written into the statement, not bound to it")
+	return nil, core.NewEditError("DEFAULT must be an SQL keyword, not a bound parameter")
 }
 
 func findColumnIndex(columns []query.ResultColumn, name string) int {
@@ -43,16 +41,14 @@ func findColumnIndex(columns []query.ResultColumn, name string) int {
 	return -1
 }
 
-// keyPredicate is a WHERE that names one row, with its bind values and a readable
-// summary.
+// keyPredicate is a row predicate with parameters and a display summary.
 type keyPredicate struct {
 	text    string
 	params  []any
 	summary string
 }
 
-// FindIdentityColumns returns every column the server can compare. Without a primary
-// key the count check proves the row.
+// FindIdentityColumns returns columns with comparable types for row matching.
 func FindIdentityColumns(columns []query.ResultColumn, dialect *query.Dialect) []query.ResultColumn {
 	kept := make([]query.ResultColumn, 0, len(columns))
 	for _, column := range columns {
@@ -63,8 +59,7 @@ func FindIdentityColumns(columns []query.ResultColumn, dialect *query.Dialect) [
 	return kept
 }
 
-// resolveKeyColumnNames returns the names that identify one row, which is every
-// comparable column without a primary key.
+// resolveKeyColumnNames returns primary key columns or all comparable result columns.
 func resolveKeyColumnNames(target WriteTarget) ([]string, error) {
 	if len(target.KeyColumns) > 0 {
 		return target.KeyColumns, nil
@@ -72,7 +67,7 @@ func resolveKeyColumnNames(target WriteTarget) ([]string, error) {
 	identity := FindIdentityColumns(target.Columns, target.Dialect)
 	if len(identity) == 0 {
 		return nil, core.NewEditError(
-			"no column of this table can be compared, so a row cannot be identified")
+			"cannot identify a row: the table has no comparable columns")
 	}
 	names := make([]string, 0, len(identity))
 	for _, column := range identity {
@@ -81,8 +76,7 @@ func resolveKeyColumnNames(target WriteTarget) ([]string, error) {
 	return names, nil
 }
 
-// buildKeyPredicate writes the WHERE that names one row. Without a primary key the
-// whole row is the key, so the caller must count the matches first.
+// buildKeyPredicate builds a row predicate. Without a primary key, the caller must count matches before writing.
 func buildKeyPredicate(
 	target WriteTarget, row []any, firstParamIndex int,
 ) (keyPredicate, error) {
@@ -122,8 +116,7 @@ func buildKeyPredicate(
 	}, nil
 }
 
-// buildRowsPredicate ORs the key predicate of every row of a set. The delete of a set and
-// the count that guards it both read this, so both always ask about the same rows.
+// buildRowsPredicate combines row predicates with OR for deletes and matching row counts.
 func buildRowsPredicate(target WriteTarget, rows [][]any) (keyPredicate, error) {
 	clauses := []string{}
 	params := []any{}
@@ -135,7 +128,7 @@ func buildRowsPredicate(target WriteTarget, rows [][]any) (keyPredicate, error) 
 			return keyPredicate{}, err
 		}
 		params = append(params, predicate.params...)
-		// One row of several is put in brackets, so its clauses stay together.
+		// Parenthesize each predicate when combining multiple rows.
 		if len(rows) == 1 {
 			clauses = append(clauses, predicate.text)
 		} else {
@@ -151,14 +144,12 @@ func buildRowsPredicate(target WriteTarget, rows [][]any) (keyPredicate, error) 
 	}, nil
 }
 
-// BuildRowCountStatement counts the rows one key predicate matches. A table without a
-// primary key can hold the same values twice, so this runs before a write.
+// BuildRowCountStatement builds a count query for one row predicate.
 func BuildRowCountStatement(target WriteTarget, row []any) (query.BoundStatement, error) {
 	return BuildRowsCountStatement(target, [][]any{row})
 }
 
-// BuildRowsCountStatement counts the rows the key predicates of a whole set match. The
-// write that follows it must not run unless the count matches the rows the user chose.
+// BuildRowsCountStatement builds a count query for the selected rows. The count must match the selection before writing.
 func BuildRowsCountStatement(target WriteTarget, rows [][]any) (query.BoundStatement, error) {
 	predicate, err := buildRowsPredicate(target, rows)
 	if err != nil {
@@ -174,8 +165,7 @@ func BuildRowsCountStatement(target WriteTarget, rows [][]any) (query.BoundState
 	}, nil
 }
 
-// NeedsRowCountGuard reports whether a write on this table must be counted first. A
-// table with a primary key identifies one row, so nothing has to be counted.
+// NeedsRowCountGuard is true for tables without a primary key.
 func NeedsRowCountGuard(target WriteTarget) bool {
 	return len(target.KeyColumns) == 0
 }
@@ -199,14 +189,13 @@ func describeAssignedValue(value core.CellValue) string {
 	return value.Text
 }
 
-// BuildUpdateStatement writes one update. Two cells of one row are one write, so both
-// land or neither does.
+// BuildUpdateStatement builds one update for all assigned cells in a row.
 func BuildUpdateStatement(
 	target WriteTarget, row []any, assignments []CellAssignment,
 ) (query.BoundStatement, error) {
 	dialect := target.Dialect
 	if len(assignments) == 0 {
-		return query.BoundStatement{}, core.NewEditError("nothing is assigned")
+		return query.BoundStatement{}, core.NewEditError("no column assignments")
 	}
 
 	clauses := []string{}
@@ -215,7 +204,7 @@ func BuildUpdateStatement(
 
 	for _, assignment := range assignments {
 		if assignment.ColumnIndex < 0 || assignment.ColumnIndex >= len(target.Columns) {
-			return query.BoundStatement{}, core.NewEditError("no such column")
+			return query.BoundStatement{}, core.NewEditError("column index is out of range")
 		}
 		column := target.Columns[assignment.ColumnIndex]
 		assigned := dialect.QuoteIdentifier(column.Name)
@@ -268,8 +257,7 @@ func buildDeleteChunk(target WriteTarget, rows [][]any) (query.BoundStatement, e
 	}, nil
 }
 
-// BuildDeleteStatements writes as few statements as the servers allow. A set too large
-// for one is split.
+// BuildDeleteStatements builds deletes in batches within the parameter limit.
 func BuildDeleteStatements(
 	target WriteTarget, rows [][]any, maxParameters int,
 ) ([]query.BoundStatement, error) {
@@ -288,8 +276,7 @@ func BuildDeleteStatements(
 	return statements, nil
 }
 
-// buildDeleteChunks splits the rows into the sets one statement each can carry, so the
-// caller can build a statement and its count from the same set.
+// buildDeleteChunks groups rows within the parameter limit for delete and count queries.
 func buildDeleteChunks(
 	target WriteTarget, rows [][]any, maxParameters int,
 ) ([][][]any, error) {
@@ -319,8 +306,7 @@ func buildDeleteChunks(
 	return chunks, nil
 }
 
-// BuildInsertStatement writes an INSERT from a column-to-value map. A missing column
-// is left out so the column default applies rather than being overwritten with null.
+// BuildInsertStatement builds an INSERT from a column-value map. Omitted columns use server defaults.
 func BuildInsertStatement(
 	table query.QualifiedName, values map[string]any, dialect *query.Dialect,
 ) (query.BoundStatement, error) {
@@ -352,19 +338,16 @@ func BuildInsertStatement(
 	}, nil
 }
 
-// ChangeStatement is one write of the staged work, and the count that must run before it
-// when the table has no primary key.
+// ChangeStatement is a staged write with an optional row count check.
 type ChangeStatement struct {
 	Statement query.BoundStatement
-	// Guard counts the rows the write will match. It is set only where no column of the
-	// table identifies one row, and the write must not run unless the count returns Expect.
+	// Guard is the count query for a table without a primary key. The count must equal Expect before writing.
 	Guard *query.BoundStatement
 	// Expect is the rows the user chose, which the guard has to match exactly.
 	Expect int
 }
 
-// buildGuard returns the count that must run before a write on a keyless table, and nil
-// when the table has a primary key.
+// buildGuard builds a count query for a keyless table, or returns nil for a table with a primary key.
 func buildGuard(target WriteTarget, rows [][]any) (*query.BoundStatement, error) {
 	if !NeedsRowCountGuard(target) {
 		return nil, nil
@@ -376,19 +359,13 @@ func buildGuard(target WriteTarget, rows [][]any) (*query.BoundStatement, error)
 	return &guard, nil
 }
 
-// BuildChangeStatements turns the staged changes into statements: inserts first, then
-// updates, then deletes. A row marked for deletion skips its own updates.
-//
-// An update or a delete on a table with no key of its own carries a count. The key of such
-// a row is the whole row, and a table like that can hold the same row twice, so the write
-// would silently take both. The count stands in front of it and the write is refused where
-// the server holds more rows than the user chose.
+// BuildChangeStatements builds inserts, updates, then deletes. Deleted rows skip updates. Keyless updates and deletes include row count checks.
 func BuildChangeStatements(
 	target WriteTarget, rows [][]any, pending core.PendingChanges,
 ) ([]ChangeStatement, error) {
 	statements := []ChangeStatement{}
 
-	// An insert names its own values, so there is no row to count.
+	// Inserts require no row count check.
 	for _, values := range pending.Inserts {
 		statement, err := BuildInsertStatement(target.Table, values, target.Dialect)
 		if err != nil {
@@ -397,7 +374,7 @@ func BuildChangeStatements(
 		statements = append(statements, ChangeStatement{Statement: statement})
 	}
 
-	// Every cell of one row is collected first, so the row becomes one statement.
+	// Group cell assignments by row.
 	byRow := map[int][]CellAssignment{}
 	order := []int{}
 	for _, edit := range core.SortedEdits(pending) {
@@ -441,8 +418,7 @@ func BuildChangeStatements(
 	return append(statements, removals...), nil
 }
 
-// BuildDeleteChangeStatements writes the deletes with the count each one needs. A delete
-// covers a chunk of rows, so its count expects that whole chunk.
+// BuildDeleteChangeStatements builds batched deletes with a row count check for each keyless batch.
 func BuildDeleteChangeStatements(
 	target WriteTarget, rows [][]any, maxParameters int,
 ) ([]ChangeStatement, error) {
@@ -467,8 +443,7 @@ func BuildDeleteChangeStatements(
 	return statements, nil
 }
 
-// FindForeignKeyTarget returns the column a foreign key points at for the grid column
-// under the cursor.
+// FindForeignKeyTarget returns the referenced column for a grid column.
 func FindForeignKeyTarget(
 	foreignKeys []query.ForeignKey, columnName string,
 ) (query.ForeignKeyTarget, bool) {

@@ -14,9 +14,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// What the tree draws: the databases of the server, the collections of each, and the
-// fields a sample of a collection holds. A collection keeps no schema, so the columns
-// are read from the documents rather than from a catalog.
+// The catalog includes databases, collections, and fields inferred from sampled documents.
 
 // ListTables returns every collection of every database the connection may read.
 func (session *mongoSession) ListTables(ctx context.Context) ([]db.TableRef, error) {
@@ -30,9 +28,7 @@ func (session *mongoSession) ListTables(ctx context.Context) ([]db.TableRef, err
 		specifications, listErr := session.client.Database(name).
 			ListCollectionSpecifications(ctx, bson.D{})
 		if listErr != nil {
-			// A database the connection may not read is left out, because the tree of
-			// the databases it may read is still the answer. Any other reason is not the
-			// same as an empty database, so it is reported.
+			// Inaccessible databases are skipped. Other errors are reported.
 			if IsAuthenticationError(listErr) {
 				continue
 			}
@@ -59,16 +55,14 @@ func (session *mongoSession) ListTables(ctx context.Context) ([]db.TableRef, err
 	return tables, nil
 }
 
-// listDatabaseNames returns the databases of the server, and the one of the connection
-// alone where the connection may not list them.
+// listDatabaseNames returns available databases, or only the connection database if listing is forbidden.
 func (session *mongoSession) listDatabaseNames(ctx context.Context) ([]string, error) {
 	names, err := session.client.ListDatabaseNames(ctx, bson.D{})
 	if err == nil {
 		sort.Strings(names)
 		return names, nil
 	}
-	// A user with rights on one database only cannot list the rest, and the tree of
-	// that one database is still worth drawing.
+	// Listing all databases can require permissions beyond the connection database.
 	if _, listErr := session.client.Database(session.Descriptor.DefaultSchema).
 		ListCollectionNames(ctx, bson.D{}); listErr != nil {
 		return nil, db.WrapDatabaseError(err)
@@ -76,9 +70,7 @@ func (session *mongoSession) listDatabaseNames(ctx context.Context) ([]string, e
 	return []string{session.Descriptor.DefaultSchema}, nil
 }
 
-// systemCollectionPrefix marks the collections a database keeps for itself, inside a
-// database of the user: the one that holds its views, the one that profiles it, and the
-// buckets under a time series collection.
+// systemCollectionPrefix is the prefix for internal collections, including views, profiling data, and time-series buckets.
 const systemCollectionPrefix = "system."
 
 // IsSystemCollection is true where the database keeps this collection for itself.
@@ -95,8 +87,7 @@ func readRelationKind(written string) db.RelationKind {
 	return db.RelationTable
 }
 
-// DescribeTable returns the fields a sample of the collection holds. A collection keeps
-// no schema, so a field no document of the sample carries is not answered.
+// DescribeTable returns fields from a collection sample. Fields absent from the sample are omitted.
 func (session *mongoSession) DescribeTable(
 	ctx context.Context, table db.TableRef,
 ) (db.TableDetail, error) {
@@ -117,8 +108,7 @@ func (session *mongoSession) DescribeTable(
 			IsPrimaryKey: name == IdentityField,
 		})
 	}
-	// Every document has an identity, and an empty collection has no document to read
-	// one from.
+	// Empty collections still include the identity field.
 	if !held {
 		columns = append([]db.ColumnDetail{{
 			Name: IdentityField, DataType: TypeObjectID, IsPrimaryKey: true,
@@ -224,9 +214,7 @@ func readIndexKeys(specification mongo.IndexSpecification) string {
 	return WriteExtendedJSON(keys)
 }
 
-// ListConstraints returns what an index of a collection promises. MongoDB keeps no
-// constraint of its own: an identity is unique because of its index, and so is every
-// other unique field.
+// ListConstraints returns uniqueness constraints from collection indexes.
 func (session *mongoSession) ListConstraints(
 	ctx context.Context, table db.TableRef,
 ) ([]db.ConstraintDetail, error) {
@@ -283,8 +271,7 @@ func (session *mongoSession) ListRoles(ctx context.Context) ([]db.DbRole, error)
 	return roles, nil
 }
 
-// BuildTableDDL writes the calls that build this collection and its indexes again. The
-// index over the identity is left out, because every collection is created with one.
+// BuildTableDDL returns collection and index creation calls. The automatic identity index is omitted.
 func (session *mongoSession) BuildTableDDL(
 	ctx context.Context, table db.TableRef,
 ) ([]string, error) {
@@ -304,10 +291,9 @@ func (session *mongoSession) BuildTableDDL(
 	return lines, nil
 }
 
-// BuildObjectDDL answers with a comment line: a database holds no object of the kinds the
-// tree groups, so there is no definition to write.
+// BuildObjectDDL returns a comment for unsupported object kinds.
 func (session *mongoSession) BuildObjectDDL(
 	context.Context, db.SchemaObject,
 ) ([]string, error) {
-	return []string{"// mongodb keeps no object of this kind"}, nil
+	return []string{"// unsupported MongoDB object kind"}, nil
 }

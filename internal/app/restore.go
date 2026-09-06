@@ -9,12 +9,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/hist"
 )
 
-// The open tabs of a connection, written into the history file and read back at the next
-// connection. A restored table or object tab reads its data the first time it is shown, so a
-// new connection asks the server for one table only.
+// Workspace persistence restores tab state. Table and object tabs load data on first display.
 
-// RestoreTabs opens the stored tabs of the profile. A profile that was never opened, or one
-// whose tabs could not be read, starts with one empty query tab.
+// RestoreTabs restores saved tabs or preserves the current tabs when the saved list is empty.
 func (connection *Connection) RestoreTabs(saved hist.SavedWorkspace, buildPreview PreviewBuilder) {
 	if len(saved.Tabs) == 0 {
 		return
@@ -75,8 +72,7 @@ func applySavedState(tab *Tab, state hist.SavedTabState) {
 	}
 }
 
-// TakeUnread returns whether this tab still has to read its data, and marks it as read. A
-// restored tab reads the first time it is shown.
+// TakeUnread clears and returns the pending first-read flag for a tab.
 func (connection *Connection) TakeUnread(tab *Tab) bool {
 	if tab == nil || !connection.Unread[tab.ID] {
 		return false
@@ -118,8 +114,7 @@ func buildSavedTab(tab *Tab) hist.SavedTab {
 	return hist.SavedTab{Kind: "query", SQL: tab.Editor.Text, State: state}
 }
 
-// DescribeTabs returns the open tabs as one text, so a change is found without a comparison
-// of every field.
+// DescribeTabs returns a text signature of the active index, tab identities, and editor contents.
 func (connection *Connection) DescribeTabs() string {
 	var written strings.Builder
 	written.WriteString(strconv.Itoa(connection.ActiveIndex))

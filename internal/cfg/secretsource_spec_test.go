@@ -1,6 +1,7 @@
 package cfg_test
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -79,9 +80,86 @@ func TestBuildSecretCommandQuotesTheReference(t *testing.T) {
 		{"; rm -rf /", `read '; rm -rf /' | head -1`},
 		{"it's", `read 'it'\''s' | head -1`},
 	} {
-		if got := cfg.BuildSecretCommand(source, held.reference); got != held.want {
+		if got, err := cfg.BuildSecretCommand(source, held.reference); err != nil || got != held.want {
 			t.Errorf("the reference %q built %q, wanted %q", held.reference, got, held.want)
 		}
+	}
+}
+
+func TestBuildSecretCommandPassesReferencesAsLiteralArguments(t *testing.T) {
+	for _, reference := range []string{
+		"", "a b", "it's", `$(printf injected)`, "`printf injected`",
+		"'; printf injected; #", "\"; printf injected; #", "first\nsecond", `a\b`,
+	} {
+		t.Run(reference, func(t *testing.T) {
+			command, err := cfg.BuildSecretCommand(cfg.SecretSource{
+				Command: `printf '<%s>' {{ref}} {{ref}} | tr -d '\000'`,
+			}, reference)
+			if err != nil {
+				t.Fatal(err)
+			}
+			output, err := exec.Command("sh", "-c", command).CombinedOutput()
+			if err != nil {
+				t.Fatalf("shell error: %v: %s", err, output)
+			}
+			if wanted := "<" + reference + "><" + reference + ">"; string(output) != wanted {
+				t.Errorf("output %q, want %q", output, wanted)
+			}
+		})
+	}
+}
+
+func TestParseSecretSourcesAcceptsQuotedFlags(t *testing.T) {
+	for _, command := range []string{
+		"op read {{ref}}",
+		"vault kv get -field=password {{ref}}",
+		`sops -d --extract '["db"]["password"]' {{ref}}`,
+		`read-secret --label "work database" {{ref}} | head -1`,
+		"read-secret\t{{ref}}\t{{ref}}",
+	} {
+		sources, problems := cfg.ParseSecretSources(cfg.Table{
+			"secret": cfg.Table{"work": cfg.Table{"command": command}},
+		})
+		if len(problems) != 0 || len(sources) != 1 {
+			t.Errorf("command %q: sources %v, problems %v", command, sources, problems)
+		}
+	}
+}
+
+func TestRejectSecretCommandsWithUnsafeReferenceContexts(t *testing.T) {
+	for _, command := range []string{
+		`op read '{{ref}}'`, `op read "{{ref}}"`,
+		`op read 'prefix {{ref}} suffix'`, `op read "prefix {{ref}} suffix"`,
+		`op read prefix{{ref}}`, `op read {{ref}}suffix`,
+		`op read --path={{ref}}`, `op read {{ref}}"suffix"`,
+		`op read \{{ref}}`, `op read {{ref}}{{ref}}`,
+		`op read {{ref}} "{{ref}}"`, `op read {{ref}} 'unterminated`,
+		`op read $(printf {{ref}})`, "op read `printf {{ref}}`",
+		`op read "$(printf {{ref}})"`, `op read ${value:- {{ref}} }`,
+		`op read $'escaped\' {{ref}} '`, `op read $" {{ref}} "`,
+		"op read <<EOF\n{{ref}}\nEOF", "op read {{ref}}\x00",
+		`op read {{ref}} # comment`, `op read {{ref}} || other`,
+		`op read {{ref}} && other`, `op read {{ref}}; other`,
+		`op read {{ref}} > output`, `op read {{ref}} |`,
+		`{{ref}}`, `op read file | {{ref}}`,
+	} {
+		t.Run(command, func(t *testing.T) {
+			sources, problems := cfg.ParseSecretSources(cfg.Table{
+				"secret": cfg.Table{"work": cfg.Table{"command": command}},
+			})
+			if len(sources) != 0 || len(problems) != 1 ||
+				!strings.Contains(problems[0].Reason, "standalone unquoted {{ref}}") {
+				t.Errorf("sources %v, problems %v", sources, problems)
+			}
+			source := cfg.SecretSource{Name: "work", Command: command}
+			if built, err := cfg.BuildSecretCommand(source, "$(printf injected)"); err == nil || built != "" {
+				t.Errorf("unsafe command %q, error %v", built, err)
+			}
+			profile := cfg.Profile{Auth: cfg.AuthSecret, Secret: "work", SecretRef: "reference"}
+			if _, err := cfg.ApplySecretCommand(profile, []cfg.SecretSource{source}); err == nil {
+				t.Error("the profile accepted an unsafe store")
+			}
+		})
 	}
 }
 
@@ -93,6 +171,7 @@ func TestLoadConfigReportsABrokenSecretStore(t *testing.T) {
 	}{
 		{"no command", "[secret.work]\ndescription = \"nothing\"\n", "command"},
 		{"no reference", "[secret.work]\ncommand = \"op read\"\n", "{{ref}}"},
+		{"quoted reference", "[secret.work]\ncommand = \"op read '{{ref}}'\"\n", "standalone unquoted {{ref}}"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			loaded := cfg.LoadConfig(writeConfig(t, held.written))
@@ -107,6 +186,37 @@ func TestLoadConfigReportsABrokenSecretStore(t *testing.T) {
 				t.Errorf("the reason reads %q", problem.Reason)
 			}
 		})
+	}
+}
+
+func TestLoadConfigSkipsProfilesWithUnsafeSecretStores(t *testing.T) {
+	loaded := cfg.LoadConfig(writeConfig(t, `
+[secret.unsafe]
+command = "op read '{{ref}}'"
+[secret.safe]
+command = "op read {{ref}}"
+[profile.unsafe]
+engine = "postgres"
+host = "localhost"
+database = "shop"
+user = "reader"
+secret = "unsafe"
+secret_ref = "reference"
+[profile.safe]
+engine = "postgres"
+host = "localhost"
+database = "shop"
+user = "reader"
+secret = "safe"
+secret_ref = "reference"
+`))
+	if len(loaded.Problems) != 2 || loaded.Problems[0].Name != "secret.unsafe" ||
+		loaded.Problems[1].Name != "unsafe" {
+		t.Errorf("problems: %v", loaded.Problems)
+	}
+	if len(loaded.Secrets) != 1 || loaded.Secrets[0].Name != "safe" ||
+		len(loaded.Profiles) != 1 || loaded.Profiles[0].Name != "safe" {
+		t.Errorf("stores: %v, profiles: %v", loaded.Secrets, loaded.Profiles)
 	}
 }
 

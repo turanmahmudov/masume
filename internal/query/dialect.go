@@ -14,36 +14,30 @@ type QualifiedName struct {
 	Name   string
 }
 
-// Dialect says where one server writes SQL differently from another. Each family
-// has one, and the servers that speak its protocol share it.
+// Dialect is the SQL generation configuration for an engine family.
 type Dialect struct {
 	// Servers that share a dialect share the name: CockroachDB and Redshift use `postgres`.
 	Engine core.Engine
-	// How this server reads a comment and a string, which the lexer needs.
+	// The lexer syntax variant.
 	Syntax syntax.SyntaxFlavour
-	// The word for the group of a relation, in a message to the user.
+	// The display term for schema or database.
 	SchemaWord string
-	// StatementLanguage names what a statement of this server is written in, for a
-	// message to the user and for the chat.
+	// StatementLanguage is the server language for display and chat prompts.
 	StatementLanguage string
 	// FenceTag is how a fenced block of that language is opened in a reply of a model.
 	FenceTag string
-	// StatementExample shows the shape of one statement, for a server whose statements
-	// are no SQL a model already knows how to write. It is empty for SQL.
+	// StatementExample is a sample statement for non-SQL languages.
 	StatementExample string
-	// StatementHint is the shape of one statement in a few cells, which an empty editor
-	// draws to say what it takes.
+	// StatementHint is the empty editor example.
 	StatementHint string
 
 	// QuoteIdentifier writes the name so the server reads it back exactly.
 	QuoteIdentifier func(name string) string
 	// BuildPlaceholder writes a bind placeholder, counted from one.
 	BuildPlaceholder func(position int) string
-	// CountExpression counts the rows of a read.
+	// CountExpression is the row count expression.
 	CountExpression string
-	// RowLockClause holds the rows a read returns until the transaction ends, so a write
-	// that follows the read finds them as they were. A server that locks the whole
-	// database for a write leaves it empty.
+	// RowLockClause is the capture query locking clause, or empty for dialects without a row lock clause.
 	RowLockClause string
 	// QuoteTextLiteral writes a value as the server would read it, for a person to see.
 	QuoteTextLiteral func(text string) string
@@ -51,20 +45,15 @@ type Dialect struct {
 	CanCompareType func(dataType string) bool
 	// IdentityColumn is the column a new table numbers its rows with.
 	IdentityColumn string
-	// ColumnTypes give the type this server writes for each kind of value, so a table
-	// made for a data file is written in the types of its own server.
+	// ColumnTypes is the server type for each imported value kind.
 	ColumnTypes map[core.ColumnKind]string
-	// BindLimit is how many placeholders one statement of this server may hold. A server
-	// that leaves it unset takes the limit of a sixteen bit count, which is what the
-	// PostgreSQL and MySQL protocols hold.
+	// BindLimit is the maximum placeholders per statement. Zero uses the default 16-bit protocol limit.
 	BindLimit int
-	// DropSchema, DropTrigger and DropRoutine write the statement that removes one
-	// object. Each takes the dialect, so it can quote the names it writes.
+	// DropSchema, DropTrigger, and DropRoutine are dialect-specific DROP builders.
 	DropSchema  func(dialect *Dialect, schema string) string
 	DropTrigger func(dialect *Dialect, schema, name, table string) string
 	DropRoutine func(dialect *Dialect, schema, name, identity string) string
-	// NamesWithoutQuotes is true for a name this server reads back as written. A
-	// server that leaves it out takes the SQL rule: a plain word that is no keyword.
+	// NamesWithoutQuotes is an optional additional check for identifiers that need no quotes.
 	NamesWithoutQuotes func(name string) bool
 }
 
@@ -82,8 +71,7 @@ func (dialect *Dialect) QuoteIdentifierIfNeeded(name string) string {
 	return dialect.QuoteIdentifier(name)
 }
 
-// defaultBindLimit is how many placeholders a statement may hold on a server that names no
-// limit of its own. Both wire protocols count them in a sixteen bit field.
+// defaultBindLimit is the default placeholder limit, matching the PostgreSQL and MySQL 16-bit protocol fields.
 const defaultBindLimit = 65535
 
 // ResolveBindLimit returns how many placeholders one statement of this server may hold.
@@ -131,8 +119,7 @@ func ReadBaseType(dataType string) string {
 	return base
 }
 
-// typeKinds give the kind of value each base type holds. A type that is in none of these
-// holds text, which is what every remaining type is read and written as.
+// typeKinds maps base types to value kinds. Unlisted types use text.
 var typeKinds = map[string]core.ColumnKind{
 	"smallint": core.KindInteger, "integer": core.KindInteger, "int": core.KindInteger,
 	"bigint": core.KindInteger, "int2": core.KindInteger, "int4": core.KindInteger,
@@ -152,8 +139,7 @@ var typeKinds = map[string]core.ColumnKind{
 	"date":                        core.KindTimestamp, "datetime": core.KindTimestamp,
 }
 
-// ReadTypeKind returns the kind of value a column of that type holds, so a value read from
-// a file can be checked against the column it is mapped to.
+// ReadTypeKind returns the value kind for an imported column type.
 func ReadTypeKind(dataType string) core.ColumnKind {
 	if kind, known := typeKinds[ReadBaseType(dataType)]; known {
 		return kind
@@ -167,7 +153,7 @@ func stripModifier(dataType string) string {
 	return modifierGroup.ReplaceAllString(dataType, "")
 }
 
-// BoundValues numbers the placeholders of a statement, so no caller counts them itself.
+// BoundValues collects parameters and numbers placeholders.
 type BoundValues struct {
 	dialect *Dialect
 	first   int

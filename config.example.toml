@@ -1,19 +1,16 @@
-# masume config. Copy this file to ~/.config/masume/config.toml and edit it.
+# masume configuration examples. Values are not all defaults. See docs/configuration.md for defaults and docs/usage.md for workflows.
 #
-# The path is $XDG_CONFIG_HOME/masume/config.toml. Custom themes go in a `themes` directory
-# next to it. When you save a connection in the client, masume writes it back into this file
-# and keeps every other line unchanged.
+# The user file is $XDG_CONFIG_HOME/masume/config.toml, normally ~/.config/masume/config.toml. Custom themes are in the adjacent themes directory.
+# The connection form saves profiles in the user file. Text outside the edited profile block stays unchanged.
 #
-# No file that masume reads carries a password. A `password` key is ignored wherever it is
-# written, and reported. Use `auth = "keyring"`, `auth = "prompt"`, `password_command`,
-# `password_env`, or a `[secret]` store.
+# Profile passwords in files are ignored. A non-empty password string produces a warning. The configured auth source still applies.
+# Password sources are keyring, prompt, password_command, password_env, or a [secret] store. Headless commands cannot prompt.
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Example profiles. One profile is one connection. The name after `profile.` is the
-# name shown in the picker.
+# Example profiles. One profile is one connection. The name after profile. is the picker name.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# A local server. The password is asked for at connect time.
+# A local server with a password prompt at connection time.
 [profile.shop]
 engine   = "postgres"
 host     = "127.0.0.1"
@@ -33,7 +30,7 @@ env         = "dev"
 mode        = "write"
 description = "The notes database"
 
-# A production server, read-only. The password comes from a password manager.
+# A read-only production server with a password manager.
 [profile.shop-prod]
 engine               = "postgres"
 host                 = "db.example.com"
@@ -48,8 +45,8 @@ sslmode              = "verify-full"
 statement_timeout_ms = 30000
 mcp                  = "read-only"
 
-# A server behind a jump host. The command runs before the connection opens. The client
-# waits for the port, and stops the command when the connection closes.
+# A server behind a jump host. The command stays in the foreground. The client checks host:wait_for_port before connection.
+# Closing the connection stops the running process group. Detached processes are not reliably cleaned up.
 [profile.shop-tunnel]
 engine          = "postgres"
 host            = "127.0.0.1"
@@ -65,20 +62,21 @@ wait_for_port   = 15432
 
 [ui]
 icons               = "plain"
-theme               = "system"
+theme               = "ayu-dark"
 hide_system_schemas = true
 
 [keys]
 preset = "default"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# All other settings. Uncomment a line to set it. The value shown is the default
-# used when the line is missing.
+# Setting reference. Commented values include defaults and examples. Connection addresses, credentials, colours and glyph overrides are examples.
+# Duplicate table headers are invalid TOML. Settings belong under one header per table.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# A secret store. Declared once, named by any number of profiles with `secret`. The command
-# prints one secret, and `{{ref}}` is where the reference of the profile goes. The reference
-# is passed as one quoted argument, so it can run nothing of its own. masume knows no tool.
+# A secret store is a reusable password command. Each {{ref}} is an unquoted, standalone placeholder for one shell-quoted argument.
+# Templates accept literal arguments, quoted flags and pipelines. Shell expansion, redirects, command lists and multiline templates require a script.
+# Password commands have no stdin. Commands must exit successfully within 30 seconds and print a non-empty first line.
+# Secret stores and password commands belong in the user file. Project profiles cannot set command, password_command, password_env, secret or secret_ref.
 #
 # [secret.work]
 # command = "op read {{ref}}"
@@ -86,7 +84,7 @@ preset = "default"
 # [secret.infra]
 # command = "vault kv get -field=password {{ref}}"
 
-# A profile is one connection. The name after `profile.` is the name shown in the picker.
+# A profile is one connection. The name after profile. is the picker name.
 #
 # [profile.a-name]
 # engine               = "postgres"   # postgres mysql sqlite mongodb cockroach
@@ -97,37 +95,42 @@ preset = "default"
 # database             = "shop"       # the file path for sqlite
 # user                 = "you"
 # auth                 = "password"   # password command prompt keyring secret
-#                                     # `password` here means password_env. A `password`
-#                                     # key in this file is ignored: no file holds a password
+# The default auth is secret when secret is set, otherwise command when password_command is set, otherwise password.
+# auth = "password" reads password_env. A password key in this file is ignored.
 # password_env         = "PGPASSWORD" # read the password from this environment variable
 # password_command     = "pass db/shop"   # read the password from the output of this command
 # secret               = "work"       # read the password from this [secret] store
 # secret_ref           = "op://eng/shop/password"   # the reference in that store
-# env                  = "dev"        # dev test prod. prod colours the title bar red
+# env                  = "dev"        # dev test prod. The theme provides the environment colour.
 # mode                 = "write"      # write read-only
 # confirm_writes       = "off"        # off delete write agent. unset: off on dev, delete on test, write on prod
 # write_plan           = "off"        # off count undo. unset: off on dev, count on test, undo on prod
-# undo_rows            = 1000         # rows a write plan reads to build an undo. 0 sets no limit
+# undo_rows            = 1000         # Maximum captured target rows. 0 uses an internal ceiling of 1048576.
 # sslmode              = "prefer"     # disable allow prefer require verify-ca verify-full
 # statement_timeout_ms = 0            # time limit per statement. 0 uses the server default
 # keepalive_s          = 30           # seconds between connection checks. 0 disables the keepalive
 # page_size            = 200          # rows the grid loads per page
 # command              = "ssh -N -L 5432:db:5432 jump"   # run before the connection opens
 # command_timeout      = 10           # seconds to wait for the command to open its port
-# wait_for_port        = 5432         # the port the command must open
-# autocommit           = true         # false keeps a transaction open until you commit
-# mcp                  = "read-only"  # off read-only read-write full. What an agent can do
-#                                     # on this profile. Never more than `[mcp] access`
+# wait_for_port        = 5432         # The readiness port on host. The database connection still uses port.
+# autocommit           = true         # false starts a transaction on TUI execution, until commit or rollback.
+# mcp                  = "read-only"  # off read-only read-write full. The default is the global [mcp] access limit.
 # description          = "one line about this connection"
 # ai_instructions      = "what the model should know about this database"
+# description is stored in the form but absent from the picker.
+# Environment defaults apply to absent file settings. Changing env in the form does not change confirmation.
+# Undo covers eligible single updates, deletes and truncates. Captured target rows exclude cascades and trigger effects.
+# A later undo can overwrite newer values. Grid changes and imports retain no undo. See docs/configuration.md for eligibility and failures.
+# Unset TLS uses prefer on PostgreSQL and MySQL, require on Redshift, Neon, Supabase and PlanetScale, and none on MongoDB.
+# MongoDB allow and prefer use TLS without an unencrypted fallback. SQLite ignores TLS.
+# Relative SQLite paths in a project file use the project directory. Other relative SQLite paths use the startup directory.
 
 # [ui]
 # icons               = "plain"   # plain ascii
-# theme               = "system"  # system, a built-in theme, or a custom theme
-#                                 # from ~/.config/masume/themes
+# theme               = "ayu-dark" # system, a built-in theme, or a custom theme from the themes directory.
 # hide_system_schemas = true      # false lists pg_catalog and other system schemas in the tree
 
-# The glyph shown for each kind of item. An empty string disables that glyph.
+# Example glyph overrides by row kind. An empty string hides that glyph.
 #
 # [ui.icon_glyphs]
 # # kinds of rows in the tree
@@ -174,20 +177,18 @@ preset = "default"
 # banner      = "⚑"
 # new-tab     = "+"
 
-# Colour overrides for the active theme, without a theme file. Every colour name
-# from the themes is allowed here.
+# Example colour overrides for the active theme. Every theme colour name is allowed here.
 #
-# Named colours. Each entry must be a hex value. An entry of [ui.colors] or [ui.syntax] can
-# then use a name from here in place of a hex value.
+# Named colours are hex values. [ui.colors] and [ui.syntax] can reference these names.
 #
 # [ui.palette]
 # blue   = "#7aa2f7"
 # purple = "#bb9af7"
 # red    = "#f7768e"
 
-# The colours of the editor. Each token kind is a table. `fg` and `bg` take a hex value or
-# a colour name, and `bold`, `italic` and `underline` are flags. `link` copies another
-# highlight first, then the other keys apply on top. See docs/themes.md for every kind.
+# Editor highlights. Each token kind is a table. fg and bg are hex values or colour names.
+# bold, italic and underline are boolean flags. link is another token kind; the local properties override the linked style.
+# See docs/themes.md for inheritance, custom parents, and the reserved system theme. Picker selections persist in [ui] theme.
 #
 # [ui.syntax]
 # keyword    = { fg = "accent", bold = true }
@@ -197,6 +198,7 @@ preset = "default"
 # number     = { fg = "accent_warm" }
 # identifier = { fg = "text" }
 # quoted     = { fg = "text" }
+# operator   = { fg = "accent_alt" }
 # parameter  = { fg = "danger" }
 # problem    = { fg = "error", underline = true }
 # bracket    = { fg = "on_accent", bg = "accent_alt" }
@@ -227,10 +229,8 @@ preset = "default"
 # env_test     = "#e0af68"
 # env_prod     = "#f7768e"
 
-# Key bindings. Every action is listed below under the scope that handles it, with
-# the keys of the default preset. A line you uncomment replaces the preset binding.
-# Actions you do not list keep the preset binding. An action with an empty list has
-# no key binding.
+# Key bindings by scope, with default preset chords. A configured action replaces the preset binding.
+# Unlisted actions retain the preset binding. An empty list removes the binding.
 #
 # [keys]
 # preset = "default"
@@ -283,6 +283,7 @@ preset = "default"
 # toggle-autocommit    = ["ctrl+o"]
 # toggle-result        = ["meta+d"]
 # toggle-sidebar       = ["meta+s"]
+# undo-write           = ["meta+u"]
 #
 # [keys.grid]   # the rows of the result
 # add-sort-column    = ["shift+s"]
@@ -325,6 +326,7 @@ preset = "default"
 # view-cell          = ["v"]
 #
 # [keys.document]   # the document tree
+# clear-rewrites   = ["c"]
 # copy-path        = ["shift+y"]
 # copy-value       = ["y"]
 # count-rows       = ["t"]
@@ -336,6 +338,7 @@ preset = "default"
 # cursor-up        = ["up"]
 # fold-row         = ["left"]
 # open-node        = ["return"]
+# pop-filter       = ["u"]
 # search-columns   = ["/"]
 # unfold-row       = ["right"]
 #
@@ -435,33 +438,33 @@ preset = "default"
 # toggle-value      = ["space"]
 # write-export      = ["ctrl+s"]
 
-# AI chat settings. By default the API key is read from an environment variable,
-# so it is not stored in this file.
+# AI settings. The api_key_env names below are configured examples, not built-in defaults.
+# Direct api_key and base_url values take priority over their environment variables.
+# A configured base URL gains /v1 unless the address already ends with /v1. Requests use /messages or /responses.
 #
 # [ai]
-# enabled              = true          # false disables every AI feature: the chat cannot open,
-#                                      # no AI action has a key binding, and nothing about AI
-#                                      # is shown anywhere
+# enabled              = true          # false disables the AI chat, its elements and its bindings.
 # default_provider     = "anthropic"   # anthropic openai
 # statement_timeout_ms = 30000         # time limit for a statement that the model runs
 #
-# [ai.providers.anthropic]
-# model        = "claude-opus-5"
-# api_key      = "sk-..."              # the key itself, or use the environment variable below
-# api_key_env  = "ANTHROPIC_API_KEY"
-# base_url     = "https://api.anthropic.com"
-# base_url_env = "ANTHROPIC_BASE_URL"
-#
-# [ai.providers.openai]
-# model        = "gpt-5"
-# api_key_env  = "OPENAI_API_KEY"
-# base_url_env = "OPENAI_BASE_URL"
+[ai.providers.anthropic]
+model        = "claude-opus-5"
+api_key_env  = "ANTHROPIC_API_KEY"
+# api_key      = ""                   # Default: empty.
+# base_url     = ""                   # Default: the provider address.
+# base_url_env = "ANTHROPIC_BASE_URL" # Example. Default: empty.
 
-# MCP server settings. A profile can lower its own access level with `mcp` above.
-# No profile can exceed the level set here.
+[ai.providers.openai]
+model        = "gpt-5"
+api_key_env  = "OPENAI_API_KEY"
+# api_key      = ""                   # Default: empty.
+# base_url     = ""                   # Default: the provider address.
+# base_url_env = "OPENAI_BASE_URL"    # Example. Default: empty.
+
+# MCP server settings. Profile mcp and read-only mode can lower the global access limit.
 #
 # [mcp]
-# profiles   = ["a-name"]    # the profiles the server opens. Empty means none is served
+# profiles   = []            # Allowed profiles. Empty serves none. Example: ["shop"].
 # access     = "read-only"   # off read-only read-write full
 # row_limit  = 500           # maximum rows one read returns
-# timeout_ms = 30000         # time limit for one read
+# timeout_ms = 30000         # Time limit for one agent statement, in milliseconds.

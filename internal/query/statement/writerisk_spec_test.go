@@ -201,7 +201,7 @@ func TestBuildConfirmationNamesTheProfileTheEnvironmentAndWhatWillRun(t *testing
 	if want := "confirm on shop-prod"; one.Title != want {
 		t.Errorf("Title = %q, want %q", one.Title, want)
 	}
-	want := "This statement names no rows, so it lands on every row on prod.\n\n" +
+	want := "This statement has no WHERE clause and may affect every row on prod.\n\n" +
 		"delete from orders"
 	if one.Body != want {
 		t.Errorf("Body = %q, want %q", one.Body, want)
@@ -217,7 +217,7 @@ func TestBuildConfirmationCountsTheStatementsAndJoinsThem(t *testing.T) {
 		t.Errorf("Body = %q, want %q", many.Body, want)
 	}
 	none := statement.BuildConfirmation("shop", "dev", statement.RiskNone, nil)
-	if !strings.HasPrefix(none.Body, "These 0 statements read only on dev.") {
+	if !strings.HasPrefix(none.Body, "These 0 statements are classified as read-only on dev.") {
 		t.Errorf("Body = %q", none.Body)
 	}
 }

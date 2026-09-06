@@ -1,5 +1,4 @@
-// Package app holds the state of the client: the active screen, the open connections, the
-// tabs of each connection, and the result of every run. Nothing in this package draws.
+// Package app manages client state, connections, tabs, and results without rendering.
 package app
 
 import (
@@ -15,8 +14,7 @@ type ResultView string
 // The views a tab can have.
 const (
 	ViewData ResultView = "data"
-	// ViewTree shows the rows as documents: a value with fields or elements is expanded
-	// and not truncated to the column width.
+	// ViewTree displays expandable document fields and array elements.
 	ViewTree        ResultView = "tree"
 	ViewFields      ResultView = "fields"
 	ViewStatistics  ResultView = "statistics"

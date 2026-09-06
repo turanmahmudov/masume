@@ -19,13 +19,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// The panel of the chat: the conversation, what the reply is doing, and the field a question is
-// typed into. The state of the reply is written where the reply is, and not in a corner of the
-// panel: a reader looking at the answer is looking there.
+// The chat panel contains the conversation, reply status, and question field.
 
-// The rows the field of the panel and the line under it take. The field opens on three rows
-// and grows with the question up to six, so a few lines are written without scrolling and a
-// long one still leaves the conversation most of the panel.
+// The question field grows from three to six rows.
 const (
 	chatFieldRowsLeast = 3
 	chatFieldRowsMost  = 6
@@ -49,8 +45,8 @@ func resolveChatFieldRows(buffer *app.EditorBuffer) int {
 }
 
 // chatOpening is what the panel says before the first question, with the questions it offers.
-var chatOpening = "Ask about this database, for a query, or for a number. " +
-	"A question about the data runs a statement, and asks first."
+var chatOpening = "Ask about this database, request a query, or ask for a count. " +
+	"The chat asks for approval before running a statement to answer a data question."
 
 // chatExamples are example questions, one line each, so a narrow panel keeps them whole.
 var chatExamples = []string{
@@ -169,10 +165,7 @@ type chatRowsCache struct {
 // are read in full: a reply is written into the last one while it streams, so its length
 // alone does not say that it changed.
 type chatRowsKey struct {
-	// The connection the conversation belongs to. Two conversations that read the same
-	// would draw the same rows, so this changes nothing on screen; it is here so that
-	// reading what was kept for one server into the panel of another cannot be arrived at
-	// by reasoning about which of the other fields happen to cover it.
+	// The connection ID for this conversation.
 	connection int
 	content    int
 	revision   int
@@ -574,7 +567,7 @@ func (model *Model) describeChatKeys(chat *app.Chat) *KeyLine {
 		bindPair(cfg.ScopeDialog, ActionScrollBack, ActionScrollForward, "page", "/").
 		// The field returns the arrows itself, so the registry cannot move these either.
 		name("↑↓", "scroll").
-		bind(cfg.ScopeDialog, ActionInsertAiSQL, "into the editor").
+		bind(cfg.ScopeDialog, ActionInsertAiSQL, "last reply query to editor").
 		bind(cfg.ScopeDialog, ActionNewAiChat, "new").
 		bind(cfg.ScopeDialog, ActionShowAiChats, "chats").
 		bind(cfg.ScopeDialog, ActionClose, "close")

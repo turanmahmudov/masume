@@ -411,11 +411,7 @@ type Adapter interface {
 	Connect(ctx context.Context, profile cfg.Profile, password string) (Session, error)
 }
 
-// NeedsConfirmation is true where a statement of this risk needs a yes. A write without a
-// WHERE is confirmed wherever a delete is, and `off` confirms nothing. `agent` confirms
-// every write as `write` does; who may answer is decided by the caller that asks. It sits
-// here, and not with the risk itself, so reading a statement stays free of what the user
-// configured.
+// NeedsConfirmation applies the configured confirmation level to statement risk. The caller validates the source of the confirmation.
 func NeedsConfirmation(mode cfg.ConfirmWrites, risk statement.WriteRisk) bool {
 	if mode == cfg.ConfirmOff || risk == statement.RiskNone {
 		return false
@@ -427,20 +423,16 @@ func NeedsConfirmation(mode cfg.ConfirmWrites, risk statement.WriteRisk) bool {
 // ErrDatabase marks an error from a driver or a server.
 var ErrDatabase = errors.New("database")
 
-// NewDatabaseError builds an error a driver or a server reported, from text this client
-// wrote itself. Where a driver error is already in hand, WrapDatabaseError keeps it.
+// NewDatabaseError builds a database error from client text. WrapDatabaseError preserves an existing driver error.
 func NewDatabaseError(format string, parts ...any) error {
 	return fmt.Errorf("%w: %s", ErrDatabase, fmt.Sprintf(format, parts...))
 }
 
-// databaseError is what a driver or a server reported, with the step it was reported by. It
-// keeps the error of the driver rather than its text, so a caller can still reach the type
-// with errors.As and the reasons the standard library names with errors.Is.
+// databaseError is a driver error with an optional operation and display message. The original error remains in the chain.
 type databaseError struct {
 	// operation is the step that failed, and is empty for a call that takes only one.
 	operation string
-	// message is what the user reads, where this client writes it better than the driver
-	// does. A server names the relation it refused; the driver wraps that in its own text.
+	// The optional display message in place of the driver text.
 	message string
 	cause   error
 }
@@ -458,12 +450,10 @@ func (err *databaseError) Error() string {
 
 func (err *databaseError) Unwrap() error { return err.cause }
 
-// Is returns to the mark, so every error out of this package reads as one from the database
-// whether the driver reported it or this client did.
+// Is matches the ErrDatabase sentinel.
 func (err *databaseError) Is(target error) bool { return target == ErrDatabase }
 
-// WrapDatabaseError marks what a driver or a server reported. An error that carries the mark
-// already is answered as it stands, and no error stays no error.
+// WrapDatabaseError adds the database marker. Nil and already marked errors remain unchanged.
 func WrapDatabaseError(err error) error {
 	if err == nil {
 		return err
@@ -474,9 +464,7 @@ func WrapDatabaseError(err error) error {
 	return &databaseError{cause: err}
 }
 
-// WrapDatabaseOperation names the step that failed, for a call that takes several of them and
-// would otherwise answer with a message that does not say which one. A single-step call needs
-// none of this: the pane the message lands in already names it.
+// WrapDatabaseOperation adds the failed operation to a database error.
 func WrapDatabaseOperation(operation string, err error) error {
 	if err == nil {
 		return nil
@@ -489,9 +477,7 @@ func WrapDatabaseOperation(operation string, err error) error {
 	return &databaseError{operation: operation, cause: err}
 }
 
-// WrapDatabaseMessage marks what a driver reported and writes the message itself, for the
-// servers whose own text buries the one line the user needs. The error of the driver stays
-// in the chain.
+// WrapDatabaseMessage adds a display message and preserves the driver error in the chain.
 func WrapDatabaseMessage(message string, cause error) error {
 	if cause == nil {
 		return nil
@@ -509,9 +495,7 @@ func NewUnsupportedError(what string) error {
 // prefix of the message, which the user is not shown.
 var markers = []error{ErrDatabase, core.ErrEdit, statement.ErrParameter}
 
-// DescribeError writes an error as a message for the user, without its wrapper. The wrapper
-// is found by the marker it carries, so a message that happens to open with the same word is
-// left as it is.
+// DescribeError removes the prefix for a recognized error sentinel. Unmarked messages remain unchanged.
 func DescribeError(err error) string {
 	if err == nil {
 		return ""
@@ -531,14 +515,7 @@ func BuildConnectMessage(profile cfg.Profile, err error) string {
 		cfg.DescribeProfileTarget(profile), DescribeError(err))
 }
 
-// FindTableByName matches the name a statement wrote against the relations a connection
-// knows. Without a schema the name must be unique, or an edit could reach the wrong
-// relation.
-//
-// A name that matches one relation exactly wins. PostgreSQL holds `Orders` and `orders`
-// side by side, and a statement that quoted one of them must not be written back through
-// the other. Where nothing matches exactly, a match that ignores the case is taken only
-// where there is one of them, because a guess between two writes to the wrong relation.
+// FindTableByName resolves a unique relation, with exact names before case-insensitive matches and the default schema for ambiguous unqualified names.
 func FindTableByName(
 	tables []TableRef, source statement.SelectSource, defaultSchema string,
 ) (TableRef, bool) {

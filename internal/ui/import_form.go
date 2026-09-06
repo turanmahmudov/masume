@@ -11,8 +11,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// The form the import dialog draws: how the file is read, and which column of the file goes
-// into which column of the table.
+// The import form contains file options and column mappings.
 
 // skipColumn is what a mapping shows for a column of the file the import leaves out.
 const skipColumn = "(skip)"
@@ -97,11 +96,11 @@ func readImportPath(overlay app.Overlay) string {
 // FindImportProblem returns why the import cannot go on, and nothing where it can.
 func FindImportProblem(overlay app.Overlay, dialect *query.Dialect) string {
 	if strings.TrimSpace(readImportPath(overlay)) == "" {
-		return "the file cannot be empty"
+		return "enter a file path"
 	}
 	options := overlay.Import.Plan.Options
 	if options.Format == load.FileCSV && len([]rune(options.Delimiter)) != 1 {
-		return "the delimiter has to be one character"
+		return "the delimiter must be one character"
 	}
 	if overlay.Import.Stage == app.ImportFile {
 		return ""

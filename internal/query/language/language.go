@@ -1,5 +1,4 @@
-// Package language reads the buffer of a tab without the server: coloured, split,
-// formatted, checked and completed.
+// Package language provides local statement tokenization, splitting, formatting, diagnostics, and completion.
 package language
 
 import (
@@ -8,9 +7,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// Language says how the buffer of a tab is read without the server: coloured,
-// split, formatted, checked and completed. SQL is one language. Another server has
-// its own, and the code above does not know which one it uses.
+// Language is the interface for local statement processing.
 type Language interface {
 	// Tokenize returns the tokens of the buffer, which the editor colours.
 	Tokenize(text string) []syntax.Token
@@ -22,16 +19,13 @@ type Language interface {
 	ReadStatementAtOffset(text string, offset int) string
 	// FormatStatement writes the buffer again, one clause per line.
 	FormatStatement(text string) string
-	// LineComment returns the mark that comments out the rest of a line, or an empty text
-	// where the language has none.
+	// LineComment returns the line comment prefix, or an empty string when unsupported.
 	LineComment() string
 	// FindLocalDiagnostics returns the faults that can be found without the server.
 	FindLocalDiagnostics(text string, knowledge editor.SchemaKnowledge) []editor.Diagnostic
-	// ResolveWriteRisk weighs the statement, for the confirmation.
+	// ResolveWriteRisk classifies statement risk for confirmation.
 	ResolveWriteRisk(text string) statement.WriteRisk
-	// HoldsRowLimit is true if the statement bounds its own result, with a LIMIT or the
-	// same idea in another language. Such a statement already holds how many rows it
-	// wants, so a reader gives it every row it returns instead of one page of them.
+	// HoldsRowLimit is true for statements with a result limit.
 	HoldsRowLimit(text string) bool
 	// ChangesCatalog is true if the statement makes the catalog of this client stale.
 	ChangesCatalog(text string) bool

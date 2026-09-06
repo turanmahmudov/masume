@@ -12,57 +12,53 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// UndoPlan says whether the write can be undone, and holds the read that takes the rows.
-// The read runs inside the transaction of the write and holds the rows it returns until
-// that transaction ends, so nothing changes them between the read and the write.
+// UndoPlan is the undo availability and query for original rows. Capture uses the write transaction and dialect row locking.
 type UndoPlan struct {
 	// Kept is true where the rows are read and the write can be undone.
 	Kept bool
-	// Reason says why no undo is kept.
+	// Reason is the cause of unavailable undo.
 	Reason string
-	// Rows is how many rows the undo will hold, as they were counted.
+	// Rows is the measured count for undo capture.
 	Rows  int64
 	Table db.TableRef
 	Kind  statement.WriteKind
-	// Read is the statement that takes the rows, and Limit the rows it may return.
+	// Read is the capture query. Limit is the maximum rows to capture.
 	Read  string
 	Limit int
-	// Keys names one row, and Columns is what the read returns.
+	// Keys is the primary key. Columns is the query column list.
 	Keys    []string
 	Columns []string
 	// dialect writes the undo statements for the server of the write.
 	dialect *query.Dialect
 }
 
-// Undo reverses one write. Its rows were read inside the transaction of the write, so it
-// takes them back to what that write found.
+// Undo is a set of statements built from original rows captured in the write transaction.
 type Undo struct {
 	Table   db.TableRef
 	Changes []db.Change
 	// The same statements with their values written in.
 	Display []string
 	Rows    int
-	// Why there is no undo, where there is none.
+	// The reason undo is unavailable.
 	Reason string
 }
 
 // IsHeld is true where the write can be undone.
 func (undo Undo) IsHeld() bool { return len(undo.Changes) > 0 }
 
-// planUndo decides whether the write can be undone and builds the read that takes the rows.
-// It reads no row itself: the rows are read when the write runs.
+// planUndo checks undo availability and builds the capture query. Capture occurs before write execution.
 func (measure measurer) planUndo(ctx context.Context, plan Plan, undoRows int) UndoPlan {
 	refuse := func(reason string) UndoPlan {
 		return UndoPlan{Reason: reason, Table: measure.table, Kind: measure.target.Kind}
 	}
 	if measure.target.Kind == statement.WriteInsert {
-		return refuse("the rows an insert writes are not known before it runs")
+		return refuse("inserted rows are unknown before execution")
 	}
 	if !plan.HasRows {
 		return refuse("the rows were not counted")
 	}
 	if plan.Rows == 0 {
-		return refuse("the write matches no row")
+		return refuse("the write matches no rows")
 	}
 	if undoRows > 0 && plan.Rows > int64(undoRows) {
 		return refuse(fmt.Sprintf("%s rows, over the undo_rows limit of %d",
@@ -75,7 +71,7 @@ func (measure measurer) planUndo(ctx context.Context, plan Plan, undoRows int) U
 	}
 	keys := readKeyColumns(detail)
 	if len(keys) == 0 {
-		return refuse("the relation has no primary key, so one row cannot be named")
+		return refuse("the table has no primary key to identify individual rows")
 	}
 	columns, reason := measure.buildUndoColumns(detail, keys)
 	if reason != "" {
@@ -89,8 +85,7 @@ func (measure measurer) planUndo(ctx context.Context, plan Plan, undoRows int) U
 	}
 }
 
-// buildUndoRead writes the read that takes the rows of the undo, with the clause that holds
-// them until the transaction ends.
+// buildUndoRead builds the capture query with the dialect row lock clause.
 func (measure measurer) buildUndoRead(columns []string) string {
 	dialect := measure.dialect()
 	quoted := make([]string, 0, len(columns))
@@ -120,8 +115,7 @@ func findColumn(detail db.TableDetail, name string) (db.ColumnDetail, bool) {
 	return db.ColumnDetail{}, false
 }
 
-// buildUndoColumns returns the columns the undo reads: the key and what an update assigns,
-// or every column a delete can write back.
+// buildUndoColumns returns keys and assigned columns for updates, or nongenerated columns for deletes.
 func (measure measurer) buildUndoColumns(
 	detail db.TableDetail, keys []string,
 ) ([]string, string) {
@@ -139,19 +133,17 @@ func (measure measurer) buildUndoColumns(
 	for _, name := range measure.target.Columns {
 		column, held := findColumn(detail, name)
 		if !held {
-			return nil, fmt.Sprintf("the write assigns %q, which this relation does not hold", name)
+			return nil, fmt.Sprintf("the write assigns unknown column %q", name)
 		}
 		if column.IsPrimaryKey {
-			return nil, "the write assigns the primary key, so the rows cannot be found again"
+			return nil, "the write changes the primary key; undo cannot identify the original rows"
 		}
 		read = append(read, column.Name)
 	}
 	return read, ""
 }
 
-// undoRowCeiling is how many rows an undo reads where the profile sets no limit. The port
-// takes no value that means every row, because the row after the limit is what tells a full
-// page from the last one.
+// undoRowCeiling is the capture limit for an unlimited profile. QueryRunner requires a finite limit to detect truncation.
 const undoRowCeiling = 1 << 20
 
 func resolveUndoLimit(limit int) int {
@@ -161,8 +153,7 @@ func resolveUndoLimit(limit int) int {
 	return limit
 }
 
-// ReadUndo takes the rows the write is about to change and builds the statements that put
-// them back. It runs inside the transaction of the write.
+// ReadUndo captures original rows and builds undo statements inside the write transaction.
 func ReadUndo(ctx context.Context, runner db.QueryRunner, plan UndoPlan) (Undo, error) {
 	if !plan.Kept {
 		return Undo{Table: plan.Table, Reason: plan.Reason}, nil
@@ -174,7 +165,7 @@ func ReadUndo(ctx context.Context, runner db.QueryRunner, plan UndoPlan) (Undo, 
 	}
 	if answered.Truncated {
 		return Undo{}, db.NewDatabaseError(
-			"the write reaches more rows than the undo_rows limit of %d", plan.Limit)
+			"the write matches more rows than the undo_rows limit of %d", plan.Limit)
 	}
 	return buildUndoStatements(plan, answered.Rows, answered.Columns)
 }

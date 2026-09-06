@@ -7,16 +7,12 @@ import (
 	"time"
 )
 
-// The only question the server asks. The protocol calls it elicitation: the server sends a
-// request in the other direction, and the client shows it to the user. A client that does
-// not report this capability never gets the question.
+// MCP elicitation sends confirmation requests only to clients that report elicitation support.
 
-// defaultAnswerTimeout is the time the user has to answer before the statement is
-// cancelled.
+// defaultAnswerTimeout is the confirmation timeout before execution is refused.
 const defaultAnswerTimeout = 120 * time.Second
 
-// Asker sends the question to the user through the client of the agent and returns the
-// answer.
+// Asker requests user confirmation through the MCP client.
 type Asker struct {
 	logEvent func(message string)
 	// answerTimeout is the time one question waits for an answer.
@@ -46,8 +42,7 @@ func (asker *Asker) CanAsk() bool {
 	return asker.findAskWriter() != nil
 }
 
-// findAskWriter returns the writer for the question, or false if the client cannot be asked.
-// The caller holds the lock.
+// findAskWriter returns the confirmation writer or nil. The caller holds the lock.
 func (asker *Asker) findAskWriter() func(message any) {
 	if !asker.clientCanAsk {
 		return nil
@@ -55,8 +50,7 @@ func (asker *Asker) findAskWriter() func(message any) {
 	return asker.write
 }
 
-// RememberClient reads the capabilities of the client from the initialize parameters, and
-// returns whether this client can ask its user anything.
+// RememberClient records elicitation support from the initialize capabilities.
 func (asker *Asker) RememberClient(capabilities any) bool {
 	named, _ := capabilities.(map[string]any)
 	elicitation, is := named["elicitation"].(map[string]any)
@@ -102,7 +96,7 @@ func (asker *Asker) AskConfirmation(ctx context.Context, title, body string) boo
 	}
 	asker.nextID++
 	id := fmt.Sprintf("ask-%d", asker.nextID)
-	// Buffered, so the answer of a question that timed out blocks nothing.
+	// The buffered channel accepts late responses without blocking.
 	answered := make(chan any, 1)
 	asker.waiting[id] = answered
 	asker.guard.Unlock()
@@ -127,9 +121,7 @@ func (asker *Asker) AskConfirmation(ctx context.Context, title, body string) boo
 	return said
 }
 
-// waitForAnswer returns the answer of the client, and false if no answer arrives in time. A
-// client without an answer leaves the statement unrun, so the server does not wait without a
-// limit.
+// waitForAnswer returns the client response or nil after timeout.
 func (asker *Asker) waitForAnswer(id string, answered chan any) any {
 	timer := time.NewTimer(asker.answerTimeout)
 	defer timer.Stop()
@@ -151,15 +143,14 @@ func (asker *Asker) waitForAnswer(id string, answered chan any) any {
 	}
 }
 
-// buildAnswerSchema returns the schema of the answer: one field the user confirms. The
-// question itself is the message of the request, so the field does not repeat it.
+// buildAnswerSchema returns a schema with one required confirmation field.
 func buildAnswerSchema() map[string]any {
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"confirm": map[string]any{
 				"type": "boolean", "title": "Run this statement",
-				"description": "Yes runs the statement above. No leaves it unrun.",
+				"description": "Yes permits execution of the statement above. No cancels execution.",
 			},
 		},
 		"required": []string{"confirm"},

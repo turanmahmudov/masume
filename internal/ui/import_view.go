@@ -10,8 +10,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// The card the import draws: the form while the file and the mapping are set, and the
-// review of what the import would do before anything is written.
+// The import dialog contains file options, column mappings, and a review before writing.
 
 // importLabelWidth is the width of the label of one row.
 const importLabelWidth = 30
@@ -163,7 +162,7 @@ func (model *Model) renderImportReview(overlay app.Overlay, width int) string {
 	if held.Report.Refused > 0 {
 		lines = append(lines, model.styles.Error().Render(present.TruncateText(
 			present.FormatRowCount(int64(held.Report.Refused))+
-				" not written:", inner)))
+				" will be skipped:", inner)))
 		for at, problem := range held.Report.Problems {
 			if at >= importedProblemRows {
 				break

@@ -401,11 +401,11 @@ func TestFindEmptyReplyProblem(t *testing.T) {
 		t.Errorf("a model that stopped with nothing to say was reported: %s", problem)
 	}
 	if problem := FindEmptyReplyProblem(0, FinishToolCalls); !strings.Contains(
-		problem, "ran out of turns after 25 tool calls") {
+		problem, "reached the limit of 25 steps without a text reply") {
 		t.Errorf("the problem reads %q", problem)
 	}
 	if problem := FindEmptyReplyProblem(0, FinishContentFilter); problem !=
-		"the model answered nothing (content-filter)" {
+		"the model returned no text (content-filter)" {
 		t.Errorf("the problem reads %q", problem)
 	}
 }

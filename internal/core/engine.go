@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Engine is the name of one database server the client supports.
+// Engine is a supported database engine.
 type Engine string
 
 // The supported servers. Each one has an entry in the registry below.
@@ -36,11 +36,10 @@ var Engines = []Engine{
 // DefaultEngine is the engine used when a profile does not name one.
 const DefaultEngine = EnginePostgres
 
-// Family is the protocol of a server. It selects the adapter that connects to the
-// server and the SQL dialect used for it.
+// Family is the database protocol shared by an adapter and dialect.
 type Family string
 
-// The five protocols used by the fourteen engines.
+// The supported database protocols.
 const (
 	FamilyPostgres Family = "postgres"
 	FamilyMysql    Family = "mysql"
@@ -48,41 +47,35 @@ const (
 	FamilyMongo    Family = "mongo"
 )
 
-// Capabilities lists the operations a server supports.
+// Capabilities is the set of supported engine operations.
 type Capabilities struct {
 	PlansStatement bool
 	MeasuresPlan   bool
-	// Most servers report a syntax error if you ask for the plan of a DROP.
+	// True if planning includes statements such as DROP.
 	PlansEveryStatement bool
 	HasServerSessions   bool
-	// True if the server reports which of its sessions wait for a lock another one holds.
+	// True if the server reports lock waits between sessions.
 	ReportsLockWaits bool
-	// True if the server reports the load it is under.
+	// True if the server reports load statistics.
 	ReportsServerLoad bool
-	// True if the server keeps a count of the statements it has run. No engine sets this:
-	// the connection answers it once it is open.
+	// True if statement statistics are available. The connected session sets this capability.
 	ReportsStatementStats bool
 	// A cancel needs a second connection to the same server.
 	CancelsRunningQuery bool
 	HasTransactions     bool
-	// A key store returns a scan in its own key order only.
+	// True if the engine supports sorting read results.
 	SortsRead      bool
 	TruncatesTable bool
 	WritesDDL      bool
-	// True if a write can be read as the relation and the rows it lands on, so a plan can
-	// count them. Only a server that takes SQL answers this.
+	// True if SQL writes support affected row and relation previews.
 	PlansWrites bool
-	// True if a connection can be opened read-only. TiDB cannot: it accepts the
-	// statement but does not apply it.
+	// True if a connection supports read-only mode. TiDB accepts the statement but does not enforce the mode.
 	TakesReadOnlyMode bool
-	// True if the staged changes of the grid are applied all together or not at all.
-	// This is not the same as HasTransactions: a standalone MongoDB controls no
-	// transaction and applies no staged set as one unit.
+	// True if staged changes support atomic application. The connected deployment can change this capability.
 	AppliesChangesTogether bool
 }
 
-// EngineInfo holds the properties of a server that are known before a connection
-// exists. The query tier adds the dialect and the language.
+// EngineInfo is the engine metadata available before connection. Query support adds the dialect and language.
 type EngineInfo struct {
 	Engine         Engine
 	Family         Family
@@ -127,8 +120,7 @@ var postgresCapabilities = Capabilities{
 }
 
 var mysqlCapabilities = withPostgres(func(capabilities *Capabilities) {
-	// Which session waits for a lock is in performance_schema, which this client does not
-	// read yet.
+	// MySQL lock waits require performance_schema queries that this client does not implement.
 	capabilities.ReportsLockWaits = false
 })
 
@@ -144,8 +136,7 @@ var engineRegistry = map[Engine]EngineInfo{
 		Capabilities: withPostgres(func(capabilities *Capabilities) {
 			// The server also plans a schema change: `explain drop table` returns a plan.
 			capabilities.PlansEveryStatement = true
-			// The server identifies a session with its own string, not the number in
-			// `pg_stat_activity`, and it has no `pg_cancel_backend`.
+			// CockroachDB session IDs are strings. The server has no pg_cancel_backend.
 			capabilities.HasServerSessions = false
 			capabilities.CancelsRunningQuery = false
 			capabilities.ReportsLockWaits = false
@@ -204,8 +195,7 @@ var engineRegistry = map[Engine]EngineInfo{
 	EngineTidb: {
 		Engine: EngineTidb, Family: FamilyMysql,
 		Capabilities: withMysql(func(capabilities *Capabilities) {
-			// The server accepts `set session transaction read only` but does not apply
-			// it.
+			// TiDB accepts `set session transaction read only` without enforcing read-only mode.
 			capabilities.TakesReadOnlyMode = false
 			// The status variables of the server are its own, not the ones MySQL reports.
 			capabilities.ReportsServerLoad = false
@@ -234,8 +224,7 @@ var engineRegistry = map[Engine]EngineInfo{
 			// SQLite plans a statement, but it does not measure the run.
 			PlansStatement: true,
 			MeasuresPlan:   false,
-			// A file has only the session that opened it, and the driver reads it in
-			// the thread that draws the screen.
+			// SQLite has no server session list.
 			HasServerSessions:   false,
 			CancelsRunningQuery: false,
 			HasTransactions:     true,
@@ -256,33 +245,27 @@ var engineRegistry = map[Engine]EngineInfo{
 			// The server explains a find and an aggregate, and it can measure both.
 			PlansStatement: true,
 			MeasuresPlan:   true,
-			// The server does not explain a write command.
+			// The client only requests plans for reads.
 			PlansEveryStatement: false,
 			// currentOp lists every running operation, and killOp stops one.
 			HasServerSessions: true,
 			// The driver cancels through the context. A second connection cannot find
 			// the operation id of the call it would stop.
 			CancelsRunningQuery: false,
-			// A replica set and a sharded cluster support a transaction. A standalone
-			// server does not, and the session reports what the connected deployment
-			// supports.
+			// Transactions require a replica set or sharded cluster. The connected session checks deployment support.
 			HasTransactions: true,
 			// A find accepts a sort, so the server sorts the page.
 			SortsRead: true,
-			// A collection is emptied with a delete of every document. There is no
-			// separate command.
+			// Emptying a collection deletes all documents.
 			TruncatesTable: false,
 			// Every statement is a command, so the object menu has no SQL to generate.
 			WritesDDL: false,
 			// The server has no read-only session, so this client blocks the write.
 			TakesReadOnlyMode: true,
-			// A replica set applies a staged set inside a transaction. A standalone
-			// server cannot, and the session reports this after it connects.
+			// Atomic changes require transactions. The connected session checks deployment support.
 			AppliesChangesTogether: true,
 		},
-		// A user name enables authentication. A server with authentication off refuses
-		// a connection that sends one, so the profile can omit the user. A profile that
-		// does name a user asks for a password like any other server.
+		// A username enables authentication and password lookup. Profiles without a user omit authentication.
 		NeedsPassword: true,
 		DefaultPort:   27017,
 		URLSchemes:    []string{"mongodb"},
@@ -302,9 +285,7 @@ func withMysql(change func(*Capabilities)) Capabilities {
 	return capabilities
 }
 
-// ResolveEngineInfo returns the properties of that engine. An unknown name gives the
-// properties of the default engine, so a caller never reads a port of zero. The name is
-// validated when the profile is built, and an error is reported there.
+// ResolveEngineInfo returns engine metadata, or the default engine metadata for an unknown name.
 func ResolveEngineInfo(engine Engine) EngineInfo {
 	info, known := engineRegistry[engine]
 	if !known {

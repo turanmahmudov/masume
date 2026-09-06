@@ -440,7 +440,7 @@ func (model *Model) runGridAction(
 		}
 		connection.Overlay = app.Overlay{
 			Kind: app.OverlayPrompt, Prompt: app.PromptWhere, Title: "where",
-			Hint:  "a predicate the server reads; empty clears it",
+			Hint:  "a WHERE condition; leave empty to remove it",
 			Draft: app.NewEditorBuffer(written, len(written)),
 		}
 	case ActionSearchColumns:
@@ -452,7 +452,7 @@ func (model *Model) runGridAction(
 	case ActionGoToColumn:
 		connection.Overlay = app.Overlay{
 			Kind: app.OverlayPrompt, Prompt: app.PromptGoToColumn, Title: "column",
-			Hint:  "the name of a column of this result",
+			Hint:  "a column name in this result",
 			Draft: app.NewEditorBuffer("", 0),
 		}
 	case ActionFilterByValues:
@@ -463,9 +463,9 @@ func (model *Model) runGridAction(
 	case ActionToggleMasking:
 		tab.Unmasked = !tab.Unmasked
 		if tab.Unmasked {
-			connection.Show("the masked columns are shown")
+			connection.Show("masked values are visible")
 		} else {
-			connection.Show("the masked columns are hidden again")
+			connection.Show("masked values are hidden")
 		}
 
 	case ActionViewCell:
@@ -493,11 +493,11 @@ func (model *Model) runGridAction(
 		return model.reviewChanges(connection, tab)
 	case ActionUndoChange:
 		if !tab.UndoChange() {
-			connection.Show("there is nothing to undo")
+			connection.Show("no staged change to undo")
 		}
 	case ActionRedoChange:
 		if !tab.RedoChange() {
-			connection.Show("there is nothing to redo")
+			connection.Show("no staged change to redo")
 		}
 	case ActionFollowForeignKey:
 		return model.followForeignKey(connection, tab, shape)
@@ -857,7 +857,7 @@ func (model *Model) reviewChanges(
 	connection *app.Connection, tab *app.Tab,
 ) (tea.Model, tea.Cmd) {
 	if core.CountChanges(tab.Pending) == 0 {
-		connection.Show("nothing is staged")
+		connection.Show("no staged changes")
 		return model, nil
 	}
 	changes, err := model.buildChanges(connection, tab)
@@ -881,12 +881,12 @@ func (model *Model) followForeignKey(
 	}
 	target, points := build.FindForeignKeyTarget(tab.Target.ForeignKeys, column.Name)
 	if !points {
-		connection.Show(column.Name + " points at no other table")
+		connection.Show(column.Name + " has no foreign key")
 		return model, nil
 	}
 	table, known := connection.Catalog.FindTable(target.Schema, target.Table)
 	if !known {
-		connection.Show("the catalog does not hold " + target.Table)
+		connection.Show("table not found in the catalog: " + target.Table)
 		return model, nil
 	}
 
@@ -952,7 +952,7 @@ func buildCopyMenuActions() []app.MenuAction {
 		{ID: copyResultInsert, Label: "Result as INSERT", Detail: "every loaded row"},
 		{
 			ID: copyColumnIn, Label: "Column as IN clause",
-			Detail: "the selected column, ready for a where",
+			Detail: "selected column values for a WHERE condition",
 		},
 	}
 }
@@ -980,20 +980,20 @@ func (model *Model) buildGridMenu(
 		{ActionFilterByCell, "Filter by value", "keep rows that match", hasRow, false},
 		{ActionExcludeCell, "Exclude value", "drop rows that match", hasRow, false},
 		{ActionFollowForeignKey, "Follow foreign key", "open the row it points to", hasRow, false},
-		{ActionFilterByValues, "Filter by values", "choose which values stay", hasRow, false},
-		{ActionSortColumn, "Sort by column", "order the read by it", capabilities.SortsRead, false},
+		{ActionFilterByValues, "Filter by values", "choose values to keep", hasRow, false},
+		{ActionSortColumn, "Sort by column", "sort rows by this column", capabilities.SortsRead, false},
 		{
-			ActionAddSortColumn, "Add column to sort", "order by it as well",
+			ActionAddSortColumn, "Add column to sort", "add another sort column",
 			capabilities.SortsRead, false,
 		},
-		{ActionOpenRow, "Open row", "every field of the row", hasRow, false},
+		{ActionOpenRow, "Open row", "all columns in the row", hasRow, false},
 		{ActionCopyMenu, "Copy", "the cell, row, or result", true, false},
-		{ActionInsertRow, "Insert row", "add a new row", editable, false},
+		{ActionInsertRow, "Insert row", "stage a new row", editable, false},
 		{
 			ActionDuplicateRow, "Duplicate row", "copy the row without its key",
 			hasRow && editable, false,
 		},
-		{ActionToggleDelete, "Delete row", "remove the row", hasRow && editable, true},
+		{ActionToggleDelete, "Delete row", "mark or unmark for deletion", hasRow && editable, true},
 	}
 
 	actions := make([]app.MenuAction, 0, len(offered))
@@ -1069,7 +1069,7 @@ func (model *Model) runCopy(
 		written = result.BuildMarkdown(shape.Columns, shape.Rows)
 	case copyResultInsert:
 		if !tab.Target.Editable && tab.Kind != app.TabTable {
-			connection.Show("this result comes from more than one relation")
+			connection.Show("cannot create INSERT statements without an editable source table")
 			return model, nil
 		}
 		written = result.BuildInsertScript(
@@ -1144,8 +1144,8 @@ func (model *Model) writeExport(
 	// An existing file is never written over without a yes.
 	if _, err := os.Stat(path); err == nil {
 		connection.Overlay = app.Overlay{
-			Kind: app.OverlayConfirm, Title: " write over the file ",
-			Body: path + " is already there.",
+			Kind: app.OverlayConfirm, Title: " overwrite the file ",
+			Body: path + " already exists. Overwrite the file?",
 			Answers: app.OverlayAnswers{Answer: func(confirmed bool) app.AnswerCommand {
 				if !confirmed {
 					return nil
@@ -1172,7 +1172,7 @@ func (model *Model) findRereadProblem(connection *app.Connection, tab *app.Tab) 
 	if connection.Session.Language().ResolveWriteRisk(active.Source) == statement.RiskNone {
 		return ""
 	}
-	return "this statement writes, so only the rows loaded so far can be exported"
+	return "this statement may write; only loaded rows can be exported"
 }
 
 // startExport writes the export to a file, one batch at a time, so a large relation is
@@ -1186,6 +1186,7 @@ func (model *Model) startExport(
 	read := active.Read
 	loaded := active.State.Result
 	wholeRead := overlay.Export.WholeRead
+	autocommit := connection.Autocommit
 	format, options := overlay.Export.Format, overlay.Export.CSV
 
 	ctx, stop := context.WithCancel(context.Background())
@@ -1195,6 +1196,11 @@ func (model *Model) startExport(
 		defer stop()
 		fail := func(reason string) tea.Msg {
 			return exportWrittenMsg{ConnectionID: id, Path: path, Problem: reason}
+		}
+		if wholeRead {
+			if err := beginManualTransaction(ctx, session, autocommit, read.Text); err != nil {
+				return fail(db.DescribeError(err))
+			}
 		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fail(err.Error())

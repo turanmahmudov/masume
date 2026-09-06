@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"time"
@@ -18,12 +19,11 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 	"github.com/turanmahmudov/masume/internal/query/editor"
 	"github.com/turanmahmudov/masume/internal/query/statement"
+	"github.com/turanmahmudov/masume/internal/query/syntax"
 	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
-// The work that reaches a server runs off the draw loop. Each command returns one message,
-// and every message names the connection and the tab it belongs to, so an answer that
-// arrives after the user moved on is dropped rather than drawn in the wrong place.
+// Server commands run outside the render loop and return messages with connection and tab IDs.
 
 // connectedMsg returns one attempt at opening a connection.
 type connectedMsg struct {
@@ -348,7 +348,7 @@ func readTableDetail(connectionID int, session db.CatalogReader, table db.TableR
 // state the server no longer holds.
 func runStatements(
 	connectionID, tabID, runID, index int, session db.Session, reads []db.ComposedRead,
-	rowLimit int, undo writeplan.UndoPlan, log *hist.Store, profileName string,
+	rowLimit int, undo writeplan.UndoPlan, log *hist.Store, profileName string, autocommit bool,
 ) tea.Cmd {
 	if index < 0 || index >= len(reads) {
 		return nil
@@ -357,6 +357,7 @@ func runStatements(
 		connectionID: connectionID, tabID: tabID, runID: runID, index: index,
 		session: session, read: reads[index], rowLimit: rowLimit, undo: undo,
 		last: index == len(reads)-1, log: log, profileName: profileName,
+		autocommit: autocommit,
 	})
 }
 
@@ -373,6 +374,31 @@ type runOneStatementDeps struct {
 	last         bool
 	log          *hist.Store
 	profileName  string
+	autocommit   bool
+}
+
+func beginManualTransaction(ctx context.Context, session db.Session, autocommit bool, sql string) error {
+	if autocommit || !session.Capabilities().HasTransactions {
+		return nil
+	}
+	tokens := syntax.ReadCodeTokens(sql, session.Dialect().Syntax)
+	switch syntax.ReadOpeningWord(tokens) {
+	case "begin", "start", "commit", "rollback", "end", "abort", "savepoint", "release":
+		return nil
+	case "set", "prepare":
+		for _, token := range tokens {
+			if token.Text == "transaction" && syntax.IsWordKind(token.Kind) {
+				return nil
+			}
+		}
+	}
+	switch session.ReadTransactionState() {
+	case db.TransactionNone:
+		return session.BeginTransaction(ctx)
+	case db.TransactionFailed:
+		return errors.New("the transaction failed; roll it back before running another statement")
+	}
+	return nil
 }
 
 func runOneStatement(deps runOneStatementDeps) tea.Cmd {
@@ -387,10 +413,15 @@ func runOneStatement(deps runOneStatementDeps) tea.Cmd {
 			Read: read, Last: last,
 		}
 
-		result, undo, err := writeplan.RunWithUndo(ctx, session, deps.undo,
-			func(running context.Context) (db.QueryResult, error) {
-				return session.ReadPage(running, read, db.ReadWindow{Limit: rowLimit})
-			})
+		var result db.QueryResult
+		var undo writeplan.Undo
+		err := beginManualTransaction(ctx, session, deps.autocommit, read.Text)
+		if err == nil {
+			result, undo, err = writeplan.RunWithUndo(ctx, session, deps.undo,
+				func(running context.Context) (db.QueryResult, error) {
+					return session.ReadPage(running, read, db.ReadWindow{Limit: rowLimit})
+				})
+		}
 		answered.Undo = undo
 		entry := hist.HistoryEntry{
 			ProfileName: profileName, SQL: read.Display, RanAt: startedAt,
@@ -412,10 +443,16 @@ func runOneStatement(deps runOneStatementDeps) tea.Cmd {
 
 // readNextPage asks the server for the rows after the ones already drawn.
 func readNextPage(
-	connectionID, tabID, index, resultID int, session db.QueryRunner, read db.ComposedRead,
-	window db.ReadWindow,
+	connectionID, tabID, index, resultID int, session db.Session, read db.ComposedRead,
+	window db.ReadWindow, autocommit bool,
 ) tea.Cmd {
 	return func() tea.Msg {
+		if err := beginManualTransaction(context.Background(), session, autocommit, read.Text); err != nil {
+			return pageReadMsg{
+				ConnectionID: connectionID, TabID: tabID, Index: index, ResultID: resultID,
+				Problem: db.DescribeError(err),
+			}
+		}
 		result, err := session.ReadPage(context.Background(), read, window)
 		if err != nil {
 			return pageReadMsg{
@@ -432,9 +469,15 @@ func readNextPage(
 
 // countRows counts the whole result, once.
 func countRows(
-	connectionID, tabID, index, resultID int, session db.QueryRunner, read db.ComposedRead,
+	connectionID, tabID, index, resultID int, session db.Session, read db.ComposedRead, autocommit bool,
 ) tea.Cmd {
 	return func() tea.Msg {
+		if err := beginManualTransaction(context.Background(), session, autocommit, read.Text); err != nil {
+			return countedMsg{
+				ConnectionID: connectionID, TabID: tabID, Index: index, ResultID: resultID,
+				Problem: db.DescribeError(err),
+			}
+		}
 		total, counted, err := session.CountRead(context.Background(), read)
 		if err != nil {
 			return countedMsg{
@@ -451,9 +494,15 @@ func countRows(
 
 // readPlan asks the server how it would run the statement.
 func readPlan(
-	connectionID, tabID, resultID int, session db.QueryRunner, statement string, analyze bool,
+	connectionID, tabID, resultID int, session db.Session, statement string, analyze, autocommit bool,
 ) tea.Cmd {
 	return func() tea.Msg {
+		if err := beginManualTransaction(context.Background(), session, autocommit, statement); err != nil {
+			return planReadMsg{
+				ConnectionID: connectionID, TabID: tabID, ResultID: resultID,
+				Problem: db.DescribeError(err),
+			}
+		}
 		plan, err := session.ExplainQuery(context.Background(), statement, analyze)
 		if err != nil {
 			return planReadMsg{
@@ -514,7 +563,7 @@ func readRelationView(
 			answered.Content = app.PaneContent{Kind: app.DataDDL, Lines: lines}
 		default:
 			answered.Content = app.PaneContent{
-				Kind: app.DataIdle, Reason: "nothing to describe here",
+				Kind: app.DataIdle, Reason: "no details for this view",
 			}
 		}
 		return answered
@@ -544,12 +593,16 @@ func readObjectDDL(
 	}
 }
 
-// applyChanges runs the staged work, all of it or none.
+// applyChanges sends the staged changes to the session.
 func applyChanges(
-	connectionID, tabID int, session db.TransactionKeeper, changes []db.Change,
+	connectionID, tabID int, session db.Session, changes []db.Change, autocommit bool,
 ) tea.Cmd {
 	return func() tea.Msg {
-		err := session.ApplyChanges(context.Background(), changes)
+		ctx := context.Background()
+		err := beginManualTransaction(ctx, session, autocommit, "")
+		if err == nil {
+			err = session.ApplyChanges(ctx, changes)
+		}
 		if err != nil {
 			return changesAppliedMsg{
 				ConnectionID: connectionID, TabID: tabID, Problem: db.DescribeError(err),
@@ -590,7 +643,7 @@ func dropSavedQuery(connectionID int, log *hist.Store, profileName, name string)
 	return func() tea.Msg {
 		answered := savedQueryRemovedMsg{ConnectionID: connectionID, Name: name}
 		if err := log.DeleteSaved(profileName, name); err != nil {
-			answered.Problem = "the query was not removed: " + db.DescribeError(err)
+			answered.Problem = "cannot delete the saved query: " + db.DescribeError(err)
 		}
 		return answered
 	}
@@ -602,10 +655,7 @@ const (
 	readRefresh = true
 )
 
-// readActivity asks the server what its other connections are doing, which sessions wait for
-// a lock, and the load it is under. Only the session list is reported as a fault.
-// dashboardReadTimeout is how long the four reads of one refresh have in all. A read longer
-// than several intervals answers with numbers too old to act on.
+// dashboardReadTimeout is the total timeout for one dashboard refresh.
 const dashboardReadTimeout = 6 * time.Second
 
 func readActivity(connectionID int, session db.ServerAdmin, refresh bool) tea.Cmd {
@@ -653,14 +703,14 @@ func readMarks(connectionID int, log *hist.Store, profileName string) tea.Cmd {
 func keepMarks(
 	connectionID int, log *hist.Store, profileName string, favourite core.Favourite,
 ) tea.Cmd {
-	return writeHistory(connectionID, "the mark was not stored", func() error {
+	return writeHistory(connectionID, "cannot save the favourite", func() error {
 		return log.ToggleFavourite(profileName, favourite)
 	})
 }
 
 // keepVisit records that the user opened a schema.
 func keepVisit(connectionID int, log *hist.Store, profileName, schema string) tea.Cmd {
-	return writeHistory(connectionID, "the schema visit was not stored", func() error {
+	return writeHistory(connectionID, "cannot save the schema visit", func() error {
 		return log.VisitSchema(profileName, schema)
 	})
 }
@@ -670,7 +720,7 @@ func keepCatalog(
 	connectionID int, log *hist.Store, profileName string,
 	tables []db.TableRef, objects []db.SchemaObject, roles []db.DbRole,
 ) tea.Cmd {
-	return writeHistory(connectionID, "the catalog was not stored", func() error {
+	return writeHistory(connectionID, "cannot save the catalog", func() error {
 		snapshot := hist.CatalogSnapshot{}
 		snapshot.Tables, _ = json.Marshal(tables)
 		snapshot.Objects, _ = json.Marshal(objects)
@@ -683,7 +733,7 @@ func keepCatalog(
 func keepSavedQuery(
 	connectionID int, log *hist.Store, profileName, name, statement string,
 ) tea.Cmd {
-	return writeHistory(connectionID, "the query was not stored", func() error {
+	return writeHistory(connectionID, "cannot save the query", func() error {
 		return log.SaveQuery(profileName, name, statement)
 	})
 }

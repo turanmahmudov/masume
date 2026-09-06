@@ -2,9 +2,7 @@ package db
 
 import "context"
 
-// A driver that speaks one socket refuses a second call while the first one still holds it,
-// and returns `conn busy` or `busy buffer` rather than the rows. The screens read on their
-// own goroutines, so the calls of one connection wait for each other here.
+// Drivers can reject concurrent socket operations with `conn busy` or `busy buffer`. The queue serializes connection calls.
 
 // CallQueue lets one call at a time onto one connection.
 type CallQueue struct {
@@ -16,8 +14,7 @@ func NewCallQueue() *CallQueue {
 	return &CallQueue{slot: make(chan struct{}, 1)}
 }
 
-// Take waits for its turn on the connection and returns what gives the turn back. It gives
-// up where the context ends first, because an answer nobody waits for is not worth a turn.
+// Take waits for the connection and returns a release callback. Context cancellation stops the wait.
 func (queue *CallQueue) Take(ctx context.Context) (func(), error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -30,7 +27,7 @@ func (queue *CallQueue) Take(ctx context.Context) (func(), error) {
 	}
 }
 
-// TryTake takes the turn only where the connection is free, and reports whether it did.
+// TryTake reserves a free connection without waiting and returns a release callback.
 func (queue *CallQueue) TryTake() (func(), bool) {
 	select {
 	case queue.slot <- struct{}{}:

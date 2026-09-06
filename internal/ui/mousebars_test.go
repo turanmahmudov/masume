@@ -155,7 +155,7 @@ func TestThePressOnTheFaultRowStepsToTheNextFault(t *testing.T) {
 		t.Fatal("the fault row recorded no key of its own")
 	}
 	if text := cutRowText(frame[stepped.row], stepped.from, stepped.to); !strings.Contains(
-		text, "no table called") {
+		text, "unknown table:") {
 		t.Errorf("the fault covers %q", text)
 	}
 }

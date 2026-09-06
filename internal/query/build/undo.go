@@ -8,10 +8,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// The statements that undo one write of one row. Each is built twice: bound for the server,
-// and with its values written in for a person to read.
+// Undo statements use bound parameters for execution and inline values for display.
 
-// writeValue is how one value reaches the statement: bound to it, or written into it.
+// writeValue is a parameter binder or literal formatter.
 type writeValue func(value any) string
 
 func renderStoredValue(value any, dialect *query.Dialect) string {
@@ -21,8 +20,7 @@ func renderStoredValue(value any, dialect *query.Dialect) string {
 	return RenderLiteral(value, dialect, "")
 }
 
-// writeKeyMatch writes the WHERE that names the one row. A key value that is not there is
-// compared with IS NULL, because no value equals null.
+// writeKeyMatch builds a row predicate with IS NULL for null key values.
 func writeKeyMatch(target WriteTarget, row []any, write writeValue) (string, error) {
 	names, err := resolveKeyColumnNames(target)
 	if err != nil {
@@ -34,7 +32,7 @@ func writeKeyMatch(target WriteTarget, row []any, write writeValue) (string, err
 		index := findColumnIndex(target.Columns, name)
 		if index == -1 || index >= len(row) {
 			return "", core.NewEditError(
-				fmt.Sprintf("key column %q is not in the rows that were read", name))
+				fmt.Sprintf("key column %q is missing from the captured row", name))
 		}
 		quoted := target.Dialect.QuoteIdentifier(name)
 		if row[index] == nil {
@@ -50,13 +48,13 @@ func writeUndoUpdate(
 	target WriteTarget, row []any, columns []int, write writeValue,
 ) (string, error) {
 	if len(columns) == 0 {
-		return "", core.NewEditError("no column is undone")
+		return "", core.NewEditError("no columns to restore")
 	}
 
 	clauses := make([]string, 0, len(columns))
 	for _, at := range columns {
 		if at < 0 || at >= len(target.Columns) || at >= len(row) {
-			return "", core.NewEditError("no such column")
+			return "", core.NewEditError("column index is out of range")
 		}
 		clauses = append(clauses,
 			target.Dialect.QuoteIdentifier(target.Columns[at].Name)+" = "+write(row[at]))
@@ -71,8 +69,7 @@ func writeUndoUpdate(
 		strings.Join(clauses, ", "), match), nil
 }
 
-// BuildUndoUpdate returns the update that takes the named columns of one row back to the
-// values given, with every value bound.
+// BuildUndoUpdate builds a parameterized update to restore the selected columns.
 func BuildUndoUpdate(
 	target WriteTarget, row []any, columns []int,
 ) (query.BoundStatement, error) {
@@ -87,12 +84,12 @@ func BuildUndoUpdate(
 	}
 	return query.BoundStatement{
 		SQL: written, Params: bound.Params,
-		Description: fmt.Sprintf("undo %s of one row of %s",
+		Description: fmt.Sprintf("restore %s in one row of %s",
 			strings.Join(names, ", "), target.Table.Name),
 	}, nil
 }
 
-// BuildShownUndoUpdate returns the same update with its values written in. It is never run.
+// BuildShownUndoUpdate builds the undo update with inline values for display.
 func BuildShownUndoUpdate(target WriteTarget, row []any, columns []int) (string, error) {
 	return writeUndoUpdate(target, row, columns, func(value any) string {
 		return renderStoredValue(value, target.Dialect)
@@ -101,7 +98,7 @@ func BuildShownUndoUpdate(target WriteTarget, row []any, columns []int) (string,
 
 func writeUndoInsert(target WriteTarget, row []any, write writeValue) (string, error) {
 	if len(target.Columns) == 0 || len(row) < len(target.Columns) {
-		return "", core.NewEditError("the rows that were read hold no column")
+		return "", core.NewEditError("the captured row has missing columns or values")
 	}
 
 	quoted := make([]string, 0, len(target.Columns))
@@ -115,8 +112,7 @@ func writeUndoInsert(target WriteTarget, row []any, write writeValue) (string, e
 		strings.Join(quoted, ", "), strings.Join(values, ", ")), nil
 }
 
-// BuildUndoInsert returns the insert that writes one removed row again, with every value
-// bound.
+// BuildUndoInsert builds a parameterized insert to restore a deleted row.
 func BuildUndoInsert(target WriteTarget, row []any) (query.BoundStatement, error) {
 	bound := query.NewBoundValues(target.Dialect, 1)
 	written, err := writeUndoInsert(target, row, bound.Bind)
@@ -125,11 +121,11 @@ func BuildUndoInsert(target WriteTarget, row []any) (query.BoundStatement, error
 	}
 	return query.BoundStatement{
 		SQL: written, Params: bound.Params,
-		Description: "undo the delete of one row of " + target.Table.Name,
+		Description: "restore one deleted row in " + target.Table.Name,
 	}, nil
 }
 
-// BuildShownUndoInsert returns the same insert with its values written in. It is never run.
+// BuildShownUndoInsert builds the undo insert with inline values for display.
 func BuildShownUndoInsert(target WriteTarget, row []any) (string, error) {
 	return writeUndoInsert(target, row, func(value any) string {
 		return renderStoredValue(value, target.Dialect)

@@ -11,18 +11,16 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/engines"
 )
 
-// One connection per profile, held for the life of the process. A server without a terminal
-// cannot ask for a password, so a profile that needs one gives an error with the reason.
+// MCP reuses one connection per profile and cannot prompt for passwords.
 
-// FindUnreachableReason returns the reason a server without a terminal cannot open this
-// profile, or an empty string if it can.
+// FindUnreachableReason reports profiles that require an interactive password prompt.
 func FindUnreachableReason(profile cfg.Profile) string {
 	if !cfg.NeedsPasswordPrompt(profile) {
 		return ""
 	}
-	return "this profile asks the user for its password, which a server with no terminal " +
-		"cannot do; give it password_env, password_command or a [secret] store, or open " +
-		"it once in the client so the keyring holds its password"
+	return "this profile requires a password prompt, which MCP does not support. " +
+		"Set password_env, password_command, or a [secret] store, or " +
+		"save the password in the keyring through the interactive client"
 }
 
 // Connection is one connection of this server, with its table list.
@@ -42,8 +40,7 @@ func (connection *Connection) Tables() []db.TableRef {
 	return connection.tables
 }
 
-// RefreshTables reads the tables again if the list is older than the interval, so a table
-// created during the session becomes visible.
+// RefreshTables refreshes the table catalog after its TTL expires.
 func (connection *Connection) RefreshTables(ctx context.Context) error {
 	connection.guard.Lock()
 	stale := time.Since(connection.readAt) >= core.CatalogTTL
@@ -73,13 +70,11 @@ type Sessions struct {
 	adapters engines.Adapters
 
 	guard sync.Mutex
-	// Each entry is the attempt and not the connection, so two calls at the same time
-	// share one attempt.
+	// Concurrent calls share a connection attempt.
 	opening map[string]*attempt
 }
 
-// openTimeout is the time limit of one attempt to open a connection. Without it a server
-// that never answers would block every later call to the same profile.
+// openTimeout is the connection attempt timeout.
 const openTimeout = 30 * time.Second
 
 // attempt is one attempt to open a connection. Several calls can wait on it.
@@ -117,15 +112,14 @@ func (sessions *Sessions) OpenConnection(
 	}
 }
 
-// runOpenAttempt opens one connection for every call that waits on this attempt. It runs on
-// its own context, so a call that cancels leaves the attempt for the other calls.
+// runOpenAttempt uses an independent context shared by all waiting calls.
 func (sessions *Sessions) runOpenAttempt(started *attempt, profile cfg.Profile) {
 	ctx, cancel := context.WithTimeout(context.Background(), openTimeout)
 	defer cancel()
 
 	started.connection, started.err = openProfileConnection(ctx, profile, sessions.adapters)
 	if started.err != nil {
-		// Removed, so the next call tries again and does not return the old error.
+		// Remove failed attempts before the next call.
 		sessions.guard.Lock()
 		delete(sessions.opening, profile.Name)
 		sessions.guard.Unlock()
@@ -151,8 +145,7 @@ func (sessions *Sessions) CloseAll() {
 	}
 }
 
-// openProfileConnection opens one connection and reads its tables. If any step fails, it
-// stops the processes it started.
+// openProfileConnection opens a connection and reads its tables, closing resources on failure.
 func openProfileConnection(
 	ctx context.Context, profile cfg.Profile, adapters engines.Adapters,
 ) (*Connection, error) {

@@ -14,8 +14,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// The file picker of the import: the directory it opens in, the files it offers, and how it
-// is drawn in the colours of the client.
+// The import file picker uses the current directory and theme.
 
 // fileSizeWidth is the room the size of a file takes, which is enough for `1.1GB`.
 const fileSizeWidth = 7
@@ -60,7 +59,7 @@ func (model *Model) buildPickerStyles() filepicker.Styles {
 		// its room, so every other row is set to match it.
 		FileSize: plain.Foreground(theme.Muted).
 			Width(fileSizeWidth).Align(lipgloss.Right),
-		EmptyDirectory: plain.Foreground(theme.Muted).SetString("no file this import can read"),
+		EmptyDirectory: plain.Foreground(theme.Muted).SetString("no supported files to import"),
 	}
 }
 

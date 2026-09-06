@@ -1,25 +1,55 @@
 # Keys
 
-Press `?` inside masume for the help screen, or `Ctrl+K` for the command palette, which searches actions by name. This page lists the same actions with the names used in the config file.
+This page lists the default bindings and their configuration names. The [user guide](usage.md) describes the workflows.
 
-Every action belongs to a scope. The scope determines which pane handles the key. Every action has a key binding in the default preset, so every action is reachable without the palette.
+Press `?` outside text entry for help. Press `Ctrl+K` for the command palette. Help shows the current bindings, including overrides. The palette searches commands by name.
 
-To rebind an action, add it to `config.toml`. A line you write replaces the preset binding. Actions you do not list keep the preset binding.
+## Focus and notation
+
+A scope is the pane or card where a binding applies. Cards and input fields handle their own keys. Unsupported engine actions are unavailable.
+
+| Scope | Focus |
+| --- | --- |
+| `global` | The workspace, outside cards and prompts |
+| `tree` | The object tree |
+| `editor` | The SQL editor |
+| `grid` | The Data grid |
+| `document` | The result document tree |
+| `plan` | The Plan view |
+| `list` | Lists in cards, and scrolling in detail views |
+| `dialog` | The active card, connection picker, or form |
+
+Plain global keys type characters while the editor has focus. These include `?`, digits, brackets, braces, commas, periods, semicolons, and apostrophes. Use modified alternatives or the palette during text entry.
+
+`return` is Enter. `digit` is any number from `1` through `9`. Uppercase letters require Shift: `F` differs from `f`.
+
+`alt`, `meta`, and `option` are equivalent configuration modifiers. This reference and the help screen use Alt. Spaces separate key presses: `alt+p s` is Alt+P, then lowercase `s`. `C c` is uppercase C, then lowercase c.
+
+`Ctrl+C` copies an editor or mouse text selection and clears the selection. Without a selection, `Ctrl+C` quits, with a connection-save question when applicable. `Esc` closes a card, dismisses completion, or clears a workspace selection.
+
+`Tab` accepts a listed completion; otherwise, `Tab` moves focus. `Enter` inserts a newline in the editor. `Ctrl+V` pastes the last text copied inside masume. Use the terminal paste command for the operating system clipboard.
+
+Legacy terminals can merge `Ctrl+I` with Tab, `Ctrl+H` with Backspace, and `Ctrl+M` with Enter. They can also merge `Ctrl+[` with Escape and `Ctrl+Shift+Z` with `Ctrl+Z`. Extended keyboard support depends on the terminal and any multiplexer. Use `Alt+Z` for editor redo, `Z` for grid redo, or the palette for affected commands.
+
+## Rebinding
+
+Add overrides to [config.toml](configuration.md#keys). Each entry replaces that action's preset bindings. Unlisted actions keep their defaults. `[]` removes a binding.
 
 ```toml
 [keys]
 preset = "default"
 
 [keys.global]
+refresh-objects = []
 run-at-cursor = ["ctrl+r", "f5"]
 
 [keys.grid]
 sort-column = ["o"]
 ```
 
-An action bound to `[]` has no key binding.
+The example removes the default F5 refresh binding before assigning F5 to execution. The palette still offers refresh.
 
-`alt`, `meta` and `option` are names for the same modifier. The preset and this page use `alt`. The help screen uses `meta`. A space in a binding means a sequence of key presses: `alt+p s` is Alt+P, then S.
+Every registered action has a default binding. Some palette operations have no registered action or binding; see [palette operations](usage.md#palette-operations).
 
 ## Cards
 
@@ -65,14 +95,7 @@ An action bound to `[]` has no key binding.
 
 ## Finding and replacing
 
-One key does both. `Alt+F` opens the `find` field. From there:
-
-- Type a search term and press Enter to highlight every match. `F3` and `Shift+F3` move between the matches.
-- Or press `Ctrl+R` instead of Enter. The field changes to `replace … with`, and its title shows the search term. The text you enter next replaces **every** match in one step. The status bar reports the number of replacements.
-
-In both cases you type the search term once. `Ctrl+Z` undoes the whole replace in one step, regardless of the number of matches.
-
-Matching is plain text substring matching, so `id` also matches `customer_id`. The title shows the search term, so you can check it before the replace runs.
+See [editing SQL](usage.md#editing-sql) for search, replacement, completion, and text selection.
 
 ## Editor
 
@@ -238,10 +261,11 @@ Matching is plain text substring matching, so `id` also matches `customer_id`. T
 
 `[keys.document]`
 
-The document tree shows the rows of a result as documents. It is available wherever a value has fields or elements: a document of a MongoDB collection, or a `json` or `jsonb` column of a SQL database.
+The Tree view opens result values with fields or elements, including MongoDB documents and SQL JSON values. See [result views](usage.md#result-views).
 
 | Action | Key |
 | --- | --- |
+| `clear-rewrites` | `c` |
 | `copy-path` | `shift+y` |
 | `copy-value` | `y` |
 | `count-rows` | `t` |
@@ -253,6 +277,7 @@ The document tree shows the rows of a result as documents. It is available where
 | `cursor-up` | `up` |
 | `fold-row` | `left` |
 | `open-node` | `return` |
+| `pop-filter` | `u` |
 | `search-columns` | `/` |
 | `unfold-row` | `right` |
 

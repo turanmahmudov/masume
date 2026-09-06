@@ -125,8 +125,7 @@ func (session *mysqlSession) DescribeTable(
 			Name: db.ReadAnyText(row["name"]), DataType: dataType,
 			Nullable:     strings.EqualFold(db.ReadAnyText(row["nullable"]), "YES"),
 			IsPrimaryKey: strings.EqualFold(db.ReadAnyText(row["column_key"]), "PRI"),
-			// MySQL marks a computed column in EXTRA as "VIRTUAL GENERATED" or "STORED
-			// GENERATED". An auto-increment column is not one, because it takes a value.
+			// EXTRA marks computed columns as VIRTUAL GENERATED or STORED GENERATED. Auto-increment columns still accept explicit values.
 			IsGenerated: strings.Contains(strings.ToUpper(db.ReadAnyText(row["extra"])), "GENERATED"),
 			Choices:     ReadEnumChoices(dataType),
 		}
@@ -202,8 +201,7 @@ func (session *mysqlSession) ListConstraints(
 	return constraints, nil
 }
 
-// BuildTableDDL asks MySQL for the CREATE of a relation of any kind, which it writes
-// itself.
+// BuildTableDDL returns the server-generated CREATE statement for a relation.
 func (session *mysqlSession) BuildTableDDL(
 	ctx context.Context, table db.TableRef,
 ) ([]string, error) {

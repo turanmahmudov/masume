@@ -9,8 +9,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// measurer holds what every read of one plan needs. A read that fails leaves its part of
-// the plan unmeasured and says why.
+// measurer is the connection and target for one write plan.
 type measurer struct {
 	session Source
 	target  statement.WriteTarget
@@ -23,7 +22,7 @@ func (measure measurer) quotedTable() string {
 	return measure.dialect().BuildQualifiedName(measure.table.Qualified())
 }
 
-// buildPredicate returns the WHERE of the write, and nothing where it names every row.
+// buildPredicate returns the write WHERE clause, or an empty string if absent.
 func (measure measurer) buildPredicate() string {
 	if !measure.target.HasWhere {
 		return ""
@@ -37,15 +36,15 @@ func (measure measurer) readOneCount(ctx context.Context, sql string) (int64, er
 		return 0, err
 	}
 	if len(answered.Rows) == 0 || len(answered.Rows[0]) == 0 {
-		return 0, db.NewDatabaseError("the server answered the count with no row")
+		return 0, db.NewDatabaseError("the count query returned no value")
 	}
 	return db.ReadNonNegativeCount(answered.Rows[0][0]), nil
 }
 
-// countRows counts the rows the write lands on, and the rows the whole relation holds.
+// countRows counts matching rows and total table rows.
 func (measure measurer) countRows(ctx context.Context, plan *Plan) {
 	if measure.target.Kind == statement.WriteInsert {
-		plan.RowsReason = "an insert names the rows it writes"
+		plan.RowsReason = "insert row counts are unavailable before execution"
 		return
 	}
 
@@ -66,10 +65,9 @@ func (measure measurer) countRows(ctx context.Context, plan *Plan) {
 	}
 }
 
-// readCascades returns what the write reaches through the server rather than through the
-// statement: its triggers, and the relations its foreign keys reach.
+// readCascades collects triggers and foreign key effects.
 func (measure measurer) readCascades(ctx context.Context, plan *Plan) {
-	// A write that matches no row reaches nothing.
+	// Skip trigger and foreign key lookup when no rows match.
 	if plan.HasRows && plan.Rows == 0 {
 		return
 	}
@@ -81,8 +79,7 @@ func (measure measurer) readCascades(ctx context.Context, plan *Plan) {
 	measure.readKeysPointingHere(ctx, plan)
 }
 
-// readTriggers returns the triggers the server runs for this write. Every SQL engine names
-// the relation of a trigger in its detail, and the writes it runs for in its events.
+// readTriggers returns matching triggers. Engine adapters return the target table in Detail and trigger events in Events.
 func (measure measurer) readTriggers(ctx context.Context) []Cascade {
 	objects, err := measure.session.ListSchemaObjects(ctx)
 	if err != nil {
@@ -99,14 +96,13 @@ func (measure measurer) readTriggers(ctx context.Context) []Cascade {
 		if !measure.runsTrigger(object) {
 			continue
 		}
-		// The relation is the one the write names, so it is left out.
+		// Omit the target table for triggers.
 		cascades = append(cascades, Cascade{Reason: "trigger " + object.Name})
 	}
 	return cascades
 }
 
-// runsTrigger is true where this write runs that trigger. A server that names no event is
-// answered with a yes: a trigger that may run is worth reading.
+// runsTrigger is true when the trigger matches the write or its events are unknown.
 func (measure measurer) runsTrigger(object db.SchemaObject) bool {
 	if object.Events == "" {
 		return true
@@ -119,8 +115,7 @@ func (measure measurer) runsTrigger(object db.SchemaObject) bool {
 	return false
 }
 
-// readKeysPointingHere sorts the foreign keys that reference this relation: the ones the
-// server follows into their own relation, and the ones that block the delete.
+// readKeysPointingHere separates cascading foreign keys from references that may block a delete.
 func (measure measurer) readKeysPointingHere(ctx context.Context, plan *Plan) {
 	relationships, err := measure.session.ListRelationships(ctx)
 	if err != nil {
@@ -144,8 +139,7 @@ func (measure measurer) readKeysPointingHere(ctx context.Context, plan *Plan) {
 			plan.Cascades = append(plan.Cascades, cascade)
 			continue
 		}
-		// A relation that references none of these rows blocks nothing. One that could
-		// not be counted may still block.
+		// Unknown reference counts remain possible blockers.
 		if cascade.HasRows && cascade.Rows == 0 {
 			continue
 		}
@@ -158,9 +152,7 @@ func (measure measurer) pointsAtTable(relationship db.Relationship) bool {
 		relationship.TargetTable == measure.table.Name
 }
 
-// countFollowedRows counts the rows of the other relation that reference the rows the write
-// removes. Only a key of one column is counted: a key of several is written differently by
-// each server.
+// countFollowedRows counts referencing rows for single-column foreign keys.
 func (measure measurer) countFollowedRows(
 	ctx context.Context, relationship db.Relationship,
 ) (int64, bool) {

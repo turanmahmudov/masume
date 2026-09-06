@@ -36,14 +36,12 @@ func (composer SQLComposer) ComposeRelationRead(
 	}
 }
 
-// ComposeStatementRead wraps the statement of the user in the rewrite. It is wrapped, not
-// merged, because its own WHERE, GROUP BY or LIMIT would change meaning.
+// ComposeStatementRead applies sorting and filters outside the original statement.
 func (composer SQLComposer) ComposeStatementRead(
 	written BoundText, rewrite core.ReadRewrite,
 ) ComposedRead {
 	dialect := composer.Dialect
-	// The statement binds its own values first, so the filter numbers its marks after
-	// them.
+	// Filter parameters follow the original statement parameters.
 	filter := build.ComposeFilter(rewrite.Filter, dialect, len(written.Params)+1)
 	bound := statement.BuildEffectiveSQL(written.Text, filter, rewrite.Sort, dialect)
 	shown := statement.BuildEffectiveSQL(
@@ -57,8 +55,7 @@ func (composer SQLComposer) ComposeStatementRead(
 	}
 }
 
-// SQL binds the marks, so nothing the user typed is ever read as SQL. A mark that cannot
-// be bound is reported, because the statement would otherwise run with the mark in it.
+// BindParameters replaces parameter markers with bound values and reports invalid parameters.
 func (composer SQLComposer) BindParameters(
 	written string, values map[string]any,
 ) (BoundText, error) {

@@ -6,9 +6,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// TransactionMark holds the state of the transaction of one session. The frame reads it on
-// the goroutine that draws, and a statement records it on the goroutine that ran, so the
-// read and the write are held apart here.
+// TransactionMark is a session transaction state with synchronized reads and writes.
 type TransactionMark struct {
 	guard sync.RWMutex
 	state TransactionState
@@ -31,10 +29,7 @@ func (mark *TransactionMark) WriteState(state TransactionState) {
 	mark.state = state
 }
 
-// ApplyStatementEffect records what a statement the user ran left the transaction as. A
-// `begin` or a `commit` written into the editor never reaches BeginTransaction, so without
-// this the mark and the server would drift apart, and a staged write would join a
-// transaction that is already committed.
+// ApplyStatementEffect updates transaction state after BEGIN, COMMIT, or ROLLBACK statements from the editor.
 func (mark *TransactionMark) ApplyStatementEffect(effect statement.TransactionEffect) {
 	switch effect {
 	case statement.EffectOpen:
@@ -45,8 +40,7 @@ func (mark *TransactionMark) ApplyStatementEffect(effect statement.TransactionEf
 	}
 }
 
-// MarkFailed records that the server refuses every later statement of the transaction. It
-// does nothing where none is open.
+// MarkFailed changes an open transaction to failed. Other states remain unchanged.
 func (mark *TransactionMark) MarkFailed() {
 	mark.guard.Lock()
 	defer mark.guard.Unlock()

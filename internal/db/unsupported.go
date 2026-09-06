@@ -15,15 +15,15 @@ type NoUserTransactions struct{}
 func (NoUserTransactions) ReadTransactionState() TransactionState { return TransactionNone }
 
 func (NoUserTransactions) BeginTransaction(context.Context) error {
-	return NewUnsupportedError("hold a transaction the user drives")
+	return NewUnsupportedError("support user-managed transactions")
 }
 
 func (NoUserTransactions) CommitTransaction(context.Context) error {
-	return NewUnsupportedError("hold a transaction the user drives")
+	return NewUnsupportedError("support user-managed transactions")
 }
 
 func (NoUserTransactions) RollbackTransaction(context.Context) error {
-	return NewUnsupportedError("hold a transaction the user drives")
+	return NewUnsupportedError("support user-managed transactions")
 }
 
 type NoServerSessions struct {
@@ -31,7 +31,7 @@ type NoServerSessions struct {
 }
 
 func (NoServerSessions) ListActivity(context.Context) ([]Activity, error) {
-	return nil, NewUnsupportedError("list its sessions")
+	return nil, NewUnsupportedError("list sessions")
 }
 
 func (NoServerSessions) CancelBackend(context.Context, int64, bool) (bool, error) {
@@ -42,18 +42,17 @@ func (NoServerSessions) CancelRunningQuery(context.Context) (bool, error) {
 	return false, NewUnsupportedError("cancel a running statement")
 }
 
-// NoServerLoad answers for a server that lists its sessions but reports nothing about the
-// load it is under. The dashboard leaves out a panel it has no numbers for.
+// NoServerLoad is the fallback for engines without server load statistics.
 type NoServerLoad struct{}
 
 func (NoServerLoad) ListLockWaits(context.Context) ([]LockWait, error) {
-	return nil, NewUnsupportedError("report which sessions wait for a lock")
+	return nil, NewUnsupportedError("report lock waits")
 }
 
 func (NoServerLoad) ReadServerLoad(context.Context) (ServerLoad, error) {
-	return ServerLoad{}, NewUnsupportedError("report the load it is under")
+	return ServerLoad{}, NewUnsupportedError("report server load")
 }
 
 func (NoServerLoad) ListSlowStatements(context.Context, int) ([]StatementStat, error) {
-	return nil, NewUnsupportedError("report the statements it spends its time in")
+	return nil, NewUnsupportedError("report slow statements")
 }

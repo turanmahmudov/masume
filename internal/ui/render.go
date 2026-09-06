@@ -17,12 +17,7 @@ import (
 // something on the frame of a screen counts from under it.
 const titleBarRows = 1
 
-// render draws the frame: the title bar, the screen, and the status bar under it.
-//
-// Drawing writes into the state as well as reading it: it clamps the offset of a view to what
-// it holds, and records where each button, row and bar landed. Only the draw knows the layout
-// at this width, and a press is answered against the frame the user is looking at, so both are
-// kept here rather than worked out a second time.
+// render draws the frame, clamps view offsets, and records hit boxes.
 func (model *Model) render() string {
 	model.forgetClosedTabs()
 	// Every key a renderer draws as a word, and every scroll bar it draws, it records here,
@@ -93,10 +88,7 @@ func describeElapsed(since time.Time) string {
 	return " " + strconv.Itoa(int(elapsed.Seconds())) + "s"
 }
 
-// renderThinkingLine draws every wait the client draws: a running statement, a catalog read, a
-// connection, or the assistant. A reader cannot tell one from another on the screen alone, so
-// all of them turn the same wheel. The dots at the end say the work goes on, and a label that
-// has them keeps its own.
+// renderThinkingLine draws a spinner, activity label, and elapsed time.
 func (model *Model) renderThinkingLine(label string, since time.Time, ground color.Color) string {
 	theme := model.styles.Theme
 	said := label
@@ -133,9 +125,7 @@ func (model *Model) describeConfirmKeys(held *confirmState) string {
 		" · " + model.registry.FormatActionChords(cfg.ScopeDialog, ActionAnswerNo) + " " + no
 }
 
-// The keys the title bar names on the right, so the palette, the help and the chat stay in
-// view. The chat is shown even without a model key: a press then reports the config file, and
-// a missing chip would look like an app without a chat.
+// The title bar shortcuts.
 var titleBarShortcuts = []struct {
 	id    ActionID
 	label string
@@ -147,9 +137,7 @@ var titleBarShortcuts = []struct {
 	{id: ActionShowAiChat, label: "ask ai", icon: cfg.IconAi},
 }
 
-// The logo of the client, and the run of blanks that holds the name apart from what the bar
-// reports beside it. The logo is the name written the way it is read, the squares of a grid,
-// so it is the mark of the client itself rather than a glyph a config file chooses.
+// The application logo and spacing.
 const (
 	logoGlyph = "升目"
 	logoGap   = "   "
@@ -321,7 +309,7 @@ func (model *Model) describeConfigProblems() string {
 	}
 	return model.writeProblemSign() +
 		present.FormatCountOf(int64(len(model.problems)), "problem", "problems") +
-		" in your config"
+		" in config or themes"
 }
 
 // renderStatusBar draws the bottom bar: the keys on the left, the report on the right.

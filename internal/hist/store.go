@@ -1,6 +1,4 @@
-// Package hist stores the data this client writes itself: the statements that ran, the
-// queries the user saved, the open tabs of a connection, the last catalog read of a profile,
-// the chats and the favourites. One SQLite file holds all of it.
+// Package hist stores query history, saved queries, tabs, catalog snapshots, chats, and favourites in a SQLite file.
 package hist
 
 import (
@@ -35,17 +33,15 @@ type SavedQuery struct {
 	SavedAt time.Time
 }
 
-// SavedTabState is the sort and the filter the grid applies to a statement. The buffer does
-// not hold them.
+// SavedTabState is the caret position and grid sort and filter state, separate from the editor buffer.
 type SavedTabState struct {
-	// The caret position, so a restored tab opens at the same place.
+	// The saved caret position.
 	Caret  int               `json:"caret"`
 	Sort   []core.SortState  `json:"sort"`
 	Filter []core.FilterStep `json:"filter"`
 }
 
-// SavedTab is one tab in stored form. A query tab holds its buffer. A table tab holds the
-// table, and an object tab holds the object. The statements of those two are generated.
+// SavedTab is a stored query buffer, table reference, or object reference. Table and object tabs use generated statements.
 type SavedTab struct {
 	Kind   string `json:"kind"`
 	SQL    string `json:"sql,omitempty"`
@@ -60,18 +56,15 @@ type SavedTab struct {
 	State    SavedTabState `json:"state"`
 }
 
-// SavedWorkspace holds the open tabs and the one that was active.
+// SavedWorkspace is the stored set of open tabs and the active tab index.
 type SavedWorkspace struct {
 	Tabs        []SavedTab `json:"tabs"`
 	ActiveIndex int        `json:"activeIndex"`
-	// Change is the number of this snapshot. It increases with every snapshot, so a save
-	// that arrives after a newer one is skipped. A zero is always written, so a caller
-	// that sets no number keeps the previous behaviour.
+	// Change is the snapshot sequence number. Older snapshots are skipped; zero bypasses the sequence check.
 	Change uint64 `json:"-"`
 }
 
-// CatalogSnapshot is the object tree of the last read, so a reconnect can draw it
-// immediately.
+// CatalogSnapshot is the cached object tree from the last catalog read.
 type CatalogSnapshot struct {
 	Tables  json.RawMessage `json:"tables"`
 	Objects json.RawMessage `json:"objects"`
@@ -79,27 +72,20 @@ type CatalogSnapshot struct {
 	Version int             `json:"version"`
 }
 
-// cacheVersion is written into the cached payload, so a payload of an older format is
-// discarded and not parsed.
+// cacheVersion is the supported catalog payload version. Other versions are discarded.
 const cacheVersion = 1
 
 // Store is one history file and its content.
 //
-// The client holds a nil store if the file could not be opened. Every method works on a nil
-// store: a read returns nothing and a write is skipped, both without an error. A user who
-// cannot write a history can still open every connection, so the nil check is here and not
-// at every call site.
+// A nil store returns empty reads and skips writes without errors.
 type Store struct {
 	file *sql.DB
-	// workspaceGuard allows one workspace save at a time, and workspaceChange holds the
-	// number of the last snapshot written for each profile. Every save runs in its own
-	// goroutine, so without these a late snapshot would overwrite a newer one.
+	// The mutex serializes workspace saves. The map records the latest accepted sequence number for each profile.
 	workspaceGuard  sync.Mutex
 	workspaceChange map[string]uint64
 }
 
-// schema creates every table the store reads and writes. `CREATE TABLE IF NOT EXISTS`
-// keeps an existing table unchanged, so a file from an earlier version is upgraded here.
+// schema is the SQL for creating missing history tables and indexes. Existing tables remain unchanged.
 const schema = `
   CREATE TABLE IF NOT EXISTS query_history (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,8 +129,7 @@ const schema = `
     cached_at    INTEGER NOT NULL
   );
 
-  -- A schema is stored with an empty table name, so one table holds both kinds of mark
-  -- and the primary key keeps a mark from being made twice.
+  -- Schema favourites use an empty table name.
   CREATE TABLE IF NOT EXISTS favourite_object (
     profile_name TEXT    NOT NULL,
     schema_name  TEXT    NOT NULL,
@@ -153,8 +138,7 @@ const schema = `
     PRIMARY KEY (profile_name, schema_name, table_name)
   );
 
-  -- The order is kept by a counter rather than by the clock: two schemas opened inside
-  -- one millisecond read as equal, and which of them came last is what this table is for.
+  -- The sequence preserves visit order when timestamps are equal.
   CREATE TABLE IF NOT EXISTS recent_schema (
     profile_name TEXT    NOT NULL,
     schema_name  TEXT    NOT NULL,
@@ -181,9 +165,7 @@ const schema = `
   );
 `
 
-// Open opens the history file and creates it if there is none. The file holds every
-// statement that ran, and with it the values in those statements, so only the owner can read
-// it.
+// Open opens or creates the history file and restricts file access to the owner.
 func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
@@ -197,8 +179,7 @@ func Open(path string) (*Store, error) {
 		_ = file.Close()
 		return nil, execErr
 	}
-	// WAL mode writes two files next to the database, and both hold rows until a
-	// checkpoint.
+	// WAL mode creates adjacent -wal and -shm files for journal data and shared state.
 	for _, beside := range []string{path, path + "-wal", path + "-shm"} {
 		if err := os.Chmod(beside, 0o600); err != nil && !os.IsNotExist(err) {
 			_ = file.Close()
@@ -329,8 +310,7 @@ func (store *Store) DeleteSaved(profileName, name string) error {
 	return err
 }
 
-// tabStateVersion is written into the payload, so a payload of an older format is discarded
-// and not parsed.
+// tabStateVersion is the supported tab payload version. Other versions are discarded.
 const tabStateVersion = 2
 
 // savedTabPayload is the sort and the filter of a tab in the form the history file stores.
@@ -341,9 +321,7 @@ type savedTabPayload struct {
 	Filter  []core.FilterStep `json:"filter"`
 }
 
-// SaveWorkspace stores the open tabs of a connection. It replaces the stored tabs, so a
-// closed tab is deleted from the file. A snapshot older than the stored one is skipped, and
-// only one save runs at a time.
+// SaveWorkspace replaces stored tabs in one transaction. Saves are serialized, and older numbered snapshots are skipped.
 func (store *Store) SaveWorkspace(profileName string, workspace SavedWorkspace) error {
 	if store == nil {
 		return nil
@@ -416,9 +394,7 @@ func nullableText(written string) any {
 	return written
 }
 
-// FindWorkspace returns the tabs of the profile, and nothing for a profile that was never
-// opened. A file that cannot be read gives an error, because the tabs are the work of the
-// user and a silent loss looks like a bug in the client.
+// FindWorkspace returns stored tabs and reports read errors. A profile without stored tabs returns false.
 func (store *Store) FindWorkspace(profileName string) (SavedWorkspace, bool, error) {
 	if store == nil {
 		return SavedWorkspace{}, false, nil
@@ -471,8 +447,7 @@ func (store *Store) FindWorkspace(profileName string) (SavedWorkspace, bool, err
 	return workspace, true, nil
 }
 
-// readSavedTabState parses the payload. A payload of another version gives an empty state,
-// so a format this client does not know is discarded and not parsed.
+// readSavedTabState parses a tab payload. Invalid payloads and unsupported versions return an empty state.
 func readSavedTabState(payload string) SavedTabState {
 	if payload == "" {
 		return SavedTabState{}
@@ -507,8 +482,7 @@ func (store *Store) SaveCatalog(profileName string, snapshot CatalogSnapshot) er
 	return execErr
 }
 
-// FindCatalog returns the last catalog read of a profile, so a connection draws the tree
-// before the server responds.
+// FindCatalog returns the cached catalog for a profile.
 func (store *Store) FindCatalog(profileName string) (CatalogSnapshot, bool) {
 	if store == nil {
 		return CatalogSnapshot{}, false

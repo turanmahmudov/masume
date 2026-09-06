@@ -8,9 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// The conversations of a profile, one row each, and the turns of one conversation. The
-// client works on a whole conversation, so it writes a whole conversation, in the same way
-// as the tabs.
+// Chat storage saves conversations and their turns per profile.
 
 // The limits of one profile. Above them, the oldest entries are removed.
 const (
@@ -18,7 +16,7 @@ const (
 	maxKeptConversations = 50
 )
 
-// maxTitleChars is the part of the first question a row of the list keeps.
+// maxTitleChars is the maximum conversation title length, excluding the ellipsis.
 const maxTitleChars = 90
 
 // The roles a turn can have.
@@ -31,8 +29,7 @@ const (
 type ChatTurn struct {
 	Role    string
 	Content string
-	// Context is the content of the editor at that time. It was sent with the question
-	// and is never displayed.
+	// Context is the editor text sent with the question. The chat does not display this text.
 	Context string
 }
 
@@ -97,9 +94,7 @@ func (store *Store) ListConversations(profileName string) ([]ChatConversation, e
 	return kept, rows.Err()
 }
 
-// ListChatTurns returns the turns of one conversation, the oldest first. A conversation
-// starts with a question, so if the limit removed the first question, its answer is removed
-// too.
+// ListChatTurns returns stored turns in order, starting at the first remaining user question.
 func (store *Store) ListChatTurns(conversationID int64) ([]ChatTurn, error) {
 	if store == nil {
 		return nil, nil
@@ -187,8 +182,7 @@ func (store *Store) SaveConversation(
 	return id, transaction.Commit()
 }
 
-// resolveConversationID returns the id of the conversation the turns belong to, and creates
-// a conversation if there is none.
+// resolveConversationID returns the existing conversation ID or creates a conversation for a zero ID.
 func resolveConversationID(
 	transaction *sql.Tx, profileName string, conversationID int64,
 	turns []ChatTurn, savedAt int64,

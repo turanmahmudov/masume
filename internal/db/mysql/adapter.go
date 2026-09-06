@@ -31,13 +31,10 @@ type mysqlSession struct {
 	// The row cap of the connection, kept so it is not set twice.
 	selectLimit    int
 	hasSelectLimit bool
-	// True where the server rolls the whole transaction back on a lock timeout, which it
-	// does only where it was started with `innodb_rollback_on_timeout`.
+	// True if innodb_rollback_on_timeout enables full rollback after a lock timeout.
 	rollsBackOnTimeout bool
 
-	// mainQueue holds the connection of the user, because the driver refuses a second
-	// call while the first one still reads the socket. The second pool holds one
-	// connection, so the pool itself makes its readers wait.
+	// mainQueue serializes user connection calls. The single-connection catalog pool serializes its own calls.
 	mainQueue *db.CallQueue
 }
 
@@ -45,13 +42,8 @@ func (session *mysqlSession) ReadTransactionState() db.TransactionState {
 	return session.transaction.ReadState()
 }
 
-// markTransactionFailed records only the errors the server rolls the whole transaction
-// back on. MySQL keeps a transaction open after an ordinary error.
-//
-// A lock timeout is the one to be careful with. It rolls back the statement alone unless
-// the server was started with `innodb_rollback_on_timeout`, so a transaction marked failed
-// on it is still open on the server. The next staged write would then not join it, and the
-// `begin` of its own would commit the work the user never committed.
+// markTransactionFailed records full transaction rollback errors. Ordinary MySQL errors leave the transaction open.
+// Lock timeouts roll back only the statement unless innodb_rollback_on_timeout is enabled. BEGIN commits an existing MySQL transaction.
 func (session *mysqlSession) markTransactionFailed(err error) {
 	var reported *driver.MySQLError
 	if !errors.As(err, &reported) {
@@ -63,8 +55,7 @@ func (session *mysqlSession) markTransactionFailed(err error) {
 	}
 }
 
-// resolveCatalogRunner returns where a catalog read runs. Inside a transaction it must be
-// the connection of the user, or it reads stale data.
+// resolveCatalogRunner uses the user connection during a transaction and the catalog pool otherwise.
 func (session *mysqlSession) resolveCatalogRunner() (queryRunner, error) {
 	if session.transaction.ReadState() != db.TransactionNone {
 		return session.connection, nil
@@ -76,8 +67,7 @@ func (session *mysqlSession) resolveCatalogRunner() (queryRunner, error) {
 	return side, nil
 }
 
-// holdCatalogPool waits for its turn where a catalog read runs on the connection of the
-// user, and returns what gives the turn back.
+// holdCatalogPool reserves the user connection for transactional catalog reads and returns a release callback.
 func (session *mysqlSession) holdCatalogPool(
 	ctx context.Context,
 ) (queryRunner, func(), error) {
@@ -101,8 +91,7 @@ type queryRunner interface {
 	ExecContext(ctx context.Context, sql string, params ...any) (sql.Result, error)
 }
 
-// applySelectLimit caps the read on the session, because MySQL has no cursor a client
-// can stop early.
+// applySelectLimit sets the session row limit.
 func (session *mysqlSession) applySelectLimit(ctx context.Context, cap int) error {
 	if session.hasSelectLimit && session.selectLimit == cap {
 		return nil
@@ -123,8 +112,7 @@ func (session *mysqlSession) applySelectLimit(ctx context.Context, cap int) erro
 	return nil
 }
 
-// buildMysqlColumns reads the columns of a result, and which of them hold bytes rather
-// than text. A result with no column, which is what a write answers, returns none.
+// buildMysqlColumns reads result column names, types, and binary flags.
 func buildMysqlColumns(rows *sql.Rows) ([]db.ResultColumn, []bool, error) {
 	names, err := rows.Columns()
 	if err != nil {
@@ -140,8 +128,7 @@ func buildMysqlColumns(rows *sql.Rows) ([]db.ResultColumn, []bool, error) {
 	}
 
 	columns := make([]db.ResultColumn, 0, len(names))
-	// A column of bytes is read as bytes, so its value is drawn as hex and not as the
-	// text a terminal cannot make of it.
+	// Binary column values remain bytes for hexadecimal display.
 	binary := make([]bool, 0, len(names))
 	for at, name := range names {
 		dataType := ""
@@ -199,8 +186,7 @@ func (session *mysqlSession) RunQuery(
 	}
 	defer func() { _ = rows.Close() }()
 
-	// The driver surfaces only the results that hold rows, so the last one read here is
-	// the result of the last statement that answers with rows.
+	// The driver exposes only row results. The final result here belongs to the last row-returning statement.
 	read, columns, readErr := readMysqlRows(rows, db.ReadOverscanRowLimit(rowLimit))
 	if readErr != nil {
 		session.markTransactionFailed(readErr)
@@ -217,8 +203,7 @@ func (session *mysqlSession) RunQuery(
 
 	writes := db.IsWriteCommand(command)
 	if writes && !db.HoldsReturningClause(lastStatement, flavour) {
-		// A plain write answers with a count alone. The rows read above belong to an
-		// earlier statement of the buffer and must not stand in for it.
+		// A final write uses its affected count instead of an earlier statement's rows.
 		read, columns = nil, nil
 	}
 	result := db.BuildCappedResult(db.CappedRead{
@@ -232,17 +217,13 @@ func (session *mysqlSession) RunQuery(
 	return result, nil
 }
 
-// markTransactionFromStatement records what the buffer left the transaction as. A `begin`
-// or a `commit` written into the editor never reaches BeginTransaction, and without this
-// the mark and the server would drift apart.
+// markTransactionFromStatement updates transaction state after statements from the editor.
 func (session *mysqlSession) markTransactionFromStatement(sql string) {
 	session.transaction.ApplyStatementEffect(
 		statement.ResolveTransactionEffect(sql, session.Support.Dialect.Syntax))
 }
 
-// countAffected returns how many rows the last write changed. The server keeps it until
-// the next statement. A count the server could not answer is reported as no count at all,
-// because a write that landed must not read as one that changed nothing.
+// countAffected returns the last write count and distinguishes an unavailable count from zero.
 func (session *mysqlSession) countAffected(ctx context.Context) (int64, bool) {
 	row := session.connection.QueryRowContext(ctx, "select row_count() as changed")
 	var changed int64
@@ -411,8 +392,7 @@ func (session *mysqlSession) ExplainQuery(
 	}
 	defer giveBack()
 
-	// The row cap applies to the plan too, and a plan with a limit the user never wrote
-	// is a plan of another statement.
+	// Planning requires the original statement without the session row cap.
 	if err := session.applySelectLimit(ctx, -1); err != nil {
 		return db.QueryPlan{}, db.WrapDatabaseError(err)
 	}
@@ -518,7 +498,7 @@ func (session *mysqlSession) ApplyChanges(ctx context.Context, changes []db.Chan
 
 func (session *mysqlSession) ListActivity(ctx context.Context) ([]db.Activity, error) {
 	if !session.Support.Capabilities.HasServerSessions {
-		return nil, db.NewUnsupportedError("list its sessions")
+		return nil, db.NewUnsupportedError("list sessions")
 	}
 	rows, _, err := session.readNamedRows(ctx, listMysqlActivitySQL)
 	if err != nil {
@@ -537,11 +517,10 @@ func (session *mysqlSession) ListActivity(ctx context.Context) ([]db.Activity, e
 	return activity, nil
 }
 
-// ReadServerLoad returns the load of the server. The server reports how long it has been
-// up rather than when it started, so the start is counted back from now.
+// ReadServerLoad returns load statistics and calculates server start time from uptime.
 func (session *mysqlSession) ReadServerLoad(ctx context.Context) (db.ServerLoad, error) {
 	if !session.Support.Capabilities.ReportsServerLoad {
-		return db.ServerLoad{}, db.NewUnsupportedError("report the load it is under")
+		return db.ServerLoad{}, db.NewUnsupportedError("report server load")
 	}
 	rows, _, err := session.readNamedRows(ctx, readMysqlServerLoadSQL)
 	if err != nil {
@@ -560,8 +539,7 @@ func (session *mysqlSession) ReadServerLoad(ctx context.Context) (db.ServerLoad,
 	return load, nil
 }
 
-// CancelBackend stops another session on the second connection, because the one of the
-// user can be busy.
+// CancelBackend stops another session through the catalog connection.
 func (session *mysqlSession) CancelBackend(
 	ctx context.Context, pid int64, terminate bool,
 ) (bool, error) {
@@ -586,7 +564,7 @@ func (session *mysqlSession) CancelRunningQuery(ctx context.Context) (bool, erro
 	}
 	if session.threadID <= 0 {
 		return false, db.NewDatabaseError(
-			"the server did not name this connection, so its statement cannot be cancelled")
+			"cannot cancel the statement: the connection ID is unavailable")
 	}
 	statement := session.flavour.BuildKillStatement(session.threadID, false)
 	if statement == "" {
@@ -602,9 +580,7 @@ func (session *mysqlSession) CancelRunningQuery(ctx context.Context) (bool, erro
 	return true, nil
 }
 
-// Ping uses the catalog connection, so a check does not wait for the query of the user.
-// Inside a transaction it has to use that connection, and a connection that is still
-// answering a call of its own is left alone: it is answering, so the server is there.
+// Ping checks the catalog connection outside transactions. Transactional checks use the user connection and skip busy connections.
 func (session *mysqlSession) Ping(ctx context.Context) error {
 	runner, err := session.resolveCatalogRunner()
 	if err != nil {
@@ -621,9 +597,7 @@ func (session *mysqlSession) Ping(ctx context.Context) error {
 	return execErr
 }
 
-// closeWait is how long a close is given to reach the server. A connection still
-// answering a call is waited for, and a server that never answers must not hold the
-// client open.
+// closeWait is the time limit for waiting to close the connection.
 const closeWait = 5 * time.Second
 
 // The user connection is one socket the driver takes no second caller on.
@@ -660,8 +634,7 @@ func (adapter *mysqlAdapter) Connect(
 		return nil, db.WrapDatabaseMessage(db.BuildConnectMessage(profile, err), err)
 	}
 
-	// One connection is held for the whole session, so a transaction and the row cap
-	// stay on it.
+	// One connection retains the session transaction and row limit.
 	connection, connectionErr := pool.Conn(ctx)
 	if connectionErr != nil {
 		_ = pool.Close()
@@ -675,10 +648,9 @@ func (adapter *mysqlAdapter) Connect(
 	}
 
 	if profile.AccessMode == cfg.AccessReadOnly {
-		// A server that has no read-only session is refused, not opened on a promise it
-		// would not keep.
+		// Read-only profiles require server support.
 		if adapter.flavour.ReadOnlyStatement == "" {
-			return fail(errors.New("this server holds no read-only session"))
+			return fail(errors.New("this server does not support read-only sessions"))
 		}
 		if _, readOnlyErr := connection.ExecContext(
 			ctx, adapter.flavour.ReadOnlyStatement); readOnlyErr != nil {
@@ -693,9 +665,7 @@ func (adapter *mysqlAdapter) Connect(
 		serverVersion = written
 	}
 
-	// The id names this connection when its statement has to be cancelled. A server that
-	// does not answer leaves it unset, and the cancel is refused rather than sent at the
-	// connection that happens to hold id zero.
+	// Cancellation requires the server connection ID. A missing ID disables cancellation.
 	threadID := int64(0)
 	if connection.QueryRowContext(
 		ctx, "select connection_id() as id").Scan(&threadID) != nil {
@@ -722,9 +692,7 @@ func (adapter *mysqlAdapter) Connect(
 	}, nil
 }
 
-// readRollsBackOnTimeout asks the server what a lock timeout does to a transaction. A
-// server that does not answer is read as leaving the transaction open, which is what every
-// build of MySQL and MariaDB does out of the box.
+// readRollsBackOnTimeout reads innodb_rollback_on_timeout. An unavailable value uses the MySQL and MariaDB default: statement-only rollback.
 func readRollsBackOnTimeout(ctx context.Context, connection *sql.Conn) bool {
 	var written string
 	if err := connection.QueryRowContext(
@@ -734,5 +702,5 @@ func readRollsBackOnTimeout(ctx context.Context, connection *sql.Conn) bool {
 	return written == "1" || strings.EqualFold(written, "on")
 }
 
-// The compiler reports a part of the port this session has not answered for.
+// Compile-time Session interface check.
 var _ db.Session = (*mysqlSession)(nil)

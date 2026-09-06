@@ -7,12 +7,9 @@ import (
 	"time"
 )
 
-// The tokens of a write plan. A client that cannot show a question of its own leaves the
-// agent to ask the user in its own words. The token is what the agent brings back: it says
-// that this one statement, on this one connection, was measured and shown.
+// Write plan tokens authorize one measured statement on one profile after agent confirmation.
 
-// planTokenLife is how long a token is worth anything. It is short: the user answered a
-// plan that was measured then, and the rows move on.
+// planTokenLife is the token lifetime.
 const planTokenLife = 10 * time.Minute
 
 // issuedPlan is one token and the write it was issued for.
@@ -27,7 +24,7 @@ type PlanTokens struct {
 	guard  sync.Mutex
 	issued map[string]issuedPlan
 	next   int
-	// now is the clock, so a test can move it.
+	// now is the clock.
 	now func() time.Time
 }
 
@@ -50,9 +47,7 @@ func (tokens *PlanTokens) Issue(profile, sql string) string {
 	return token
 }
 
-// Take is true where the token was issued for this write on this connection and has not
-// been used. Every token is taken one time, so an agent cannot run one plan twice. A token
-// brought back for another write stays usable for the write it was issued for.
+// Take consumes a matching token and checks its lifetime. A profile or statement mismatch leaves the token unchanged.
 func (tokens *PlanTokens) Take(token, profile, sql string) bool {
 	if tokens == nil || token == "" {
 		return false
@@ -71,8 +66,7 @@ func (tokens *PlanTokens) Take(token, profile, sql string) bool {
 	return tokens.now().Sub(held.at) <= planTokenLife
 }
 
-// matchesStatement is true for the same statement, whatever the spacing around it. The
-// statement decides what runs, so nothing else about it is allowed to differ.
+// matchesStatement compares exact statement text after trimming surrounding whitespace.
 func matchesStatement(issued, asked string) bool {
 	return strings.TrimSpace(issued) == strings.TrimSpace(asked)
 }

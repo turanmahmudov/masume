@@ -18,14 +18,12 @@ type SyntaxRule struct {
 	HasItalic     bool
 	Underline     bool
 	HasUnderline  bool
-	// Another rule this one inherits its style from. The keys of this rule are applied
-	// after it.
+	// The inherited rule. Local settings override the inherited style.
 	Link    string
 	HasLink bool
 }
 
-// ThemeTables holds the three tables of a theme. `config.toml` has the same three tables
-// under `[ui]`, so one colour can be changed without a theme file.
+// ThemeTables is the palette, colours, and syntax configuration for a theme or `[ui]`.
 type ThemeTables struct {
 	// The named colours of the theme, each one a hex value.
 	Palette map[string]string
@@ -43,7 +41,7 @@ func NewThemeTables() ThemeTables {
 	}
 }
 
-// Appearance says whether a theme is for a dark or a light terminal.
+// Appearance is the theme terminal background: dark or light.
 type Appearance string
 
 // The two appearances a theme can set.
@@ -73,8 +71,7 @@ func IsHexColor(value string) bool {
 	return hexColor.MatchString(value)
 }
 
-// sortedKeys returns the keys of a table in a stable order, so the problems of a file are
-// always reported in the same order.
+// sortedKeys returns table keys in alphabetical order.
 func sortedKeys(table Table) []string {
 	keys := make([]string, 0, len(table))
 	for key := range table {
@@ -94,13 +91,12 @@ func readColorTable(table Table, label string, problems *[]string) map[string]st
 			read[key] = written
 			continue
 		}
-		*problems = append(*problems, fmt.Sprintf("%s %q is not written as text", label, key))
+		*problems = append(*problems, fmt.Sprintf("%s %q must be text", label, key))
 	}
 	return read
 }
 
-// readPalette reads the palette. A palette entry cannot be a palette name, because the
-// names refer to this table.
+// readPalette reads hex colours. Palette references are invalid in palette entries.
 func readPalette(table Table, problems *[]string) map[string]string {
 	read := readColorTable(table, "palette entry", problems)
 	for _, key := range sortedNames(read) {
@@ -108,7 +104,7 @@ func readPalette(table Table, problems *[]string) map[string]string {
 			continue
 		}
 		*problems = append(*problems, fmt.Sprintf(
-			"palette entry %q is %q, which is not a hex colour", key, read[key]))
+			"palette entry %q has an invalid hex colour: %q", key, read[key]))
 		delete(read, key)
 	}
 	return read
@@ -132,7 +128,7 @@ func findFlag(table Table, key, label string, problems *[]string) (bool, bool) {
 	if isFlag {
 		return held, true
 	}
-	*problems = append(*problems, fmt.Sprintf("%s %q is not true or false", label, key))
+	*problems = append(*problems, fmt.Sprintf("%s %q must be true or false", label, key))
 	return false, false
 }
 
@@ -153,7 +149,7 @@ func readSyntax(table Table, problems *[]string) map[string]SyntaxRule {
 		rule, isTable := FindTable(table[kind])
 		if !isTable {
 			*problems = append(*problems, fmt.Sprintf(
-				"highlight %q is not written as a table of its own", kind))
+				"highlight %q must be a table", kind))
 			continue
 		}
 		read[kind] = readSyntaxRule(rule, fmt.Sprintf("highlight %q", kind), problems)
@@ -172,7 +168,7 @@ func readAppearance(root Table, problems *[]string) Appearance {
 		return Appearance(written)
 	}
 	*problems = append(*problems, fmt.Sprintf(
-		"appearance is %q, which is neither \"dark\" nor \"light\"", written))
+		"invalid appearance %q; use \"dark\" or \"light\"", written))
 	return AppearanceDark
 }
 
@@ -187,8 +183,7 @@ func readTables(root Table, problems *[]string) ThemeTables {
 	}
 }
 
-// ParseThemeDocument reads one theme file. The caller passes the name, which is the file
-// name, so two files cannot have the same theme name.
+// ParseThemeDocument reads a theme document. The caller supplies the theme file name.
 func ParseThemeDocument(document Table, name string) (ThemeDocument, []string) {
 	problems := []string{}
 	if document == nil {

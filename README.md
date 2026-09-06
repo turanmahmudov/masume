@@ -3,7 +3,7 @@
 <h3 align="center">A database client for the terminal</h3>
 
 <p align="center">
-  <em>Browse and query a database in the terminal. Let an AI agent use the same connections.</em>
+  <em>Browse and query databases in the terminal. Share selected connection profiles with an AI agent.</em>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 
 ### Browse
 
-The object tree lists schemas, tables, views, functions, sequences, types, triggers and roles. Select a table to see its data, columns, indexes, constraints, DDL and query plan.
+The object tree lists database objects supported by the engine. Table views include data, columns, indexes, constraints, DDL and query plans.
 
 ![The object tree](vhs/shots/01-object-tree.png)
 
@@ -36,13 +36,13 @@ An ER diagram shows a table and the tables it is linked to by foreign keys.
 
 ### Query
 
-The editor has syntax highlighting and autocompletion based on the database catalog. Errors are marked in the gutter before you run the statement.
+The editor has syntax highlighting and completion from the database catalog. Local checks and supported server checks mark detected errors before execution. A statement without a diagnostic can still fail.
 
 ![The SQL editor with the completion menu open](vhs/shots/08-completion.png)
 
 ### Results
 
-Sort, filter, follow a foreign key, freeze a column, or mask a column. Edits are staged in the grid. Nothing is written until you review the changes as SQL and run them.
+Sort, filter, follow a foreign key, or freeze a column. Grid edits stay staged until SQL review and execution. Masking hides matching columns in the grid only; copies, exports and value viewers retain original values.
 
 ![A result grid](vhs/shots/09-result.png)
 
@@ -54,7 +54,9 @@ Query plans are displayed as a tree, with estimated or measured costs.
 
 ### Agents
 
-masume has a built-in AI chat and an MCP server over stdio. The chat uses the current connection. `masume --mcp` connects to the profiles listed in the config. Both use the same tools with the same access limits, and both ask for confirmation before a write.
+masume has a built-in AI chat and an MCP server over stdio. The AI chat uses the current connection and asks before each query, including reads. MCP opens separate connections to explicitly allowed profiles. MCP access levels and profile settings apply to its queries and write confirmations.
+
+Both interfaces share database tools, but their policies differ. See [AI data sharing](docs/ai.md), [MCP access](docs/mcp.md), and [security limits](SECURITY.md).
 
 ---
 
@@ -66,43 +68,43 @@ masume has a built-in AI chat and an MCP server over stdio. The chat uses the cu
 
 **AI chat:** ask about a statement, its error, or its query plan. Supports Anthropic and OpenAI
 
-**Autocompletion from the catalog:** table and column names are suggested as you type. Errors are marked in the gutter before the statement runs
+**Catalog completion:** suggestions for table and column names, with best-effort statement diagnostics
 
-**All table details:** data, columns, indexes, constraints, DDL, query plan, and an ER diagram
+**Table details:** data, columns, indexes, constraints, DDL, query plans and ER diagrams, subject to engine support
 
-**Staged edits:** insert, edit, duplicate and delete rows. Review the changes as SQL, then run or discard them
+**Staged edits:** insert, edit, duplicate and delete supported table rows. Review SQL before execution. Sorting, server filtering and rerunning discard staged edits. See [editing rows](docs/usage.md#editing-rows).
 
-**Filters:** filter by one value, by several values, or by a `WHERE` clause. Filters stack, and one key removes the last one
+**Filters:** server predicates and filters on loaded rows. See [sorting and filters](docs/usage.md#sorting-and-filters) for their different scopes.
 
-**Follow a foreign key** to the referenced row
+**Foreign keys:** open rows matching the selected foreign-key column. Composite keys require additional filtering.
 
 **Query plans** as a tree with estimated or measured costs, or as raw text
 
 **Named parameters:** a statement with `:name` placeholders opens a form for the values
 
-**Server dashboard:** `Alt+O A` opens an operations view that refreshes every two seconds: the other sessions and what they are running, connections against the limit, transactions and write ahead log per second, the cache hit rate, replication lag, and the sessions waiting for a lock drawn as a tree of who waits for whom. With `pg_stat_statements` installed it also lists the statements the server spends the most time in. `Enter` opens a session's statement in a tab, `x` stops it, `Ctrl+D` ends the session
+**Server dashboard:** `Alt+O a` opens sessions and available metrics, refreshed about every two seconds. PostgreSQL panels include locks, load, cache hits, replication lag and statement statistics where supported. See [server activity](docs/usage.md#server-activity) for engine limits and session actions.
 
-**MongoDB:** a query tab accepts MongoDB shell syntax
+**MongoDB:** supported shell-style calls and extended JSON. This is a [subset of shell syntax](docs/engines.md#mongodb), not a JavaScript runtime.
 
-**Export and copy:** CSV, JSON, Markdown, `INSERT` statements, one row as JSON, or one column as an `IN` clause
+**Export and copy:** CSV and JSON files. Clipboard formats also include Markdown, `INSERT` statements, row JSON and column `IN` clauses. See [copy and export](docs/usage.md#copy-and-export) for row scope and CSV transformations.
 
-**Import:** a CSV or JSON file into a table, or into a table the import makes. A file picker offers the files it can read, types are read from the file, columns are mapped by name, and a dry run reports the rows that cannot be written before any of them are
+**Import:** CSV or JSON into an existing or new SQL table. A file picker, column mapping and local validation precede execution. Database constraints can still reject accepted rows. See [importing files](docs/usage.md#importing-files).
 
-**Query history and saved queries.** Open tabs are restored after a restart
+**Query history and saved queries.** Tab restoration retains query text and selected settings, but not result rows, staged edits or transactions.
 
-**Project connections and shared queries:** a `.masume.toml` committed next to the code provides the connections and the queries of a project, found from the working directory upward. Clone the repository, run `masume`, and the development database is in the picker. Your own config file overrides it
+**Project profiles and queries:** the nearest `.masume.toml` supplies shared connections and saved queries. User profiles replace project profiles with matching names.
 
-**Write plans:** before a write runs, masume counts the rows it lands on, and lists the columns it assigns, the relations it reaches through a trigger, and the foreign keys that refuse it. It also reads the rows the write changes, inside the transaction of that write, and `Alt+U` undoes it afterwards. The chat and an agent over MCP are measured the same way, and an agent is handed the undo with its result
+**Write plans:** optional counts, assigned columns, trigger names and foreign-key effects for eligible single SQL writes. Plans can retain reverse SQL for captured target rows. Undo excludes cascades and trigger effects, and can overwrite later changes. See [write-plan limits](docs/configuration.md#measuring-a-write).
 
-**Manual transactions:** disable autocommit, then begin, commit or roll back
+**Manual transactions:** explicit begin, commit and rollback, or automatic begin with autocommit disabled. Engine transaction restrictions still apply.
 
-**Passwords never reach the config file:** a `password` key in any file masume reads is ignored and reported. `auth = "keyring"` keeps the password in the keyring of the machine, and masume offers to put a typed password there once the server accepts it. `auth = "secret"` reads one reference out of a store you declare, so 1Password, Bitwarden, Vault, SOPS, `pass` or a script of your own all work through the same two lines
+**Password sources:** prompts, the operating system keyring, environment variables, commands and named secret stores. masume ignores database passwords in profile files. AI API keys have separate storage rules. See [credentials](SECURITY.md#credentials).
 
-**Read-only profiles:** the session is set read-only on the server, so writes are impossible
+**Read-only profiles:** client checks with additional engine-specific protection. MongoDB uses client checks only; explicit TiDB read-only profiles fail to connect. Database permissions remain essential.
 
-**Seventeen built-in themes,** or use the terminal colours. When the terminal theme changes, masume updates
+**Seventeen built-in themes,** custom themes, or terminal colours. System-theme updates require terminal colour-query support.
 
-**AI is optional:** `[ai] enabled = false` disables all AI features and hides them from the interface
+**Optional AI chat:** `[ai] enabled = false` disables the AI chat and its interface elements. MCP settings are separate.
 
 ---
 
@@ -118,42 +120,47 @@ There is no tagged release yet, so there are no prebuilt binaries. Each command 
 ```sh
 git clone https://github.com/turanmahmudov/masume.git
 cd masume
+mise install
 mise run install
 ```
 
 ## Usage
 
-```
-masume                        open the client
-masume run STATEMENT          run one statement, write the result, and exit
-masume URL                    open one connection, for example postgres://you@host/shop
-masume FILE                   open one SQLite file, for example ./notes.db
-masume DSN                    open one connection string, for example "host=db dbname=shop"
-masume --profile NAME         open one profile of the config file
-masume --detect               list the databases running in a container on this machine
-masume --mcp                  run the MCP server for the configured profiles
-masume --mcp --profile=NAME   run the MCP server for one profile
-masume --mcp --check          connect to every configured profile once, print a report, and exit
-masume --version              print the version and exit
+```text
+masume                       open the client
+masume run [TARGET] STATEMENT run statements and exit
+masume URL                   open a supported connection URL
+masume FILE                  open an existing SQLite file
+masume DSN                   open a keyword connection string
+masume --profile NAME        open a saved or project profile
+masume --detect              offer detected container databases
+masume --mcp                 serve allowed MCP profiles
+masume --mcp --profile=NAME  serve one allowed MCP profile
+masume --mcp --check         check enabled MCP profiles and exit
+masume --version             print the version and exit
 ```
 
-A connection given on the command line needs no profile in the config file. With no argument, masume opens `$DATABASE_URL` if the shell exports it.
+A command-line target needs no saved profile. Without an explicit target or profile, masume can open `$DATABASE_URL`.
 
 ```sh
-masume postgres://reader@db.internal:5432/shop?sslmode=verify-full
+masume 'postgres://reader@db.internal:5432/shop?sslmode=verify-full'
 masume "host=db.internal dbname=shop user=reader"
 masume ./notes.db
 masume --profile shop-prod
 masume --detect
 ```
 
-`--detect` asks docker, or podman where there is no docker, for the containers that run on this machine. A container whose image is a database masume supports, and which publishes the port that database listens on, becomes a row in the connection picker. The user, the database and the password come from the environment of the container, so most local containers open with one `Enter` and nothing typed.
+`--detect` reads running containers through Docker, or Podman when Docker is absent. Supported database images with published ports appear in the picker. Connection fields come from container environment variables and detection defaults.
 
-masume asks for the password if the connection carries none. The connection is not written to the config file, so masume offers to write it when you quit. Answer `y` to save it as a profile and `n` to quit without it. To save it earlier, or under another name, press `Ctrl+N` for the picker, then `e` and `Ctrl+S`.
+The client prompts when the connection requires a missing password. Temporary connections remain unsaved until requested. On exit, `y` saves opened temporary profiles and `n` exits without saving. Saving a retained password can store that password in the keyring.
+
+Supported URLs are not complete native driver connection strings. Most native URL options are ignored. See [connection targets](docs/configuration.md#a-connection-on-the-command-line) before using authentication or TLS options.
+
+The [user guide](docs/usage.md) covers navigation, SQL, editing, transactions, imports, exports, history and troubleshooting.
 
 ### Without a screen
 
-`masume run` runs one statement and writes the result to stdout, over the same profiles, timeouts and access limits as the client. This is how a Makefile, a container or a CI job uses masume.
+`masume run` executes statements and writes results to stdout. It uses profiles, connection commands, timeouts and read-only checks, but not write confirmation, write plans or undo. Batches are not automatically atomic.
 
 ```sh
 masume run -p shop-prod -f json 'select count(*) from orders'
@@ -163,11 +170,13 @@ masume run ./notes.db -f csv 'select * from notes limit 100000' > notes.csv
 echo 'select 1' | masume run -p shop -e -
 ```
 
-Formats are `table` (the default), `csv`, `json` and `markdown`. A statement without a limit of its own returns one page, `page_size` on the profile, the same as the client; the run reports on stderr that the result is longer. A statement that bounds itself, with a `LIMIT`, returns every row it asks for, read a batch at a time, and a result larger than memory still reaches the stream. `--limit ROWS` bounds a run whose statement carries no limit. The exit codes are: `0` every statement ran, `1` the server refused one, `2` the connection could not be opened, `3` the profile is read-only and the statement writes. See `masume run --help` and [docs/headless.md](docs/headless.md).
+Formats are `table` by default, `csv`, `json` and `markdown`. Reads without their own limit return one profile page by default. `--limit` adds an output cap, including for statements with a SQL limit. Limited reads without `--limit` stream CSV and JSON in batches; table and Markdown output remain buffered.
+
+`--explain` executes eligible reads to measure their plans. It is not a dry run. Exit `1` can follow a successful write with incomplete output; do not automatically retry writes. See [headless usage](docs/headless.md) for exit codes, credentials and output limits.
 
 ### For a team
 
-A repository can hold a `.masume.toml` next to its code, with the connections of the project and the queries the team keeps:
+A repository can contain `.masume.toml` with shared profiles and queries:
 
 ```toml
 [profile.dev]
@@ -182,9 +191,11 @@ sql         = "select * from orders order by created_at desc limit 50"
 description = "the newest 50 orders"
 ```
 
-masume reads the first such file it finds, starting in the working directory and walking up. The connections appear in the picker marked `project`, and the queries appear under `Ctrl+Q`. A profile of your own config file replaces a project profile of the same name.
+masume reads the nearest project file in or above the working directory. Profiles appear in the picker with a `project` label; queries appear under `Ctrl+Q`. A user profile replaces the whole project profile with the same name.
 
-A project file holds the server address. It holds no way to reach a secret: `password`, `password_command`, `password_env`, `command`, `secret` and `secret_ref` are all refused there. `auth = "prompt"` and `auth = "keyring"` both work. A project file also cannot set your theme, your keys, your icons, or the profiles an agent reaches. See [docs/configuration.md](docs/configuration.md).
+Project profiles with `password_command`, `password_env`, `command`, `secret` or `secret_ref` are refused. Literal `password` values are ignored instead. Both `auth = "prompt"` and `auth = "keyring"` work. Keyring access uses the profile name, so a project profile can access an existing password under that name.
+
+Project files cannot set global themes, keys, AI providers or MCP settings. An allowed MCP name can still resolve to a project profile. See [project configuration](docs/configuration.md#the-project-file) and [project security](SECURITY.md#project-files).
 
 The config file is `$XDG_CONFIG_HOME/masume/config.toml`. The history file is `$XDG_STATE_HOME/masume/history.sqlite`. See [docs/mcp.md](docs/mcp.md) for the MCP server.
 
@@ -192,7 +203,7 @@ The config file is `$XDG_CONFIG_HOME/masume/config.toml`. The history file is `$
 
 The project is in an early stage. There is no tagged release yet, and the config file format can change before `v1`. It builds on Linux and macOS, for amd64 and arm64. There is no Windows build.
 
-The tier 1 engines are tested against a real server in CI on every push. The other engines use the protocol of a tier 1 engine and are covered by unit tests only. [docs/engines.md](docs/engines.md) lists the tiers and the limitations of each engine. Read it before you use masume on a production database.
+Tier 1 engines have integration coverage in CI; SQLite uses temporary files. Tier 2 services share protocols but have no real-server integration coverage. See [engine limits](docs/engines.md) before production use.
 
 ## First connection
 
@@ -202,7 +213,7 @@ The quickest first connection is a URL on the command line:
 masume postgres://ada@127.0.0.1:5432/shop
 ```
 
-For a connection you open again, write a profile. On the first run, masume creates a starter config file if there is none. Run `masume`, press `Ctrl+N` to open the connection picker, then press `n` to add a connection. Or write the profile by hand:
+The first interactive run creates a starter configuration file if none exists. In the picker, `n` adds a profile. `Ctrl+N` returns to the picker from a connection. Profiles can also be written directly:
 
 ```toml
 [profile.shop]
@@ -216,20 +227,22 @@ env      = "dev"
 mode     = "write"
 ```
 
-`auth = "prompt"` asks for the password at connect time and keeps it in memory only.
+`auth = "prompt"` asks for the password at connection time. The password stays in memory unless saved to the keyring.
 
 ## Docs
 
 | Page | About |
 | --- | --- |
-| [Configuration](docs/configuration.md) | Every config key, its type, its default and what it does |
+| [User guide](docs/usage.md) | Workflows, navigation, editing, data transfer and troubleshooting |
+| [Configuration](docs/configuration.md) | Settings, defaults, profiles and password sources |
 | [Engines](docs/engines.md) | Support tiers and capabilities |
-| [Keys](docs/keys.md) | Every action and its key binding |
+| [Keys](docs/keys.md) | Default bindings, scopes and overrides |
 | [Themes](docs/themes.md) | Built-in themes, and how to write a custom one |
 | [AI chat](docs/ai.md) | Providers, tools, what is sent to the provider |
 | [MCP server](docs/mcp.md) | Tools, limits, confirming a write |
 | [Without a screen](docs/headless.md) | `masume run` for scripts and CI |
 | [Architecture](docs/architecture.md) | How the source is organized |
+| [Security](SECURITY.md) | Storage, data sharing and protection limits |
 
 ## Contributing
 

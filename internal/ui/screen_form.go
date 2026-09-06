@@ -16,7 +16,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/secret"
 )
 
-// TestStateKind says how far a test of the form got.
+// TestStateKind is the connection test status.
 type TestStateKind string
 
 // The four states a test can be in.
@@ -27,8 +27,7 @@ const (
 	TestFailed  TestStateKind = "failed"
 )
 
-// FormState is the connection form: the fields, which one holds the caret, and how the last
-// test went.
+// FormState contains connection fields, focus, and test status.
 type FormState struct {
 	Fields []cfg.FormField
 	// The profile the form edits, so the fields it does not show survive a save.
@@ -204,8 +203,7 @@ func (model *Model) readFormKey(key tea.Key) (tea.Model, tea.Cmd) {
 	return model, nil
 }
 
-// pasteIntoForm writes what the terminal pasted into the field the caret is in. The card
-// tells the reader to paste a URL into the host field, so the paste has to land.
+// pasteIntoForm inserts pasted text or fills the form from a connection URL.
 func (model *Model) pasteIntoForm(written string) (tea.Model, tea.Cmd) {
 	form := model.form
 	if form == nil || model.confirm != nil {
@@ -276,7 +274,7 @@ func (model *Model) saveForm() (tea.Model, tea.Cmd) {
 	if form.Editing {
 		replacing = form.Source.Name
 	}
-	// The file holds no password. One the connection carries goes to the keyring instead.
+	// Passwords use the keyring when available.
 	profile, keyringErr := keepPasswordOutOfTheFile(profile)
 	if keyringErr != nil {
 		form.Test, form.Message = TestFailed, keyringErr.Error()
@@ -487,7 +485,7 @@ func (model *Model) renderForm() string {
 		cardTop+cardBodyRow+len(lines), left+cardBodyColumn, model.styles.Theme.Panel)[0])
 	if hasFormField(form.Shown(), "host") {
 		lines = append(lines, model.styles.Faint().Render(present.TruncateText(
-			"paste a postgres:// or mysql:// url into host to fill the form", cardWidth-4)))
+			"paste a postgres:// or mysql:// URL into host to fill the form", cardWidth-4)))
 	}
 
 	// Where the rows of the fields land on the screen, so a press marks the row it looks

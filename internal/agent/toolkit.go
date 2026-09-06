@@ -1,5 +1,4 @@
-// Package agent holds the operations a model can run on one connection. Two callers use it:
-// the Model Context Protocol server, and the chat inside the client.
+// Package agent provides database tools for the Model Context Protocol server and the client chat.
 package agent
 
 import (
@@ -29,9 +28,9 @@ type RunPermission struct {
 // StatementAnswer is what one statement answered, and the undo the caller kept with it.
 type StatementAnswer struct {
 	Result db.QueryResult
-	// Undo holds the statements that reverse the write, read inside its transaction.
+	// Undo is the statements built from original rows captured in the write transaction.
 	Undo []string
-	// UndoReason says why no undo was kept, where the caller measured the write.
+	// UndoReason is the cause of unavailable undo after write measurement.
 	UndoReason string
 }
 
@@ -39,7 +38,7 @@ type StatementAnswer struct {
 type MeasuredWrite struct {
 	// Lines is the plan as text, one line each.
 	Lines []string
-	// Table, Rows and Total are what the write lands on.
+	// Table is the target. Rows and Total are matching and total row counts.
 	Table    string
 	Rows     int64
 	HasRows  bool
@@ -48,27 +47,22 @@ type MeasuredWrite struct {
 	Columns  []string
 	Cascades []string
 	Blocked  []string
-	// UndoRows is the rows the undo would hold, and UndoReason why it holds none.
+	// UndoRows is the capture count. UndoReason is the cause of unavailable undo.
 	UndoRows   int64
 	UndoReason string
-	// Token lets the caller run this one statement without being asked again. It is empty
-	// where the client of the caller asks the user itself.
+	// Token is the statement authorization token for clients without confirmation dialogs.
 	Token string
 }
 
-// StatementRunner is the interface a caller uses to allow a statement. The caller decides:
-// the chat asks the user in a card, and the server checks the access level of the connection
-// and then asks the user through their own client.
+// StatementRunner is the caller interface for statement authorization, measurement, execution, and reporting.
 type StatementRunner struct {
-	// RowLimit is the number of rows one run returns, which is also the maximum a caller
-	// can request.
+	// RowLimit is the maximum rows per run.
 	RowLimit int
 	// AskToRun returns whether the statement can run, and the reason if it cannot.
 	AskToRun func(
 		ctx context.Context, risk statement.WriteRisk, statements []string,
 	) RunPermission
-	// MeasureWrite measures one write without running it. A caller that measures no write
-	// on this connection leaves it unset, or answers false.
+	// MeasureWrite measures a write without execution. Nil or false means measurement is unavailable.
 	MeasureWrite func(ctx context.Context, sql string) (MeasuredWrite, bool)
 	RunStatement func(ctx context.Context, sql string, rowLimit int) (StatementAnswer, error)
 	// ReportRun is called after the run, so the caller can store the result.
@@ -92,13 +86,12 @@ type ToolDeps struct {
 	MarkTableDescribed func(table db.TableRef, detail db.TableDetail)
 }
 
-// ToolDefinition is one operation a model can run on a connection. It has a name and a
-// description before a connection exists. The server lists them, and the chat binds them.
+// ToolDefinition is a database tool with an input schema and execution function.
 type ToolDefinition struct {
 	Name        string
 	Description string
-	// InputSchema is the JSON Schema of the call. Every caller sends it unchanged.
+	// InputSchema is the tool JSON Schema before caller-specific extensions.
 	InputSchema map[string]any
-	// Call validates the input against the schema, because a caller can send any value.
+	// Call validates and runs the tool input.
 	Call func(ctx context.Context, deps ToolDeps, input map[string]any) any
 }

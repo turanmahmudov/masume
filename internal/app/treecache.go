@@ -8,16 +8,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// The object tree is built from the whole catalog, which costs milliseconds on a server with
-// thousands of tables. The frame is drawn after every key press and at every wake, and the
-// keys of the tree also read the rows, so the same tree was built several times for one key
-// press. This file builds it one time and keeps it until an input changes.
+// Cache the object tree until its input fingerprint changes.
 
-// treeFingerprint identifies every input of BuildTree.
-//
-// The tables, the objects and the roles are replaced together, and ReadAt is set with them, so
-// the read time identifies all three. Every other input is small enough to hash completely:
-// the open rows, the tables the user looked at, and the marks.
+// treeFingerprint is the cache key for tree inputs. Catalog replacement updates ReadAt; detail and view changes use hashes.
 type treeFingerprint struct {
 	readAt      time.Time
 	tables      int
@@ -30,13 +23,11 @@ type treeFingerprint struct {
 	filter      string
 	filterScope string
 	hideSystem  bool
-	// The age of a recent schema is shown in seconds, so two times in the same second
-	// give the same tree.
+	// The display time rounded to seconds.
 	second int64
 }
 
-// buildTreeFingerprint returns the fingerprint of the tree inputs. The engine of a connection
-// is fixed at the open, so it is not part of the fingerprint.
+// buildTreeFingerprint builds a cache key for mutable tree inputs.
 func (connection *Connection) buildTreeFingerprint(now time.Time) treeFingerprint {
 	return treeFingerprint{
 		readAt:      connection.Catalog.ReadAt,
@@ -54,9 +45,7 @@ func (connection *Connection) buildTreeFingerprint(now time.Time) treeFingerprin
 	}
 }
 
-// BuildTree returns the rows of the object tree and the counts of its border. The tree is
-// cached until an input changes, because one key press draws one frame and reads the rows
-// several times.
+// BuildTree returns cached tree rows and counts until the input fingerprint changes.
 func (connection *Connection) BuildTree(now time.Time) present.TreeResult {
 	held := connection.buildTreeFingerprint(now)
 	if connection.treeBuilt && connection.treeAt == held {
@@ -83,8 +72,7 @@ func hashText(running uint64, text string) uint64 {
 	return running*31 + held.Sum64()
 }
 
-// hashOpenRows hashes the open rows. A map has no fixed order, so each entry is added to the
-// hash and the order is not used.
+// hashOpenRows hashes expanded row IDs independently of map iteration order.
 func hashOpenRows(open map[string]bool) uint64 {
 	held := uint64(len(open))
 	for id, isOpen := range open {
@@ -96,18 +84,14 @@ func hashOpenRows(open map[string]bool) uint64 {
 	return held
 }
 
-// CatalogFingerprint identifies the content of the catalog, so a caller that caches a result
-// of the catalog knows when to build it again.
+// CatalogFingerprint is the cache key for loaded tables and column details.
 type CatalogFingerprint struct {
 	readAt  time.Time
 	tables  int
 	details uint64
 }
 
-// FingerprintCatalog returns the fingerprint of the catalog. The tables are replaced together
-// and ReadAt is set with them, so the read time identifies the whole list. The detail of one
-// table arrives separately, so this function hashes every column of every table that was
-// read: a statement is checked against the name and the type of each column.
+// FingerprintCatalog combines the catalog timestamp, table count, and loaded column hashes.
 func (connection *Connection) FingerprintCatalog() CatalogFingerprint {
 	return CatalogFingerprint{
 		readAt:  connection.Catalog.ReadAt,
@@ -135,8 +119,7 @@ func hashDetailColumns(details map[string]present.TableDetailState) uint64 {
 	return held
 }
 
-// hashDetails hashes the read state of each table. A state changes from loading to read
-// without a change of the count, so the hash contains the state and the name.
+// hashDetails hashes table detail states, errors, and column and foreign key counts.
 func hashDetails(details map[string]present.TableDetailState) uint64 {
 	held := uint64(len(details))
 	for id, state := range details {
@@ -150,8 +133,7 @@ func hashDetails(details map[string]present.TableDetailState) uint64 {
 	return held
 }
 
-// hashFavourites hashes the marks of the user. A mark is added and removed, so the count
-// changes with it. The names are hashed as well, in case two changes happen in one frame.
+// hashFavourites hashes favourite kinds, schemas, and names.
 func hashFavourites(favourites []core.Favourite) uint64 {
 	held := uint64(len(favourites))
 	for _, one := range favourites {
@@ -160,8 +142,7 @@ func hashFavourites(favourites []core.Favourite) uint64 {
 	return held
 }
 
-// hashRecent hashes the recently opened schemas. The order is the purpose of the list, so the
-// hash uses the order.
+// hashRecent hashes recent schema names in list order.
 func hashRecent(recent []core.RecentSchema) uint64 {
 	held := uint64(len(recent))
 	for _, one := range recent {

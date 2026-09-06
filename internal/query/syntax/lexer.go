@@ -1,14 +1,9 @@
-// Package syntax splits the text of a statement into tokens, names the keywords, and finds
-// where each one stands. It is the layer every other reader of a statement is built on, and
-// it reaches no server.
+// Package syntax tokenizes statements and finds keywords without a server connection.
 package syntax
 
 import "strings"
 
-// SyntaxFlavour says where one server reads a buffer differently from another.
-// MySQL starts a line comment with `#` and reads a backslash inside a string as an
-// escape. Every other server reads `#` as an operator and a backslash as a plain
-// character.
+// SyntaxFlavour is the lexer variant. MySQL mode supports # comments and backslash escapes in ordinary strings.
 type SyntaxFlavour string
 
 // The two ways a buffer is scanned.
@@ -62,7 +57,7 @@ func init() {
 	}
 }
 
-// IsKeyword is true for a word the server reads as SQL, not as a name.
+// IsKeyword is true for words in the lexer keyword or type lists.
 func IsKeyword(word string) bool {
 	lowered := strings.ToLower(word)
 	return keywords[lowered] || types[lowered]
@@ -71,8 +66,7 @@ func IsKeyword(word string) bool {
 // operatorCharacters are the single marks the scanner reads as an operator.
 const operatorCharacters = `+-*/<>=~!@#%^&|?:,;.()[]`
 
-// identifierQuotes are read for every server. A backtick has no other meaning in
-// PostgreSQL.
+// isIdentifierQuote accepts double quotes and backticks in both lexer variants.
 func isIdentifierQuote(character byte) bool {
 	return character == '"' || character == '`'
 }
@@ -105,14 +99,13 @@ func readWordEnd(sql string, start int) int {
 	return index
 }
 
-// run says where a part ends, and whether it was closed.
+// run is a token end offset and termination state.
 type run struct {
 	end        int
 	terminated bool
 }
 
-// readQuotedEnd reads to the closing mark. A doubled quote means the quote itself.
-// A backslash escapes only where the flavour says it does.
+// readQuotedEnd scans doubled quotes and optional backslash escapes until the closing quote.
 func readQuotedEnd(sql string, start int, quote byte, escapes bool) run {
 	index := start + 1
 	for index < len(sql) {
@@ -252,11 +245,7 @@ func scanBlockComment(sql string, index int) (Token, bool) {
 	return buildRunToken(TokenComment, index, readBlockCommentEnd(sql, index)), true
 }
 
-// scanMysqlBlockComment reads a MySQL block comment. `/*!` opens an executable comment,
-// which the server runs, so its text is scanned as code and only the characters that open
-// it are read as an operator. MariaDB runs `/*M!` the same way, and only MariaDB does, so
-// a buffer read as a plain comment there would hide a whole statement from every check
-// this client makes. Every other block comment is a comment.
+// scanMysqlBlockComment scans MySQL /*! and MariaDB /*M! executable comment bodies as code. Other block comments remain comments.
 func scanMysqlBlockComment(sql string, index int) (Token, bool) {
 	if sql[index] != '/' || at(sql, index+1) != '*' {
 		return Token{}, false
@@ -285,7 +274,7 @@ func scanEscapingString(sql string, index int) (Token, bool) {
 	return buildRunToken(TokenString, index, readQuotedEnd(sql, index, '\'', true)), true
 }
 
-// scanEscapedString reads `E'…'`, the only string where the server reads backslashes.
+// scanEscapedString scans PostgreSQL E-prefixed strings with backslash escapes.
 func scanEscapedString(sql string, index int) (Token, bool) {
 	character := sql[index]
 	if character != 'E' && character != 'e' {
@@ -356,8 +345,7 @@ func scanOperator(sql string, index int) (Token, bool) {
 	return Token{Kind: TokenOperator, Start: index, End: index + 1}, true
 }
 
-// standardScanners are tried in order, so the first scanner that reads the
-// character owns it.
+// standardScanners is the ordered scanner list. The first match consumes the token.
 var standardScanners = []scanner{
 	scanLineComment, scanBlockComment, scanString, scanEscapedString, scanQuotedName,
 	scanDollarString, scanParameter, scanNumber, scanWord, scanOperator,
@@ -375,8 +363,7 @@ func resolveScanners(flavour SyntaxFlavour) []scanner {
 	return standardScanners
 }
 
-// Tokenize scans the buffer. It is a scanner, not a parser: the colouring needs
-// the kind of each part, not the structure.
+// Tokenize scans token kinds and byte ranges without parsing statement structure.
 func Tokenize(sql string, flavour SyntaxFlavour) []Token {
 	scanners := resolveScanners(flavour)
 	tokens := make([]Token, 0, len(sql)/4+1)

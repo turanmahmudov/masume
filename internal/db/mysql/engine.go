@@ -21,8 +21,7 @@ var Dialect = &query.Dialect{
 	BuildPlaceholder: func(int) string { return "?" },
 	CountExpression:  "count(*)",
 	RowLockClause:    " for update",
-	// A backslash starts an escape in a MySQL literal, so it is doubled too. Only a
-	// literal rendered for a reader passes through here, never a value a run binds.
+	// MySQL literals escape backslashes and quotes. Executed values use bound parameters.
 	QuoteTextLiteral: func(text string) string {
 		return "'" + strings.ReplaceAll(strings.ReplaceAll(text, `\`, `\\`), "'", "''") + "'"
 	},
@@ -55,8 +54,7 @@ var Support = db.EngineSupport{
 	Compose:    db.NewSQLComposer(Dialect),
 }
 
-// BuildSupport joins the facts of a server that speaks the MySQL protocol to this
-// dialect and language, so each of those engines names only what it differs in.
+// BuildSupport combines engine metadata with the MySQL dialect and language.
 func BuildSupport(engine core.Engine) db.EngineSupport {
 	return db.EngineSupport{
 		EngineInfo: core.ResolveEngineInfo(engine),

@@ -8,8 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// describeFailure writes a failure of the server as the message the server wrote, without
-// the wrapper the driver puts around it.
+// describeFailure returns the server message without the driver prefix.
 func describeFailure(err error) string {
 	var reported *pgconn.PgError
 	if errors.As(err, &reported) && reported.Message != "" {
@@ -29,8 +28,7 @@ func isUnfinishedStatement(message string) bool {
 	return message == "syntax error at end of input"
 }
 
-// ReadStatementProblem returns the problem the server reported for a Describe, and
-// nothing where the fault is the server's own.
+// ReadStatementProblem returns statement errors from Describe and excludes server faults.
 func ReadStatementProblem(code, message string, position int) (db.StatementProblem, bool) {
 	if len(code) != 5 || serverFaultClasses[code[:2]] {
 		return db.StatementProblem{}, false

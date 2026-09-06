@@ -12,8 +12,7 @@ import (
 // sqlitePlanHeader is the header the command line writes over a plan of several steps.
 const sqlitePlanHeader = "QUERY PLAN"
 
-// buildSqlitePlan builds the plan from the rows of EXPLAIN QUERY PLAN, each of which
-// names its parent. SQLite measures no step, so a node has no number.
+// buildSqlitePlan builds parent-child nodes from EXPLAIN QUERY PLAN rows. SQLite provides no step timings.
 func buildSqlitePlan(rows [][]any, measurable bool) db.QueryPlan {
 	labels := map[int64]string{}
 	parents := map[int64]int64{}

@@ -14,16 +14,15 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// Every operation a model can run on a connection. Only the last one writes.
+// Database tools for models.
 
-// The limits of a listing. A pattern reduces a long list, not a higher limit.
+// Default listing limits.
 const (
 	maxRelationshipsListed = 300
 	maxTablesListed        = 200
 )
 
-// buildNamePattern parses a pattern from a caller: the text at any position in the name,
-// with `*` for any group of characters. The comparison ignores the case.
+// buildNamePattern builds a case-insensitive substring pattern with * wildcards.
 func buildNamePattern(written string) (*regexp.Regexp, error) {
 	escaped := regexp.QuoteMeta(written)
 	// The star is the only part of the pattern that is not literal.
@@ -51,8 +50,7 @@ func listSchemaNames(tables []db.TableRef) []string {
 	return names
 }
 
-// resolveTableInput returns the table for a name from the model. The second value is the
-// error message if there is no such table.
+// resolveTableInput resolves a table name or returns an error response.
 func resolveTableInput(deps ToolDeps, table, database string) (db.TableRef, map[string]any) {
 	source := statement.SelectSource{Name: table}
 	if database != "" {
@@ -71,7 +69,7 @@ func resolveTableInput(deps ToolDeps, table, database string) (db.TableRef, map[
 		return db.TableRef{}, map[string]any{
 			"error": `no table named "` + table + `" in "` +
 				resolveDatabase(deps, source.Schema) + `"`,
-			"hint": "call list_tables first to see what is actually there",
+			"hint": "call list_tables to check available tables",
 		}
 	}
 	return found, nil
@@ -85,13 +83,12 @@ var tableInputFields = []field{
 	},
 	{
 		name: "database", kind: kindString,
-		description: "The database the table is in, if not the connected one " +
-			"and not already in `table`.",
+		description: "The table database or schema, if different from the connection default " +
+			"and absent from `table`.",
 	},
 }
 
-// defineTableReadTool builds a tool that returns one property of one table. The read
-// function is the only difference between them.
+// defineTableReadTool builds a table metadata tool.
 func defineTableReadTool(
 	name, description string,
 	readDetail func(
@@ -125,24 +122,24 @@ func defineTableReadTool(
 // refuseInput returns the error of a call as a text for the model.
 func refuseInput(problem string) map[string]any {
 	return map[string]any{
-		"error": problem, "hint": "read the schema of this tool and call it again",
+		"error": problem, "hint": "check the tool input schema and correct the arguments",
 	}
 }
 
 var listTablesFields = []field{
 	{
 		name: "database", kind: kindString,
-		description: "The database to list. Defaults to the connected database.",
+		description: "The database or schema to list. Defaults to the connection default.",
 	},
 	{
 		name: "pattern", kind: kindString,
-		description: "Only the tables whose name matches: the text anywhere in the name, " +
-			"with * for any run of characters. Case is not read. \"order\" finds " +
+		description: "A case-insensitive substring pattern, " +
+			"with * for any sequence of characters. \"order\" matches " +
 			"order_item, and \"*_log\" finds audit_log.",
 	},
 	{
 		name: "limit", kind: kindInteger, positive: true,
-		description: "The most to answer with. 200 by default.",
+		description: "Maximum tables to return. Default: 200.",
 	},
 }
 
@@ -180,7 +177,7 @@ var listTables = ToolDefinition{
 		if hasPattern {
 			matcher, err := buildNamePattern(pattern)
 			if err != nil {
-				return refuseInput(`the pattern "` + pattern + `" cannot be read`)
+				return refuseInput(`invalid pattern: "` + pattern + `"`)
 			}
 			matching = []db.TableRef{}
 			for _, table := range inDatabase {
@@ -191,7 +188,7 @@ var listTables = ToolDefinition{
 			if len(matching) == 0 {
 				return map[string]any{
 					"error": `no table in "` + schema + `" matches "` + pattern + `"`,
-					"hint":  "list without a pattern to see what is there",
+					"hint":  "omit the pattern to list available tables",
 				}
 			}
 		}
@@ -208,8 +205,7 @@ var listTables = ToolDefinition{
 		described := make([]map[string]any, 0, len(listed))
 		for _, table := range listed {
 			held := map[string]any{"name": table.Name, "kind": string(table.Kind)}
-			// Only if the server has an estimate. Otherwise the field is omitted and
-			// not sent as zero.
+			// Omit unavailable or zero estimates.
 			if table.EstimatedRows > 0 {
 				held["estimatedRows"] = table.EstimatedRows
 			}
@@ -218,15 +214,14 @@ var listTables = ToolDefinition{
 		answer := map[string]any{"database": schema, "tables": described}
 		if len(matching) > len(listed) {
 			answer["truncatedBy"] = len(matching) - len(listed)
-			answer["hint"] = "pass a pattern to narrow this, rather than raising the limit"
+			answer["hint"] = "use a more specific pattern instead of increasing the limit"
 		}
 		return answer
 	},
 }
 
 func describeColumnForModel(column db.ColumnDetail) map[string]any {
-	// A column without a default is written as null and not as an empty text, because an
-	// empty text is a valid default.
+	// A missing default is null. An empty string is a valid default.
 	var defaultValue any
 	if column.HasDefault {
 		defaultValue = column.DefaultValue
@@ -238,8 +233,7 @@ func describeColumnForModel(column db.ColumnDetail) map[string]any {
 		"primaryKey": column.IsPrimaryKey,
 		"default":    defaultValue,
 	}
-	// The values of an enum column. Without them the model has to read them from the
-	// server before it can write `where status = 'shipped'`.
+	// Include allowed enum values.
 	if len(column.Choices) > 0 {
 		described["choices"] = column.Choices
 	}
@@ -254,8 +248,7 @@ func describeForeignKeyForModel(key query.ForeignKey) map[string]any {
 	}
 }
 
-// The server is asked every time, and its answer also goes to the tree. A cached column
-// list from before an ALTER is worse than one more request.
+// Refresh table metadata from the server on each call.
 var describeTable = defineTableReadTool(
 	"describe_table",
 	"Get the columns, types, and foreign keys of one table, in the connected database or "+
@@ -325,9 +318,9 @@ var listConstraints = defineTableReadTool(
 
 var getTableDDL = defineTableReadTool(
 	"get_table_ddl",
-	"Get the CREATE TABLE statement for one table, exactly as the server would write it: "+
-		"every column, key, and constraint together. Useful for a full picture in one read, "+
-		"instead of describe_table plus list_constraints.",
+	"Get a CREATE TABLE statement from the table metadata available through this connection. "+
+		"Call this for the table definition in one response "+
+		"instead of separate describe_table and list_constraints calls.",
 	func(ctx context.Context, deps ToolDeps, table db.TableRef) (map[string]any, error) {
 		lines, err := deps.Session.BuildTableDDL(ctx, table)
 		if err != nil {
@@ -357,7 +350,7 @@ func touchesTable(relationship db.Relationship, table db.TableRef) bool {
 var listRelationshipsFields = []field{
 	{
 		name: "table", kind: kindString,
-		description: "Limit to the relationships that touch this table, unqualified or " +
+		description: "Limit to foreign keys from or to this table, unqualified or " +
 			"database.table.",
 	},
 	{
@@ -368,9 +361,9 @@ var listRelationshipsFields = []field{
 
 var listRelationships = ToolDefinition{
 	Name: "list_relationships",
-	Description: "List the foreign keys of the connected database, both directions. Pass a " +
-		"table to see only the relationships that touch it. Call this to find how to join " +
-		"two tables, or what references a table before changing it.",
+	Description: "List foreign keys in the connected database. Pass a " +
+		"table to list foreign keys from or to that table. Call this to find joins " +
+		"or check references before changing a table.",
 	InputSchema: buildSchema(listRelationshipsFields),
 	Call: func(ctx context.Context, deps ToolDeps, input map[string]any) any {
 		read, problem := readInput(listRelationshipsFields, input)
@@ -419,8 +412,7 @@ var listRelationships = ToolDefinition{
 }
 
 func describePlanRowForModel(row result.PlanRow) map[string]any {
-	// A count the server did not measure or estimate is written as null, not as zero and
-	// not omitted.
+	// Unavailable counts and times are null.
 	var estimatedRows, actualRows, selfMs any
 	if row.Node.HasEstimatedRows {
 		estimatedRows = row.Node.EstimatedRows
@@ -451,18 +443,17 @@ var explainQueryFields = []field{
 	},
 	{
 		name: "analyze", kind: kindBoolean,
-		description: "Run the statement to measure it for real, instead of only " +
-			"estimating. Only honoured for a statement that only reads; a write is always " +
-			"estimated, never run, whatever this says.",
+		description: "Request execution measurements instead of estimates. " +
+			"Only statements classified as read-only are eligible. " +
+			"Other statements receive estimates without execution, regardless of this value.",
 	},
 }
 
 var explainQuery = ToolDefinition{
 	Name: "explain_query",
-	Description: "Get the query plan for a statement: the order tables are read in, which " +
-		"indexes are used, and where the row count or the time goes. Call this to check a " +
-		"query for a missing index, a bad join order, or a wildly wrong estimate, before " +
-		"proposing it or when asked to make one faster.",
+	Description: "Get a query plan with table scan order, indexes, row counts, and execution times when available. " +
+		"Call this to check for missing indexes, inefficient joins, or inaccurate estimates " +
+		"before proposing a query or when asked to improve query performance.",
 	InputSchema: buildSchema(explainQueryFields),
 	Call: func(ctx context.Context, deps ToolDeps, input map[string]any) any {
 		read, problem := readInput(explainQueryFields, input)
@@ -472,8 +463,7 @@ var explainQuery = ToolDefinition{
 		sql, _ := readText(read, "sql")
 		askedToAnalyze, _ := readFlag(read, "analyze")
 
-		// An unsupported operation is reported before the user is asked about a
-		// statement that would never be sent.
+		// Check plan support before requesting permission.
 		if !deps.Session.Capabilities().PlansStatement {
 			return map[string]any{
 				"error": db.DescribeError(db.NewUnsupportedError("plan a statement")),
@@ -506,8 +496,8 @@ var explainQuery = ToolDefinition{
 			"nodes":    nodes,
 		}
 		if askedToAnalyze && !canAnalyze {
-			answer["note"] = "asked to analyze, but this statement writes, so only the " +
-				"estimate is shown; nothing ran"
+			answer["note"] = "analysis was requested, but this statement is not classified as read-only; " +
+				"the plan contains estimates only, without statement execution"
 		}
 		return answer
 	},
@@ -522,9 +512,9 @@ var validateQueryFields = []field{
 
 var validateQuery = ToolDefinition{
 	Name: "validate_query",
-	Description: "Check whether a statement parses and its names resolve, without running " +
-		"it: no rows come back either way. Call this on a query before presenting it, to " +
-		"catch a wrong column or a syntax mistake yourself.",
+	Description: "Check statement syntax and name resolution without execution. " +
+		"No result rows are returned. Call this before presenting a query to check " +
+		"for invalid column names and syntax errors.",
 	InputSchema: buildSchema(validateQueryFields),
 	Call: func(ctx context.Context, deps ToolDeps, input map[string]any) any {
 		read, problem := readInput(validateQueryFields, input)
@@ -536,7 +526,7 @@ var validateQuery = ToolDefinition{
 		if deps.Session.ReadTransactionState() != db.TransactionNone {
 			return map[string]any{
 				"checked": false,
-				"reason":  "a transaction is open; validation only runs outside one",
+				"reason":  "validation requires no active transaction",
 			}
 		}
 		found, faulty := deps.Session.CheckStatement(ctx, sql)
@@ -554,8 +544,7 @@ var validateQuery = ToolDefinition{
 	},
 }
 
-// Definitions returns every operation a caller can run on one connection. Only the last one
-// writes.
+// Definitions returns the database tools available to callers.
 func Definitions() []ToolDefinition {
 	return []ToolDefinition{
 		listTables, describeTable, listIndexes, listConstraints, getTableDDL,

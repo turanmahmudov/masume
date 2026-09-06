@@ -18,9 +18,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
-// One question of the chat, asked and answered. The run happens in a goroutine, and reports
-// what arrives through a channel the screen reads one event at a time, because the state of the
-// client belongs to the one goroutine that draws it.
+// Chat runs in a separate goroutine and sends events to the UI through a channel.
 
 // chatEventsMsg is everything a run reported since the screen last read it.
 type chatEventsMsg struct {
@@ -45,10 +43,7 @@ type chatClosedMsg struct {
 	Run          int
 }
 
-// waitForChatEvents returns everything the run has to report. It waits for the first thing
-// and then takes what is already waiting, because a reply arrives a few characters at a time
-// and a frame for each of them would leave the screen no time to draw anything else, so the
-// wheel of the wait would stop turning.
+// waitForChatEvents waits for one event, then collects queued events into a batch.
 func waitForChatEvents(id, run int, events chan app.ChatEvent) tea.Cmd {
 	return func() tea.Msg {
 		first, open := <-events
@@ -172,6 +167,7 @@ func (model *Model) buildChatToolDeps(
 	connection *app.Connection, run int, events chan app.ChatEvent,
 ) agent.ToolDeps {
 	session := connection.Session
+	autocommit := connection.Autocommit
 	tables := append([]db.TableRef{}, connection.Catalog.Tables...)
 	profileName := connection.Profile().Name
 	log := model.log
@@ -210,6 +206,9 @@ func (model *Model) buildChatToolDeps(
 			RunStatement: func(
 				ctx context.Context, sql string, rowLimit int,
 			) (agent.StatementAnswer, error) {
+				if err := beginManualTransaction(ctx, session, autocommit, sql); err != nil {
+					return agent.StatementAnswer{}, err
+				}
 				return runChatWrite(ctx, session, held, func(
 					running context.Context,
 				) (db.QueryResult, error) {
@@ -273,7 +272,7 @@ type chatQuestion struct {
 }
 
 // refusedByUser is what the model is told where the user said no.
-const refusedByUser = "the user did not allow this statement to run; nothing ran"
+const refusedByUser = "the user did not approve execution; the requested statements did not run"
 
 // askChatToRun measures the write, asks the user whether it may run, and waits for the
 // answer. The panel asks it, not a card: only one overlay is drawn at a time, and a card
@@ -334,8 +333,7 @@ func measureChatWrite(
 	}, true
 }
 
-// buildChatWritePlan measures the write the chat asked to run, so the panel says what it
-// lands on before the user answers.
+// buildChatWritePlan checks the rows affected by the proposed write.
 func buildChatWritePlan(
 	ctx context.Context, question chatQuestion,
 	risk statement.WriteRisk, statements []string,

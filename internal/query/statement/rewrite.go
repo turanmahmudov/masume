@@ -27,8 +27,7 @@ type StatementParts struct {
 
 var splitKeywords = []string{"order by", "limit", "offset", "fetch"}
 
-// SplitStatement splits the statement around its ORDER BY. An ORDER BY goes before
-// the trailing LIMIT, OFFSET or FETCH, never after.
+// SplitStatement separates ORDER BY from trailing LIMIT, OFFSET, or FETCH clauses.
 func SplitStatement(sql string, flavour syntax.SyntaxFlavour) StatementParts {
 	withoutTerminator := strings.TrimRight(sql, " \t\r\n")
 	terminator := ""
@@ -81,15 +80,14 @@ func joinParts(parts []string, terminator string) string {
 	return strings.Join(kept, "\n") + terminator
 }
 
-// The alias of each wrapper, so a column of the statement never hides behind one.
+// Subquery aliases for generated wrappers.
 const (
 	filterAlias = "masume_filter"
 	pageAlias   = "masume_page"
 	countAlias  = "masume_count"
 )
 
-// wrapStatement puts the statement inside a subquery. The closing bracket takes its
-// own line, because the statement can end in a line comment.
+// wrapStatement builds a subquery. A newline before the closing parenthesis terminates any trailing line comment.
 func wrapStatement(inner, alias string) string {
 	return "select * from (\n" + inner + "\n) as " + alias
 }
@@ -102,8 +100,7 @@ func buildSortKeys(sort []core.SortState, dialect *query.Dialect) string {
 	return strings.Join(keys, ", ")
 }
 
-// ApplyOrderBy writes the sort keys in the order they were added, which is the
-// order they break ties.
+// ApplyOrderBy replaces the top-level sort with keys in the supplied order.
 func ApplyOrderBy(sql string, sort []core.SortState, dialect *query.Dialect) string {
 	parts := SplitStatement(sql, dialect.Syntax)
 	if len(sort) == 0 {
@@ -114,8 +111,7 @@ func ApplyOrderBy(sql string, sort []core.SortState, dialect *query.Dialect) str
 		parts.Terminator)
 }
 
-// FindOrderByColumns returns the sort keys the statement writes, or nothing if it
-// orders by anything more than plain columns.
+// FindOrderByColumns returns simple column sort keys, or nil for unsupported expressions.
 func FindOrderByColumns(sql string, flavour syntax.SyntaxFlavour) []core.SortState {
 	parts := SplitStatement(sql, flavour)
 	if !parts.HasOrderBy {
@@ -148,8 +144,7 @@ func FindOrderByColumns(sql string, flavour syntax.SyntaxFlavour) []core.SortSta
 		if _, present := syntax.TokenAt(tokens, index); !present {
 			break
 		}
-		// Anything but a comma between two keys is an expression this cannot read,
-		// such as `order by lower(name)` or a NULLS clause.
+		// Reject expressions and NULLS clauses.
 		if !syntax.IsOperator(tokens, index, ",") {
 			return nil
 		}
@@ -158,8 +153,7 @@ func FindOrderByColumns(sql string, flavour syntax.SyntaxFlavour) []core.SortSta
 	return keys
 }
 
-// BuildRelationSQL writes the read of one relation. No LIMIT is written, because the
-// page window is applied outside the statement.
+// BuildRelationSQL builds a table query without paging.
 func BuildRelationSQL(
 	table query.QualifiedName, predicate *build.Predicate, sort []core.SortState, dialect *query.Dialect,
 ) EffectiveStatement {
@@ -177,10 +171,7 @@ func BuildRelationSQL(
 	return statement
 }
 
-// ApplyWhere lays a predicate over a statement. A filter inside the LIMIT would
-// search only the rows already fetched, so the LIMIT is applied again outside the
-// wrapper. The ORDER BY stays inside, because it can name a column the projection
-// does not return.
+// ApplyWhere wraps the query with a filter and moves trailing limit clauses outside. ORDER BY remains inside the subquery.
 func ApplyWhere(sql, predicate string, flavour syntax.SyntaxFlavour) string {
 	trimmed := strings.TrimSpace(predicate)
 	parts := SplitStatement(sql, flavour)
@@ -203,9 +194,7 @@ func joinInner(parts ...string) string {
 	return strings.Join(kept, "\n")
 }
 
-// BuildEffectiveSQL wraps the statement of the user in the sort and filter of the
-// grid. It is wrapped, not merged, because its own WHERE, GROUP BY or LIMIT would
-// break.
+// BuildEffectiveSQL applies the grid filter and sort to a statement.
 func BuildEffectiveSQL(
 	sql string, predicate *build.Predicate, sort []core.SortState, dialect *query.Dialect,
 ) EffectiveStatement {
@@ -224,8 +213,7 @@ func BuildEffectiveSQL(
 	return statement
 }
 
-// BuildCountSQL drops the ORDER BY and keeps a trailing LIMIT, so the count matches
-// the request.
+// BuildCountSQL wraps a query with a count, excluding ORDER BY and preserving trailing limit clauses.
 func BuildCountSQL(sql string, dialect *query.Dialect) string {
 	parts := SplitStatement(sql, dialect.Syntax)
 	if parts.Body == "" {
@@ -236,8 +224,7 @@ func BuildCountSQL(sql string, dialect *query.Dialect) string {
 		dialect.CountExpression, inner, countAlias, parts.Terminator)
 }
 
-// ApplyPaging lays the page window over a statement. A statement that already ends
-// in LIMIT or OFFSET goes inside a subquery.
+// ApplyPaging adds a page limit and offset, using a subquery when trailing limit clauses exist.
 func ApplyPaging(sql string, limit, offset int, flavour syntax.SyntaxFlavour) string {
 	parts := SplitStatement(sql, flavour)
 	if parts.Body == "" {
@@ -251,13 +238,12 @@ func ApplyPaging(sql string, limit, offset int, flavour syntax.SyntaxFlavour) st
 	if parts.Tail == "" {
 		return joinParts([]string{parts.Body, parts.OrderBy, window}, parts.Terminator)
 	}
-	// The ORDER BY stays inside, because it can name a column the projection does
-	// not return.
+	// ORDER BY can reference columns absent from the projection.
 	inner := joinInner(parts.Body, parts.OrderBy, parts.Tail)
 	return joinParts([]string{wrapStatement(inner, pageAlias), window}, parts.Terminator)
 }
 
-// DescribeRewrite writes the sort and filter laid over the statement.
+// DescribeRewrite summarizes the grid sort and filter.
 func DescribeRewrite(sort []core.SortState, filter string) string {
 	parts := []string{}
 	if len(sort) > 0 {

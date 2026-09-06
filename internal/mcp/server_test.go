@@ -56,7 +56,7 @@ func TestAnswerEveryMethod(t *testing.T) {
 		{`{"jsonrpc":"2.0","method":"notifications/initialized"}`, ""},
 		{`{"jsonrpc":"2.0","id":2}`,
 			`{"jsonrpc":"2.0","id":2,"error":{"code":-32600,` +
-				`"message":"a message needs a method"}}`},
+				`"message":"a request requires a method"}}`},
 		{`[1,2]`, `{"jsonrpc":"2.0","id":null,"error":{"code":-32600,` +
 			`"message":"a message must be a JSON object"}}`},
 		{`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"nope"}}`,
@@ -90,7 +90,7 @@ func TestInitializeReportsTheVersionAsked(t *testing.T) {
 	if !responder.deps.Asker.CanAsk() {
 		t.Error("a client that says it can ask its user was not remembered")
 	}
-	if len(*written) != 1 || (*written)[0] != "> initialize probe: can ask its user" {
+	if len(*written) != 1 || (*written)[0] != "> initialize probe: confirmation dialogs are available" {
 		t.Errorf("the log holds %v", *written)
 	}
 
@@ -336,7 +336,7 @@ func TestInitializeLogsAClientThatCannotBeAsked(t *testing.T) {
 	if responder.deps.Asker.CanAsk() {
 		t.Error("a client that reported no elicitation was remembered as one that asks")
 	}
-	if len(*written) != 1 || !strings.Contains((*written)[0], "cannot ask its user") {
+	if len(*written) != 1 || !strings.Contains((*written)[0], "confirmation dialogs are unavailable") {
 		t.Errorf("the log holds %v", *written)
 	}
 }

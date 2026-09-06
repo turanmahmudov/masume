@@ -2,8 +2,7 @@ package core
 
 import "strings"
 
-// SSLMode is an sslmode value as libpq defines it. An empty value means the profile
-// does not set one, and each engine has its own default.
+// SSLMode is a libpq-compatible SSL setting. An empty value uses the engine default.
 type SSLMode string
 
 // The modes libpq accepts, in its own order, from the least to the most secure.
@@ -20,9 +19,7 @@ const (
 // SSLModes lists the modes a profile can use.
 var SSLModes = []SSLMode{SSLDisable, SSLAllow, SSLPrefer, SSLRequire, SSLVerifyCa, SSLVerifyFull}
 
-// FindSSLMode parses the text as a mode. An unknown name gives an error and is not
-// replaced by a weaker mode, because a profile that requests encryption must not
-// connect without it after a spelling error.
+// FindSSLMode parses an SSL mode and returns false for an unknown name.
 func FindSSLMode(written string) (SSLMode, bool) {
 	return FindAllowed(SSLModes, strings.ToLower(strings.TrimSpace(written)))
 }

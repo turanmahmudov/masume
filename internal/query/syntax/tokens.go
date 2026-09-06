@@ -15,8 +15,7 @@ func IsWordKind(kind TokenKind) bool {
 	return kind == TokenKeyword || kind == TokenType || kind == TokenIdentifier
 }
 
-// ReadCodeTokens scans the statement and drops the comments. A string and a quoted
-// name keep their kind, so neither is read as a keyword.
+// ReadCodeTokens removes comments and lowercases token text, preserving token kinds.
 func ReadCodeTokens(sql string, flavour SyntaxFlavour) []CodeToken {
 	scanned := Tokenize(sql, flavour)
 	tokens := make([]CodeToken, 0, len(scanned))
@@ -58,14 +57,12 @@ func IsOperatorAnywhere(tokens []CodeToken, text string) bool {
 	return false
 }
 
-// isWordKeyword is true for a keyword of letters, which matches words. Anything
-// else, such as `;`, matches one operator.
+// isWordKeyword detects keywords containing letters.
 func isWordKeyword(keyword string) bool {
 	return strings.ContainsAny(keyword, "abcdefghijklmnopqrstuvwxyz")
 }
 
-// matchesKeywordAt is true where the keyword stands at that index. A keyword of
-// several words matches several tokens, whatever the spacing.
+// matchesKeywordAt matches an operator or consecutive keyword tokens.
 func matchesKeywordAt(tokens []CodeToken, index int, keyword string) bool {
 	if !isWordKeyword(keyword) {
 		return IsOperator(tokens, index, keyword)
@@ -140,14 +137,12 @@ func FindKeywordsIn(tokens []CodeToken, keywords []string) []KeywordHit {
 	return collectKeywordHits(tokens, keywords, false)
 }
 
-// FindKeywordsAnywhere returns where the keywords appear at any bracket depth, so
-// a subquery counts too.
+// FindKeywordsAnywhere finds keywords at any parenthesis depth.
 func FindKeywordsAnywhere(tokens []CodeToken, keywords []string) []KeywordHit {
 	return collectKeywordHits(tokens, keywords, true)
 }
 
-// HoldsCode is true where the text holds something to run. A text of comments and blanks
-// alone holds no statement.
+// HoldsCode is true when the input has a non-comment token.
 func HoldsCode(sql string, flavour SyntaxFlavour) bool {
 	for _, token := range Tokenize(sql, flavour) {
 		if token.Kind != TokenComment {
@@ -157,12 +152,12 @@ func HoldsCode(sql string, flavour SyntaxFlavour) bool {
 	return false
 }
 
-// FindTopLevelKeywords reads the statement, for a caller with only one question.
+// FindTopLevelKeywords finds keywords outside parentheses.
 func FindTopLevelKeywords(sql string, keywords []string, flavour SyntaxFlavour) []KeywordHit {
 	return FindKeywordsIn(ReadCodeTokens(sql, flavour), keywords)
 }
 
-// ReadOpeningWord returns the first word of the statement, which decides its kind.
+// ReadOpeningWord returns the first token text when the token is a word.
 func ReadOpeningWord(tokens []CodeToken) string {
 	first, present := TokenAt(tokens, 0)
 	if !present || !IsWordKind(first.Kind) {
@@ -187,14 +182,12 @@ func UnquoteIdentifier(name string) string {
 	return strings.ReplaceAll(inner, string(quote)+string(quote), string(quote))
 }
 
-// ReadCommandWord returns the first word of a statement, such as `select`, `update`
-// or `create`.
+// ReadCommandWord returns the opening statement keyword.
 func ReadCommandWord(sql string, flavour SyntaxFlavour) string {
 	return ReadOpeningWord(ReadCodeTokens(sql, flavour))
 }
 
-// SelectsIntoTarget is true for `select … into t`, which names a target instead of
-// returning rows. An `insert into` is read from its opening word instead.
+// SelectsIntoTarget detects a top-level INTO in a SELECT statement.
 func SelectsIntoTarget(tokens []CodeToken) bool {
 	if ReadOpeningWord(tokens) != "select" {
 		return false
@@ -218,15 +211,13 @@ func ReadIdentifier(sql string, tokens []CodeToken, index int) (string, bool) {
 	return "", false
 }
 
-// IsNameToken is true for a token that can be a name. A word the server reads as
-// SQL starts the next clause, so it is never a name.
+// IsNameToken is true for identifier and quoted identifier tokens.
 func IsNameToken(tokens []CodeToken, index int) bool {
 	token, present := TokenAt(tokens, index)
 	return present && (token.Kind == TokenIdentifier || token.Kind == TokenQuoted)
 }
 
-// SkipBracketGroup returns the token after a balanced `( … )` group, or the same
-// index if none starts here.
+// SkipBracketGroup skips a parenthesis group or leaves the index unchanged when no group starts there.
 func SkipBracketGroup(tokens []CodeToken, index int) int {
 	if !IsOperator(tokens, index, "(") {
 		return index

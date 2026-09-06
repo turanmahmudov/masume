@@ -1,21 +1,17 @@
-# masume config. This file was written on the first run.
+# masume configuration for the first run.
 #
-# Every setting below is shown at its default, so nothing here changes how masume behaves.
-# Edit a line to change one. `config.example.toml` in the repository lists the rest,
-# including the key presets and the colour names, and docs/configuration.md explains them.
+# Active settings use the defaults. Commented profiles are examples.
+# `config.example.toml` lists all settings. docs/configuration.md describes the settings.
 #
-# masume rewrites only the `[profile.…]` block it manages when a connection is added or
-# edited in the form, so every other line here is kept, comments included.
+# The connection form updates its profile block. Other blocks and their comments remain unchanged.
 #
-# Never write a shared or a production password into a file that is tracked in git. Use
-# `auth = "prompt"`, `password_command`, or `password_env` instead.
+# Passwords in config files are ignored. Password sources include prompts, the keyring, commands, environment variables, and secret stores.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Connections
 #
-# One profile is one connection, and the name after `profile.` is what the picker
-# lists. Uncomment a block and edit it, or press Ctrl+N then n and let the form
-# write it for you.
+# One profile is one connection. The name after `profile.` is the picker label.
+# Ctrl+N then n opens the new connection form.
 # ─────────────────────────────────────────────────────────────────────────────
 
 # [profile.shop]
@@ -23,26 +19,26 @@
 #                                     # timescale redshift neon supabase mariadb tidb
 #                                     # planetscale aurora-mysql
 # host                 = "127.0.0.1"
-# port                 = 5432         # the port of the engine where none is written
+# port                 = 5432         # the engine default if omitted
 # database             = "shop"       # the file, for sqlite
 # user                 = "you"
-# auth                 = "password"   # password command prompt
+# auth                 = "password"   # password command prompt keyring secret
 # password_env         = "PGPASSWORD" # read the password from the environment
-# password_command     = "pass db/shop"   # or from what this command writes
+# password_command     = "pass db/shop"   # the command that prints the password
 # env                  = "dev"        # dev test prod. prod colours the whole title bar
 # mode                 = "write"      # write read-only
 # confirm_writes       = "off"        # off delete write agent. unset: off on dev, delete on test, write on prod
 # write_plan           = "off"        # off count undo. measure a write before it runs
-# undo_rows            = 1000         # rows a plan reads to build an undo. 0 sets no limit
+# undo_rows            = 1000         # the maximum rows captured for an undo. 0 uses an internal ceiling of 1048576
 # sslmode              = "prefer"     # disable allow prefer require verify-ca verify-full
 # statement_timeout_ms = 0            # 0 leaves the timeout to the server
 # keepalive_s          = 30           # seconds between two checks. 0 sends no keepalive
-# page_size            = 200          # the rows one page of the grid reads
-# autocommit           = true         # false holds a transaction open by hand
+# page_size            = 200          # rows per page
+# autocommit           = true         # false begins a transaction on execution, until commit or rollback
 # mcp                  = "read-only"  # off read-only read-write full. Never above
 #                                     # `[mcp] access` below
-# description          = "what this connection is"
-# ai_instructions      = "what the model should know about this database"
+# description          = "connection description"
+# ai_instructions      = "database instructions for the model"
 
 # A file needs no host, no port and no user.
 #
@@ -55,20 +51,18 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 [ui]
-theme               = "ayu-dark"   # a theme masume ships, one of your own in the themes
-                                   # directory beside this file, or "system" to take the
-                                   # colours from the terminal and follow them
+theme               = "ayu-dark"   # a built-in theme, a theme in the adjacent themes directory, or "system" for terminal colours
 icons               = "plain"      # plain ascii
 hide_system_schemas = true         # false lists pg_catalog and the rest in the tree
 
-# A glyph for one kind of row in the tree, which a Nerd Font can fill. A glyph written
-# as "" turns that one off. `config.example.toml` lists every kind.
+# Each tree row kind accepts a custom glyph, including Nerd Font glyphs.
+# An empty glyph hides that icon. `config.example.toml` lists all kinds.
 #
 # [ui.icon_glyphs]
 # table = ""
 # view  = ""
 
-# Colours laid over the theme, without writing a theme file.
+# Colour overrides for the selected theme.
 #
 # [ui.colors]
 # accent = "#7aa2f7"
@@ -76,9 +70,8 @@ hide_system_schemas = true         # false lists pg_catalog and the rest in the 
 # ─────────────────────────────────────────────────────────────────────────────
 # Keys
 #
-# Every action has a chord in the default preset. A line you write replaces what
-# the preset bound; a line you leave out keeps it. `config.example.toml` names
-# every action, under the scope that handles it.
+# Custom bindings replace preset bindings. Omitted actions keep their preset bindings.
+# `config.example.toml` lists actions by scope.
 # ─────────────────────────────────────────────────────────────────────────────
 
 [keys]
@@ -88,21 +81,20 @@ preset = "default"
 # run-at-cursor = ["ctrl+r", "f5"]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# The model the chat asks
+# AI chat models
 #
-# The key is read from the environment, which keeps it out of this file.
+# The API key source is an environment variable.
 # ─────────────────────────────────────────────────────────────────────────────
 
 [ai]
-enabled              = true          # false removes every AI feature: no chat, no key,
-                                     # nothing about AI drawn or offered anywhere
+enabled              = true          # false disables the AI chat, its bindings, and its interface elements
 default_provider     = "anthropic"   # anthropic openai
-statement_timeout_ms = 30000         # how long a statement the model runs may take
+statement_timeout_ms = 30000         # execution time limit for one AI chat query, in milliseconds
 
 [ai.providers.anthropic]
 model        = "claude-opus-5"
 api_key_env  = "ANTHROPIC_API_KEY"
-# base_url_env = "ANTHROPIC_BASE_URL"   # point at a gateway rather than the provider
+# base_url_env = "ANTHROPIC_BASE_URL"   # the environment variable for a custom provider address
 
 [ai.providers.openai]
 model        = "gpt-5"
@@ -110,14 +102,13 @@ api_key_env  = "OPENAI_API_KEY"
 # base_url_env = "OPENAI_BASE_URL"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# What an agent reaches through `masume --mcp`
+# Agent access through `masume --mcp`
 #
-# `profiles` is empty, so no profile is served until you name one here. A profile
-# may lower itself with `mcp` above; none may raise itself past `access`.
+# An empty `profiles` list exposes no profiles. A profile `mcp` setting can reduce access but cannot exceed `access`.
 # ─────────────────────────────────────────────────────────────────────────────
 
 [mcp]
-profiles   = []            # name a profile to serve it, such as ["shop"]
+profiles   = []            # the exposed profiles, such as ["shop"]
 access     = "read-only"   # off read-only read-write full
-row_limit  = 500           # the rows one read returns
-timeout_ms = 30000         # how long one read may take
+row_limit  = 500           # maximum rows per query
+timeout_ms = 30000         # execution time limit for one query, in milliseconds

@@ -505,7 +505,7 @@ func TestRunReadsTheRowsItWasAskedFor(t *testing.T) {
 	if written != "id\n1\n2\n" {
 		t.Errorf("the run wrote %q, wanted the two rows it was asked for", written)
 	}
-	if !strings.Contains(reported, "asked for") {
+	if !strings.Contains(reported, "exceeds the requested limit") {
 		t.Errorf("the run said %q, wanted that the result is longer", reported)
 	}
 
@@ -575,7 +575,7 @@ func TestRunRefusesSeveralStatementsAsJSON(t *testing.T) {
 	if written != "" {
 		t.Errorf("the run wrote %q, wanted nothing", written)
 	}
-	if !strings.Contains(reported, "json holds one result") {
+	if !strings.Contains(reported, "json output supports one statement per run") {
 		t.Errorf("the run said %q, wanted why JSON takes one statement", reported)
 	}
 }

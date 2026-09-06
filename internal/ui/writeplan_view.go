@@ -10,7 +10,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
-// The card that says what a write does before it runs.
+// The write-plan dialog.
 
 const (
 	// writePlanLabelWidth is the column the values of the plan start in.
@@ -178,7 +178,7 @@ func (model *Model) buildWritePlanUndoLine(plan writeplan.Plan) writePlanLine {
 	}
 	row.trailer = paintText(theme.Muted, theme.Panel, "  "+
 		model.registry.FormatActionChords(cfg.ScopeGlobal, ActionUndoWrite)+
-		" undoes it after it ran")
+		" undoes this write after execution")
 	return row
 }
 

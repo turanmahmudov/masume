@@ -6,9 +6,7 @@ import (
 	"strings"
 )
 
-// The Responses protocol of OpenAI. It caches a repeated prefix automatically, without a mark
-// and without extra cost. It uses a key that groups the requests with a common prefix. The
-// key is stored here and not in the request, because no other protocol uses one.
+// The OpenAI Responses client sends a cache key to group requests with a common prefix.
 
 const openaiBaseURL = "https://api.openai.com/v1"
 
@@ -31,8 +29,7 @@ func (held *openaiModel) Describe() string {
 	return "openai/" + held.model
 }
 
-// The items of the input, in the form of this protocol. A turn is a role with parts. A call
-// and its result are separate items.
+// Responses input uses separate items for messages, tool calls, and tool results.
 type openaiPart struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
@@ -41,8 +38,7 @@ type openaiPart struct {
 type openaiItem struct {
 	Type string `json:"type,omitempty"`
 	Role string `json:"role,omitempty"`
-	// Content is the list of parts of a turn, or the plain text of the first turn of the
-	// request.
+	// Content is message parts or plain text for the developer message.
 	Content any `json:"content,omitempty"`
 	// A call the model requested, and the result of that call.
 	CallID    string `json:"call_id,omitempty"`
@@ -73,13 +69,11 @@ const (
 	openaiOutputText = "output_text"
 )
 
-// buildOpenaiInput converts the turns into the form of this protocol. The system prompt is a
-// separate turn, which this protocol calls the developer turn.
+// buildOpenaiInput builds Responses input with the system prompt in a developer message.
 func buildOpenaiInput(request Request) []openaiItem {
 	items := []openaiItem{}
 	if request.System != "" {
-		// The first turn of the request holds plain text. Every turn after it holds
-		// parts.
+		// The developer message uses plain text.
 		items = append(items, openaiItem{Role: "developer", Content: request.System})
 	}
 
@@ -183,7 +177,7 @@ func (held *openaiModel) Stream(
 	err = readServerEvents(body, func(held serverEvent) error {
 		event := openaiStreamEvent{}
 		if problem := readJSONInto(held.data, &event); problem != nil {
-			LogEvent("! openai wrote an event this build cannot read: " + problem.Error())
+			LogEvent("! cannot parse openai event: " + problem.Error())
 			return nil
 		}
 
@@ -213,8 +207,7 @@ func (held *openaiModel) Stream(
 			if event.Item == nil || event.Item.Type != "function_call" {
 				return nil
 			}
-			// This event holds the complete arguments, so the collected parts are only a
-			// fallback.
+			// Prefer complete event arguments over collected fragments.
 			arguments := event.Item.Arguments
 			if arguments == "" {
 				if open, held := building[event.Item.ID]; held {
@@ -256,8 +249,7 @@ func (held *openaiModel) Stream(
 	return answer, nil
 }
 
-// findOpenCall returns the call these arguments belong to. The event names its item. A stream
-// with one call at a time names no item.
+// findOpenCall resolves an event item or uses the only open call when the item is unavailable.
 func findOpenCall(building map[string]*openBlock, event openaiStreamEvent) *openBlock {
 	if event.Item != nil {
 		if open, held := building[event.Item.ID]; held {
@@ -287,8 +279,7 @@ func readOpenaiUsage(event openaiStreamEvent, kept Usage) Usage {
 	return kept
 }
 
-// readOpenaiStopReason converts the stop reason of this model into the form used by the
-// panel. This protocol reports no reason for a call, so a requested call is the reason.
+// readOpenaiStopReason maps response status and requested calls to a shared finish reason.
 func readOpenaiStopReason(event openaiStreamEvent, asked bool) string {
 	if event.Response == nil {
 		return FinishUnknown

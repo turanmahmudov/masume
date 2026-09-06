@@ -6,9 +6,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// The text sent to the model before the first question: its role, the tools it can call, and
-// the structure of the connection. The content of the editor goes with the question, because
-// it changes between questions and the provider caches the system prompt.
+// The system prompt contains the role, tools, and connection metadata. Each question includes the current editor text separately.
 
 // maxEditorSQLChars is the length at which the content of the editor is truncated.
 const maxEditorSQLChars = 4000
@@ -20,19 +18,17 @@ type EditorContext struct {
 	LastError string
 }
 
-// StatementLanguage is the statement language of the connected server, so the chat proposes
-// a statement the server accepts and not SQL for a server without SQL.
+// StatementLanguage is the connected server language and code block format.
 type StatementLanguage struct {
-	// Name is the name of the language, for example SQL.
+	// Name is the language, for example SQL.
 	Name string
 	// FenceTag is the tag of the fenced block that holds a proposed statement.
 	FenceTag string
-	// Example shows the form of one statement. It is empty for SQL.
+	// Example is a sample statement. It is empty for SQL.
 	Example string
 }
 
-// describeStatementLanguage returns the first lines of the prompt. They are the only lines
-// that are different between a server with SQL and a server with commands.
+// describeStatementLanguage builds the language-specific prompt instructions.
 func describeStatementLanguage(language StatementLanguage) []string {
 	name := language.Name
 	if name == "" {
@@ -47,7 +43,7 @@ func describeStatementLanguage(language StatementLanguage) []string {
 		"Answer questions about the connected database and, when asked for a query, write " +
 			"correct " + name + " for its server.",
 		"Put a proposed query in exactly one fenced code block, opened with ```" + tag +
-			", and nothing else in fences.",
+			". Do not use fences for other text.",
 	}
 	if language.Example != "" {
 		lines = append(lines, language.Example)
@@ -56,38 +52,33 @@ func describeStatementLanguage(language StatementLanguage) []string {
 }
 
 var systemPrompt = strings.Join([]string{
-	"No table or column is named below, only the connected database and the names of any " +
-		"others on the same server. Call list_tables to see what exists, in the connected " +
-		"database or another one named below, and call describe_table before writing a query " +
-		"against a table whose columns you have not already seen in this conversation.",
-	"list_relationships shows how tables join, list_indexes and list_constraints show what a " +
-		"table enforces, and get_table_ddl gives a whole table in one read. Reach for " +
-		"whichever answers the question, rather than describe_table alone every time.",
+	"The catalog summary below lists database and schema names, without tables or columns. " +
+		"Call list_tables to find tables in the default database or schema, or another listed database or schema. " +
+		"Before writing a query, call describe_table for each table whose columns are unknown in this conversation.",
+	"list_relationships returns foreign keys. list_indexes and list_constraints return indexes and constraints. " +
+		"get_table_ddl returns a table definition in one response. " +
+		"Choose the tool that answers the question; do not always use describe_table alone.",
 	"Call validate_query on a query you are about to present, when you are not already " +
 		"certain it is correct. It only checks the statement; it does not run it or return rows.",
-	"Call explain_query to check a query for a missing index, a bad join order, or a wrong " +
-		"estimate, before proposing it or when asked to make one faster. It only estimates by " +
-		"default; ask for analyze to measure a read for real, which does not apply to a write.",
-	"Call run_query only where the user asked for data, a count or a value, such as \"how " +
-		"many orders are unpaid\". A request to write, fix or explain a query is answered with " +
-		"the query in a fenced block and nothing run.",
+	"Call explain_query to check for missing indexes, inefficient joins, or inaccurate estimates before proposing or optimizing a query. " +
+		"The default is an estimated plan. Use analyze for execution measurements of eligible read-only statements, never writes.",
+	"Call run_query only when the user requests data, a count, or a value, such as \"how many orders are unpaid\". " +
+		"For requests to write, fix, or explain a query, return the query in a fenced block without execution.",
 	"The user is asked before a statement runs, and may say no. If they do, say so plainly " +
 		"and do not ask again unless they bring it up.",
-	"After a run, answer with the figures themselves. Never tell the user to look at a result " +
-		"they cannot see.",
+	"After execution, include the result values in the answer. Do not refer the user to results outside the chat.",
 	"Only name a table, column, or database that a tool call confirmed. Never invent one, and " +
 		"never present a guessed name as though it were confirmed.",
 	"Do not ask the user to run a catalog query for you; call the tools yourself.",
-	"If a tool call fails or a table still cannot be found afterward, say plainly that you " +
-		"cannot see it, rather than assuming a layout from another database.",
+	"If a tool fails or cannot find a table, state that the metadata is unavailable. " +
+		"Do not assume the schema matches another database.",
 	"The user may have a query already in the editor, sent with the question along with any " +
 		"error it last failed with. Take it as the subject of a question like \"why does this " +
 		"fail\" or \"optimize this\" unless they plainly mean something else.",
 	"Keep prose short.",
 }, "\n")
 
-// describeProfileInstructions returns the rules the user set for this connection, for
-// example a naming convention.
+// describeProfileInstructions returns the configured connection instructions.
 func describeProfileInstructions(instructions string) string {
 	trimmed := strings.TrimSpace(instructions)
 	if trimmed == "" {
@@ -105,12 +96,12 @@ func DescribeEditorContext(context EditorContext) string {
 	capped := trimmed
 	if len([]rune(capped)) > maxEditorSQLChars {
 		capped = string([]rune(capped)[:maxEditorSQLChars]) +
-			"\n... (cut here; ask to see the rest if it matters)"
+			"\n... (truncated; request the remaining text if needed)"
 	}
 
-	lines := []string{"The editor currently holds:", "```sql", capped, "```"}
+	lines := []string{"Current editor statement:", "```sql", capped, "```"}
 	if context.LastError != "" {
-		lines = append(lines, "", "It last failed with: "+context.LastError)
+		lines = append(lines, "", "Last execution error: "+context.LastError)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -122,12 +113,11 @@ type ChatPromptSource struct {
 	Language      StatementLanguage
 	DefaultSchema string
 	Tables        []db.TableRef
-	// Instructions holds the rules the user set for this connection.
+	// Instructions is the configured connection guidance.
 	Instructions string
 }
 
-// BuildChatSystemPrompt returns the same text for every question of one connection, so the
-// provider can cache it.
+// BuildChatSystemPrompt builds the system prompt from connection metadata and instructions.
 func BuildChatSystemPrompt(source ChatPromptSource) string {
 	schema := BuildSchemaContext(SchemaContextSource{
 		DialectName: source.DialectName, DefaultSchema: source.DefaultSchema,

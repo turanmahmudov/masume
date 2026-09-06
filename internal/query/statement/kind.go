@@ -4,7 +4,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// readStarts are the words a statement can start with and still only read.
+// readStarts is the set of opening keywords eligible for paging.
 var readStarts = map[string]bool{"select": true, "with": true, "table": true, "values": true}
 
 // IsPageable is true if the client can read the statement one page at a time.
@@ -17,19 +17,15 @@ func IsPageable(sql string, flavour syntax.SyntaxFlavour) bool {
 	return len(syntax.FindKeywordsAnywhere(tokens, WriteKeywords)) == 0
 }
 
-// rowLimitKeywords are the clauses that bound the rows a statement returns. An OFFSET
-// alone moves the start of a result and does not bound it.
+// rowLimitKeywords is the set of row limit clauses. OFFSET alone does not limit the result size.
 var rowLimitKeywords = []string{"limit", "fetch"}
 
-// HoldsRowLimit is true if the statement bounds its own result. Such a statement already
-// holds how many rows it wants, so a reader gives it every row it returns instead of one
-// page of them.
+// HoldsRowLimit detects a top-level LIMIT or FETCH clause.
 func HoldsRowLimit(sql string, flavour syntax.SyntaxFlavour) bool {
 	return len(syntax.FindTopLevelKeywords(sql, rowLimitKeywords, flavour)) > 0
 }
 
-// plannedStarts are the words a server plans. A server plans the rows a statement
-// reads, but not a statement that defines an object or grants a right.
+// plannedStarts is the set of opening keywords eligible for plan requests.
 var plannedStarts = map[string]bool{
 	"select": true, "with": true, "table": true, "values": true,
 	"insert": true, "update": true, "delete": true, "merge": true, "replace": true,
@@ -51,7 +47,7 @@ func definesFromQuery(tokens []syntax.CodeToken) bool {
 	return len(objectHits) > 0 && objectHits[0].Start < asHits[0].Start
 }
 
-// CanExplain is true if the server can plan the statement.
+// CanExplain is true for statement forms eligible for a plan request.
 func CanExplain(sql string, flavour syntax.SyntaxFlavour) bool {
 	tokens := syntax.ReadCodeTokens(sql, flavour)
 	opening := syntax.ReadOpeningWord(tokens)

@@ -11,7 +11,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
-// HealthState says whether the server still responds.
+// HealthState is the connection health status.
 type HealthState string
 
 // The three states a connection can be in.
@@ -21,27 +21,24 @@ const (
 	HealthDown         HealthState = "down"
 )
 
-// NoticeTone says how strongly a report is drawn.
+// NoticeTone is the notice display category.
 type NoticeTone string
 
-// The three tones a report can have. An active report says something stands now, such as the
-// work staged on a tab.
+// Notice categories. Active notices describe current state, such as staged changes.
 const (
 	NoticeInfo   NoticeTone = "info"
 	NoticeActive NoticeTone = "active"
 	NoticeError  NoticeTone = "error"
 )
 
-// Notice is the short-lived report the status bar shows. An outcome the app decided itself
-// takes no key to dismiss.
+// Notice is a temporary status bar message.
 type Notice struct {
 	Text    string
 	Tone    NoticeTone
 	ShownAt time.Time
 }
 
-// How long a report of each tone stays in the bar. An error stays longer, because the user
-// can have to act on it.
+// Status bar notice lifetimes.
 const (
 	NoticeLife      = 4 * time.Second
 	NoticeErrorLife = 8 * time.Second
@@ -55,22 +52,22 @@ func (notice *Notice) ReadLife() time.Duration {
 	return NoticeLife
 }
 
-// Catalog holds what the server holds: the schemas, the relations and the objects.
+// Catalog is the loaded server metadata.
 type Catalog struct {
 	Tables  []db.TableRef
 	Objects []db.SchemaObject
 	Roles   []db.DbRole
 	// The columns of each table, once read. Keyed by the table row id.
 	Details map[string]present.TableDetailState
-	// When the table list was last read, so it is not trusted for ever.
+	// The last catalog refresh time.
 	ReadAt time.Time
 	// True while the first read is still running.
 	Loading bool
-	// Why the read failed, where it did.
+	// The catalog loading error, if any.
 	Problem string
 }
 
-// NewCatalog starts a catalog with nothing read yet.
+// NewCatalog creates an unloaded catalog.
 func NewCatalog() *Catalog {
 	return &Catalog{Details: map[string]present.TableDetailState{}, Loading: true}
 }
@@ -90,8 +87,7 @@ func (catalog *Catalog) FindTable(schema, name string) (db.TableRef, bool) {
 	return db.TableRef{}, false
 }
 
-// Marks holds what the user marked on this profile: the favourites and the schemas opened
-// lately.
+// Marks is the profile favourites and recently visited schemas.
 type Marks struct {
 	Favourites []core.Favourite
 	Recent     []core.RecentSchema
@@ -109,7 +105,7 @@ func (marks *Marks) ToggleFavourite(favourite core.Favourite) {
 	marks.Favourites = append(marks.Favourites, favourite)
 }
 
-// VisitSchema records that the user opened a schema, so the recent folder lists it.
+// VisitSchema updates the recent schema list.
 func (marks *Marks) VisitSchema(schema string, now time.Time) {
 	kept := make([]core.RecentSchema, 0, len(marks.Recent)+1)
 	kept = append(kept, core.RecentSchema{Schema: schema, VisitedAt: now})
@@ -132,53 +128,47 @@ type Connection struct {
 	Catalog    *Catalog
 	Marks      *Marks
 	Health     HealthState
-	// Why the last check failed, and how many failed in a row, which decides the wait.
+	// The last health error and consecutive failure count.
 	HealthProblem  string
 	HealthFailures int
 	Notice         *Notice
 
 	Tabs        []*Tab
 	ActiveIndex int
-	// The restored tabs that have not read what they describe yet. A tab reads the
-	// first time it is shown, so a connect asks the server for one relation only.
+	// Restored tabs awaiting their first data request.
 	Unread    map[int]bool
 	nextTabID int
-	// The number of the last snapshot of the tabs. It rises with every snapshot, so the
-	// history file can drop a save that lands after a newer one.
+	// The increasing snapshot sequence for rejecting stale saves.
 	workspaceChange uint64
-	// The tabs closed lately, so the last one can be opened again with what it held.
+	// Recently closed tabs available for reopening.
 	closed []*Tab
 
-	// The first tab of the row on screen. It is kept, so the row moves only when the tab
-	// the cursor is on would fall outside it.
+	// The first visible tab index.
 	TabOffset int
 
 	// True while the object tree is drawn. `Alt+S` gives its columns to the grid.
 	SidebarVisible bool
 	// False while the result is hidden and the editor has the whole pane.
 	ResultVisible bool
-	// The rows the editor takes when the result is drawn under it. Zero means the rows the
-	// client opens with; a drag of the border between the two panes sets it.
+	// The editor height in rows. Zero uses the default height.
 	EditorHeight int
-	// True while the user holds a transaction open by hand.
+	// True when statements use autocommit mode.
 	Autocommit bool
 
-	// The last write that was measured, held so it can be undone.
+	// Undo data or an unavailable reason for the last recorded write.
 	Undo *HeldUndo
 
 	// The overlay on top, which owns the keyboard while it is open.
 	Overlay Overlay
 	// The tree of this connection: which rows are folded, and where the cursor is.
 	Tree TreeState
-	// The chat of this connection: what was said, and what the reply is doing.
+	// The connection chat and current response state.
 	Chat *Chat
-	// stopExport ends the export that streams now. Reading every row can take minutes, so
-	// the cancel key stops it as it stops a statement.
+	// stopExport is the active export cancellation function.
 	stopExport func()
 	stopImport func()
 
-	// The object tree as it was last built, and the state it was built from. The whole
-	// catalog goes into one, so it is kept until something it reads changes.
+	// The cached object tree and its input fingerprint.
 	treeAt     treeFingerprint
 	treeResult present.TreeResult
 	treeBuilt  bool
@@ -191,9 +181,7 @@ type HeldUndo struct {
 	RanAt time.Time
 }
 
-// KeepUndo holds the undo of the write that just ran. Only the last one is kept: an older
-// one restores rows the newer write has changed since. A write that kept no undo is held as
-// well, so the key that runs one can say why there is none.
+// KeepUndo replaces the stored undo with the latest write, including the reason when undo is unavailable.
 func (connection *Connection) KeepUndo(undo writeplan.Undo, sql string, now time.Time) {
 	connection.Undo = &HeldUndo{Undo: undo, SQL: sql, RanAt: now}
 }
@@ -203,11 +191,10 @@ type TreeState struct {
 	Expanded map[string]bool
 	Cursor   int
 	Offset   int
-	// True while the wheel moved the rows away from the cursor, so the cursor may stand
-	// off screen until it moves again.
+	// True after scrolling independently of the cursor.
 	Rolled bool
 	Filter string
-	// The schema a filter was opened inside, so it searches that schema alone.
+	// The schema restriction for the tree filter.
 	FilterScope string
 	// True while the filter field holds the keyboard.
 	Filtering bool
@@ -242,10 +229,7 @@ func (connection *Connection) Profile() cfg.Profile {
 	return connection.Session.Describe().Profile
 }
 
-// Active returns the tab on screen. A connection always holds one tab: NewConnection opens
-// one, CloseTab refuses to close the last, and RestoreTabs keeps the one it opened with
-// where the file named none. The empty answer is the floor under those three, and no caller
-// is written for it.
+// Active returns the selected tab, or nil for an empty tab list.
 func (connection *Connection) Active() *Tab {
 	if len(connection.Tabs) == 0 {
 		return nil
@@ -268,14 +252,13 @@ func (connection *Connection) StopExport() {
 	connection.stopExport = nil
 }
 
-// BeginImport holds what ends the import that writes now, so closing the card stops it.
+// BeginImport replaces the active import cancellation function and stops the previous import.
 func (connection *Connection) BeginImport(stop func()) {
 	connection.StopImport()
 	connection.stopImport = stop
 }
 
-// StopImport ends the import that writes now, where one does. The rows already written are
-// inside a transaction that the server rolls back when the connection drops the statement.
+// StopImport requests cancellation of the active import.
 func (connection *Connection) StopImport() {
 	if connection.stopImport == nil {
 		return
@@ -284,7 +267,7 @@ func (connection *Connection) StopImport() {
 	connection.stopImport = nil
 }
 
-// Show reports an outcome the app decided itself, which takes no key to dismiss.
+// Show displays an informational notice.
 func (connection *Connection) Show(text string) {
 	connection.Notice = &Notice{Text: text, Tone: NoticeInfo, ShownAt: time.Now()}
 }
@@ -308,8 +291,7 @@ func (connection *Connection) appendTab(tab *Tab) *Tab {
 	return tab
 }
 
-// showTab puts the tab in the place of the blank one on show, or after the last one. A read
-// opened from the tree or the history leaves no empty tab behind it.
+// showTab replaces a blank active tab or appends a new tab.
 func (connection *Connection) showTab(tab *Tab) *Tab {
 	standing := connection.Active()
 	if standing == nil || !standing.IsBlank() {
@@ -319,8 +301,7 @@ func (connection *Connection) showTab(tab *Tab) *Tab {
 	return tab
 }
 
-// OpenQueryTab opens a tab bound to the text in its editor. An empty tab is always a new
-// one, and a statement takes the place of a blank tab.
+// OpenQueryTab opens a query tab. Nonempty statements can replace a blank active tab.
 func (connection *Connection) OpenQueryTab(sql string) *Tab {
 	connection.nextTabID++
 	tab := NewQueryTab(connection.nextTabID, sql)
@@ -330,8 +311,7 @@ func (connection *Connection) OpenQueryTab(sql string) *Tab {
 	return connection.showTab(tab)
 }
 
-// OpenTable opens the relation, or focuses the tab that already holds it. Walking the tree
-// must not leave a row of identical tabs behind.
+// OpenTable focuses an existing table tab or opens a new table tab.
 func (connection *Connection) OpenTable(table db.TableRef, preview string) *Tab {
 	for at, tab := range connection.Tabs {
 		if tab.Kind == TabTable && tab.Table.Schema == table.Schema && tab.Table.Name == table.Name {
@@ -342,8 +322,7 @@ func (connection *Connection) OpenTable(table db.TableRef, preview string) *Tab 
 	return connection.OpenTableInNewTab(table, preview)
 }
 
-// OpenTableInNewTab asks for a second tab on the same relation on purpose, which is how two
-// filters of one table are compared side by side.
+// OpenTableInNewTab opens a separate table tab even when another tab has the same table.
 func (connection *Connection) OpenTableInNewTab(table db.TableRef, preview string) *Tab {
 	connection.nextTabID++
 	return connection.showTab(NewTableTab(connection.nextTabID, table, preview))
@@ -362,8 +341,7 @@ func (connection *Connection) OpenObject(object db.SchemaObject) *Tab {
 	return connection.showTab(NewObjectTab(connection.nextTabID, object))
 }
 
-// closedTabDepth is the number of closed tabs a connection holds. Each one keeps the page it
-// read, so a session that opens and closes tabs all day would hold every page it ever drew.
+// closedTabDepth is the maximum retained closed tabs, including their results.
 const closedTabDepth = 10
 
 // CloseTab closes the tab at that position. The last tab cannot be closed.
@@ -432,8 +410,7 @@ func (connection *Connection) SeedTree() {
 		connection.Marks.Favourites, connection.Marks.Recent)
 }
 
-// CompletionSources returns the part of the completion that belongs to the connection. Each
-// tab adds its own columns.
+// CompletionSources returns schema, table, and routine suggestions from the connection catalog.
 func (connection *Connection) CompletionSources() (schemas, tables, functions []string) {
 	offered := func(schema string) bool {
 		if !connection.Tree.HideSystemSchemas {
@@ -451,7 +428,7 @@ func (connection *Connection) CompletionSources() (schemas, tables, functions []
 			seenSchemas[table.Schema] = true
 			schemas = append(schemas, table.Schema)
 		}
-		// Both forms, because a table outside the search path needs its schema.
+		// Include qualified and unqualified table names.
 		tables = append(tables, table.Name, table.Schema+"."+table.Name)
 	}
 	slices.Sort(schemas)
@@ -460,7 +437,7 @@ func (connection *Connection) CompletionSources() (schemas, tables, functions []
 		if object.Kind != db.ObjectFunction || !offered(object.Schema) {
 			continue
 		}
-		// A routine is called by name, and the list was already read for the tree.
+		// Include qualified and unqualified routine names.
 		functions = append(functions, object.Name, object.Schema+"."+object.Name)
 	}
 	return schemas, tables, functions

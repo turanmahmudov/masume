@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// FavouriteKind says whether a favourite is a schema or a table.
+// FavouriteKind is the marked object type: schema or table.
 type FavouriteKind string
 
 // The two kinds of favourite.
@@ -31,8 +31,7 @@ type RecentSchema struct {
 // RecentLimit is the number of schemas the recent list keeps.
 const RecentLimit = 5
 
-// CatalogTTL is how long a table list stays valid before it is read again. A table
-// created after the read must become visible.
+// CatalogTTL is the table list cache lifetime.
 const CatalogTTL = time.Minute
 
 // schemaIDPrefix is the prefix of every schema row id.
@@ -52,7 +51,7 @@ func FindSchemaOfID(id string) string {
 	return strings.TrimPrefix(id, schemaIDPrefix)
 }
 
-// BuildFavouriteID returns the id of one favourite, so the tree can mark that row.
+// BuildFavouriteID returns the tree row ID for a favourite.
 func BuildFavouriteID(favourite Favourite) string {
 	if favourite.Kind == FavouriteSchema {
 		return "favourite:schema:" + favourite.Schema

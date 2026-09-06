@@ -14,16 +14,14 @@ var clauseStarts = []string{
 	"cross join", "join",
 }
 
-// spaceKeepingKinds are the parts of a statement where several spaces are content,
-// not layout.
+// isSpaceKeeping is true for tokens with significant internal whitespace.
 func isSpaceKeeping(kind syntax.TokenKind) bool {
 	return kind == syntax.TokenString || kind == syntax.TokenQuoted || kind == syntax.TokenComment
 }
 
 var horizontalSpace = regexp.MustCompile(`[ \t]+`)
 
-// collapseCodeWhitespace collapses runs of blanks between tokens only. Inside a
-// string or a quoted name the spaces are the value.
+// collapseCodeWhitespace collapses horizontal whitespace outside strings, quoted identifiers, and comments.
 func collapseCodeWhitespace(sql string, flavour syntax.SyntaxFlavour) string {
 	var collapsed strings.Builder
 	cursor := 0
@@ -39,8 +37,7 @@ func collapseCodeWhitespace(sql string, flavour syntax.SyntaxFlavour) string {
 	return collapsed.String()
 }
 
-// FormatStatement puts each top-level clause on its own line and collapses runs of
-// whitespace. Text inside literals and comments is left exactly as written.
+// FormatStatement separates top-level clauses and collapses code whitespace, preserving literal and comment contents.
 func FormatStatement(sql string, flavour syntax.SyntaxFlavour) string {
 	hits := syntax.FindTopLevelKeywords(sql, clauseStarts, flavour)
 	if len(hits) == 0 {

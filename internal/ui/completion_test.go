@@ -108,7 +108,7 @@ func TestTheTitleNamesTheKeysOfTheList(t *testing.T) {
 		model, _, tab := buildListingModel(t, written)
 		frame := strings.Split(model.render(), "\n")
 		title := stripStyles(frame[firstPaneRow])
-		for _, key := range []string{"↑↓", "Tab take", "Esc"} {
+		for _, key := range []string{"↑↓", "Tab accept", "Esc"} {
 			if !strings.Contains(title, key) {
 				t.Errorf("the title of %q reads %q and does not name %q",
 					written, strings.TrimSpace(title), key)

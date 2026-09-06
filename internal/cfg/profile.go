@@ -11,8 +11,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/secret"
 )
 
-// AuthMode is the source of the password: the profile itself, a command, a store, the
-// keyring of the operating system, or the user.
+// AuthMode is the password source: memory, a command, a store, the system keyring, or a prompt.
 type AuthMode string
 
 // The sources of a password.
@@ -20,8 +19,7 @@ const (
 	AuthPassword AuthMode = "password"
 	AuthCommand  AuthMode = "command"
 	AuthPrompt   AuthMode = "prompt"
-	// AuthKeyring reads the password masume itself stored in the keyring of the operating
-	// system. A keyring that holds none for the profile leaves the user as the source.
+	// AuthKeyring is the system keyring password source, with a prompt for a missing password.
 	AuthKeyring AuthMode = "keyring"
 	// AuthSecret reads one reference out of a store the user declared under `[secret]`.
 	AuthSecret AuthMode = "secret"
@@ -45,7 +43,7 @@ const (
 // Environments lists the environments a profile can use.
 var Environments = []Environment{EnvironmentDev, EnvironmentTest, EnvironmentProd}
 
-// AccessMode says whether the client can write to the server.
+// AccessMode is the connection write permission.
 type AccessMode string
 
 // The two access modes a profile can use.
@@ -57,7 +55,7 @@ const (
 // AccessModes lists the modes a profile can use.
 var AccessModes = []AccessMode{AccessReadOnly, AccessWrite}
 
-// ConfirmWrites says which statements need a confirmation before they run.
+// ConfirmWrites is the confirmation level for statements.
 type ConfirmWrites string
 
 // The four levels of confirmation.
@@ -65,23 +63,22 @@ const (
 	ConfirmOff    ConfirmWrites = "off"
 	ConfirmDelete ConfirmWrites = "delete"
 	ConfirmWrite  ConfirmWrites = "write"
-	// ConfirmAgent confirms every write, and lets an agent carry the answer of the user
-	// where its client cannot show a question of its own.
+	// ConfirmAgent requires confirmation for every write and allows an agent to submit the user response.
 	ConfirmAgent ConfirmWrites = "agent"
 )
 
 // ConfirmModes lists the levels a profile can use.
 var ConfirmModes = []ConfirmWrites{ConfirmOff, ConfirmDelete, ConfirmWrite, ConfirmAgent}
 
-// WritePlan says how much of a write is measured before the user is asked to run it.
+// WritePlan is the write preview level before confirmation.
 type WritePlan string
 
 // The three levels of measurement.
 const (
 	PlanOff WritePlan = "off"
-	// PlanCount counts the rows the write lands on and the relations it reaches.
+	// PlanCount is the preview of affected rows and relations.
 	PlanCount WritePlan = "count"
-	// PlanUndo also reads the rows the write changes, so they can be put back.
+	// PlanUndo includes the original rows for undo.
 	PlanUndo WritePlan = "undo"
 )
 
@@ -112,16 +109,12 @@ const (
 	DefaultPageSize = 200
 	// DefaultKeepalive is the time between two checks that the server responds.
 	DefaultKeepalive = 30 * time.Second
-	// DefaultUndoRows is how many rows a plan reads to build an undo. A write over this
-	// many rows runs without one.
+	// DefaultUndoRows is the maximum row count for undo. Larger writes run without undo.
 	DefaultUndoRows = 1000
 )
 
-// passwordInFileReason is what the client says about a `password` in a file. No file masume
-// reads carries a password: a config file is a plain file that backups, editors and dotfile
-// repositories all copy, and a project file is committed. The key is ignored rather than
-// refused, so the connection still opens and asks for its password.
-const passwordInFileReason = "a password in a file is ignored; type it once and tick " +
+// passwordInFileReason is the warning for an ignored password in a config file.
+const passwordInFileReason = "passwords in files are ignored; enter the password and select " +
 	"\"remember in the keyring\", or set password_env, password_command or a [secret] store"
 
 // Profile is one connection as the config file defines it.
@@ -137,8 +130,7 @@ type Profile struct {
 	Auth        AuthMode
 	Environment Environment
 	AccessMode  AccessMode
-	// The password of a connection the command line gave, or one found in a container. It
-	// is never read from a file and never written to one.
+	// The password from a command-line target or container. Config files never read or write this value.
 	Password    string
 	PasswordEnv string
 	// A command that prints the password, for example a lookup in a secret store.
@@ -146,14 +138,13 @@ type Profile struct {
 	// The `[secret]` store that holds the password, and the reference inside it.
 	Secret    string
 	SecretRef string
-	// The command the named store runs for this reference, built when the file is read.
-	// The profile itself never holds one.
+	// The command built from the secret store and reference. This value is absent from the config file.
 	SecretCommand string
 	SSLMode       core.SSLMode
 	Autocommit    bool
 	ConfirmWrites ConfirmWrites
 	WritePlan     WritePlan
-	// How many rows a plan reads to build an undo.
+	// The maximum row count for undo.
 	UndoRows int
 	// A command to run before the connection, for example a tunnel.
 	Command string
@@ -164,30 +155,25 @@ type Profile struct {
 	PageSize int
 	// The time between two checks that the server responds. Zero disables the check.
 	Keepalive time.Duration
-	// The time one statement can run before it is cancelled. Zero leaves the limit to
-	// the server.
+	// The statement time limit. Zero uses the server limit.
 	StatementTimeout time.Duration
 	Description      string
 	// Instructions for the chat on this connection, for example a naming rule.
 	AiInstructions string
 	// The operations an agent can run here over MCP. Unset keeps the `[mcp]` level.
 	McpAccess McpAccess
-	// True for a profile the config file holds. One built from the command line or found
-	// in a container is false.
+	// True for a profile from the user config file.
 	InConfigFile bool
-	// The path of the project file that provides this profile. Empty for every other
-	// profile.
+	// The source project file path, or empty for other profiles.
 	ProjectFile string
 }
 
-// IsInAFile is true for a profile that a file already holds, so the client does not offer to
-// write it on the way out.
+// IsInAFile is true for a profile from a user config or project file.
 func (profile Profile) IsInAFile() bool {
 	return profile.InConfigFile || profile.ProjectFile != ""
 }
 
-// ProfileProblem is a profile, or a `[secret]` store, that could not be read, with the
-// reason.
+// ProfileProblem is a profile or secret store error.
 type ProfileProblem struct {
 	Name   string
 	Reason string
@@ -196,15 +182,12 @@ type ProfileProblem struct {
 // secretProblemPrefix marks a problem of a `[secret]` store rather than of a profile.
 const secretProblemPrefix = "secret."
 
-// FileProblemPrefix marks a problem of the config file itself, which loses every profile
-// in it rather than one.
+// FileProblemPrefix is the prefix for errors that prevent loading the whole config file.
 const FileProblemPrefix = "file."
 
-// Describe returns the problem as one line, naming what it is about. A store and a profile
-// read the same way and are reported the same way, so the line says which of the two it is.
+// Describe returns one error line with the file, store, or profile name.
 func (problem ProfileProblem) Describe() string {
-	// The reason stands first, because the line is cut where a card is narrow and the
-	// path is the half a reader can lose.
+	// File errors start with the reason, followed by the path.
 	if name, isFile := strings.CutPrefix(problem.Name, FileProblemPrefix); isFile {
 		return fmt.Sprintf("%s · %s", problem.Reason, name)
 	}
@@ -219,19 +202,17 @@ func (problem ProfileProblem) DescribeWarning() string {
 	return fmt.Sprintf("profile %q: %s", problem.Name, problem.Reason)
 }
 
-// ParsedProfiles holds the profiles read from the file and the ones that failed.
+// ParsedProfiles is the set of loaded profiles, stores, errors, and warnings.
 type ParsedProfiles struct {
 	Profiles []Profile
 	Problems []ProfileProblem
-	// Warnings are the profiles that were read and used, with a key that was ignored. A
-	// profile with a warning still opens; one in Problems was skipped.
+	// Warnings are ignored keys in loaded profiles. Problems are skipped profiles or stores.
 	Warnings []ProfileProblem
 	// The secret stores the user declared under `[secret]`.
 	Secrets []SecretSource
 }
 
-// resolveDefaultConfirmWrites uses the environment, which is the only indication of the
-// cost of a mistake. Production confirms every write and development confirms none.
+// resolveDefaultConfirmWrites returns the environment confirmation level.
 func resolveDefaultConfirmWrites(environment Environment) ConfirmWrites {
 	switch environment {
 	case EnvironmentProd:
@@ -471,9 +452,7 @@ func buildProfile(name string, source Table) (Profile, error) {
 	}, nil
 }
 
-// ParseProfiles reads the `[profile]` and the `[secret]` sections. The two are read together
-// because a profile that names a store cannot be finished without it. A profile that cannot
-// be read is reported and skipped, so one bad entry does not stop the app.
+// ParseProfiles reads `[profile]` and `[secret]`, resolves store commands, and reports skipped entries.
 func ParseProfiles(document Table) ParsedProfiles {
 	sources, sourceProblems := ParseSecretSources(document)
 	written, present := FindSection(document, "profile")
@@ -519,8 +498,7 @@ func ParseProfiles(document Table) ParsedProfiles {
 	return parsed
 }
 
-// nameSecretProblems marks the problems of a store, so a report that lists profiles and
-// stores together says which is which.
+// nameSecretProblems adds the secret store prefix to each error.
 func nameSecretProblems(problems []ProfileProblem) []ProfileProblem {
 	named := make([]ProfileProblem, 0, len(problems))
 	for _, problem := range problems {
@@ -530,8 +508,7 @@ func nameSecretProblems(problems []ProfileProblem) []ProfileProblem {
 	return named
 }
 
-// DescribeProfileTarget returns a short form of the target of the profile: a file path, or
-// a server address.
+// DescribeProfileTarget returns the database file path or server address.
 func DescribeProfileTarget(profile Profile) string {
 	if core.OpensFile(profile.Engine) {
 		return profile.Database
@@ -566,8 +543,7 @@ func NeedsPasswordPrompt(profile Profile) bool {
 	if core.OpensFile(profile.Engine) {
 		return false
 	}
-	// A profile that requests a prompt gets one, because the server can need a password
-	// that the client cannot get in another way.
+	// Prompt mode always requests a password for a server connection.
 	if profile.Auth == AuthPrompt {
 		return true
 	}
@@ -575,9 +551,7 @@ func NeedsPasswordPrompt(profile Profile) bool {
 	if !core.ResolveEngineInfo(profile.Engine).NeedsPassword {
 		return false
 	}
-	// A server checks the password against a named user, and cannot check anything if
-	// the profile has no user. This applies to MongoDB: its user is optional, because a
-	// server with authentication off refuses a connection that sends one.
+	// MongoDB authentication requires a username. Profiles without a user omit authentication.
 	if profile.User == "" {
 		return false
 	}
@@ -585,8 +559,7 @@ func NeedsPasswordPrompt(profile Profile) bool {
 	if profile.Auth == AuthCommand || profile.Auth == AuthSecret {
 		return false
 	}
-	// The keyring is asked here, because a keyring that holds nothing for the profile
-	// leaves the user as the only source and the client must draw the field.
+	// Missing or inaccessible keyring passwords require a prompt.
 	if profile.Auth == AuthKeyring {
 		password, found, err := secret.FindPassword(profile.Name)
 		return err != nil || !found || password == ""

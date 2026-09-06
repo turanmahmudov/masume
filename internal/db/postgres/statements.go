@@ -6,8 +6,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// The catalog reads of every PostgreSQL-protocol server. The engine entry names the
-// schemas to leave out, so one statement serves every server of the family.
+// Catalog queries use the engine metadata for excluded system schemas.
 
 // buildSystemSchemaFilter writes the catalog schemas of the engine entry as a list to
 // exclude.
@@ -68,8 +67,7 @@ const describeColumnsSQL = `
    order by a.attnum
 `
 
-// buildKeyColumnsSQL joins the attribute numbers of a constraint back to names, which
-// is how `pg_constraint` holds its key columns.
+// buildKeyColumnsSQL maps pg_constraint attribute numbers to column names.
 func buildKeyColumnsSQL(keyColumn, relationColumn string) string {
 	return `(select array_agg(att.attname order by k.ord)
             from unnest(c.` + keyColumn + `) with ordinality k(attnum, ord)
@@ -82,8 +80,7 @@ var (
 	targetKeyColumnsSQL = buildKeyColumnsSQL("confkey", "confrelid")
 )
 
-// deleteRuleSQL writes the rule of a foreign key as text, out of the letter the catalog
-// holds for it.
+// deleteRuleSQL converts foreign key delete rule codes to text.
 const deleteRuleSQL = `case c.confdeltype
            when 'c' then 'cascade' when 'n' then 'set null' when 'd' then 'set default'
            when 'r' then 'restrict' else 'no action' end`
@@ -135,8 +132,7 @@ const listRolesSQL = `
    order by r.rolname
 `
 
-// triggerEventsSQL writes the writes a trigger runs for, out of the bits the catalog holds
-// for them. A trigger can name more than one.
+// triggerEventsSQL decodes trigger event bits. A trigger can handle multiple events.
 const triggerEventsSQL = `concat_ws(', ',
            case when tg.tgtype & 4 > 0 then 'insert' end,
            case when tg.tgtype & 8 > 0 then 'delete' end,
@@ -253,8 +249,7 @@ const listLockWaitsSQL = `
    order by waiting.state_change, waiting.pid, holder.pid
 `
 
-// The load the server itself is carrying: how many connections it holds, how many it allows,
-// and when it started. The count covers every database of the server.
+// Server load includes connection count, connection limit, and start time. The count covers all databases.
 const readServerLoadSQL = `
   select /*masume:dashboard*/ (select count(*) from pg_stat_activity)  as connections,
          current_setting('max_connections')::int8 as max_connections,
@@ -276,16 +271,11 @@ const readServerLoadSQL = `
          end as replication_lag_s
 `
 
-// DashboardMark is written into every statement the dashboard runs, so the panel of slow
-// statements can leave its own reads out of what it draws.
-//
-// The server counts a statement by the shape of its parse tree, and a comment is not part of
-// that shape. A reader who runs the same statement byte for byte apart from the mark shares
-// a row with it.
+// DashboardMark is the query comment used to exclude dashboard reads from statement statistics.
+// PostgreSQL groups statements by parse tree. Identical queries with different comments share a statistics row.
 const DashboardMark = "masume:dashboard"
 
-// The statements the server spent the most time in, the slowest by mean first. The count
-// belongs to the whole server, so it is narrowed to this database.
+// Statement statistics for the current database, sorted by mean execution time.
 const listSlowStatementsSQL = `
   select /*masume:dashboard*/ query,
          calls,

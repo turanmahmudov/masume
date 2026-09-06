@@ -1,6 +1,4 @@
-// Package load reads a data file into a table: it samples the file, infers a type for each
-// column, maps the columns onto a table, checks every row, and builds the statements that
-// write them. Nothing here reaches a server.
+// Package load samples, maps, and validates import files, then builds SQL statements without a server connection.
 package load
 
 import (
@@ -19,7 +17,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// FileFormat is the shape of a file an import reads.
+// FileFormat is the import file format.
 type FileFormat string
 
 const (
@@ -27,10 +25,10 @@ const (
 	FileJSON FileFormat = "json"
 )
 
-// FileFormats lists the formats, the one a file without a known extension is read as first.
+// FileFormats is the list of supported formats, with the default first.
 var FileFormats = []FileFormat{FileCSV, FileJSON}
 
-// fileExtensions give the format of each extension a data file uses.
+// fileExtensions are the formats for supported file extensions.
 var fileExtensions = map[string]FileFormat{
 	".csv": FileCSV, ".tsv": FileCSV, ".txt": FileCSV,
 	".json": FileJSON, ".jsonl": FileJSON, ".ndjson": FileJSON,
@@ -49,13 +47,13 @@ func ListFileExtensions() []string {
 // tabDelimited are the extensions of a file whose fields are separated by a tab.
 var tabDelimited = map[string]bool{".tsv": true}
 
-// byteOrderMark is the mark a writer can put at the head of a UTF-8 file.
+// byteOrderMark is the optional UTF-8 file prefix.
 const byteOrderMark = "\ufeff"
 
-// ErrStopWalk stops a walk of a file from the row it is handed.
+// ErrStopWalk is the callback error for stopping a file read.
 var ErrStopWalk = errors.New("stop reading the file")
 
-// FileError is a file an import cannot read.
+// FileError is an import file error.
 type FileError struct{ Reason string }
 
 func (err FileError) Error() string { return err.Reason }
@@ -64,24 +62,22 @@ func failFile(format string, parts ...any) error {
 	return FileError{Reason: fmt.Sprintf(format, parts...)}
 }
 
-// ReadOptions holds how one file is read.
+// ReadOptions is the import file configuration.
 type ReadOptions struct {
 	Format FileFormat
 	// One character, which separates the fields of a CSV.
 	Delimiter string
 	HasHeader bool
-	// The text a CSV writes a value that is not there with, for example `\N`. A field
-	// that is empty is read as a value that is not there whatever this holds.
+	// The CSV null marker, such as `\N`. Empty fields are always null.
 	NullText string
 }
 
-// DefaultReadOptions returns how a file is read where nothing was chosen.
+// DefaultReadOptions returns the default import settings.
 func DefaultReadOptions() ReadOptions {
 	return ReadOptions{Format: FileCSV, Delimiter: ",", HasHeader: true, NullText: `\N`}
 }
 
-// FindFileFormat returns the format of the file, read from its extension. A name with no
-// known extension is read as a CSV, which is what a data file mostly is.
+// FindFileFormat returns the extension format, or CSV for an unknown extension.
 func FindFileFormat(path string) FileFormat {
 	if format, known := fileExtensions[strings.ToLower(filepath.Ext(path))]; known {
 		return format
@@ -94,8 +90,7 @@ func FindFormatNamed(written string) (FileFormat, bool) {
 	return core.FindAllowed(FileFormats, strings.ToLower(strings.TrimSpace(written)))
 }
 
-// BuildReadOptions returns how that file is read: its format, and a tab for a file whose
-// extension marks its fields as separated by one.
+// BuildReadOptions returns the format and delimiter for the file extension.
 func BuildReadOptions(path string) ReadOptions {
 	options := DefaultReadOptions()
 	options.Format = FindFileFormat(path)
@@ -112,13 +107,8 @@ type Row struct {
 	Values []any
 }
 
-// WalkFile reads the file: the names of its columns first, and then every row. The names
-// are handed over again, longer than before, wherever a row adds a column the ones before
-// it did not hold, which a file of documents can do. A row is as long as the names were
-// when it was read, so a row from before a column appeared holds no value for it.
-//
-// It returns nothing where the whole file was read, and the error the caller answered with
-// where the caller stopped it.
+// WalkFile reports column names, then rows. New document fields expand the names without changing earlier rows.
+// WalkFile returns nil after a complete read, or the read or callback error that stopped the read.
 func WalkFile(
 	path string, options ReadOptions,
 	onNames func(names []string) error, onRow func(row Row) error,
@@ -139,14 +129,12 @@ func WalkFile(
 func readDelimiter(written string) (rune, error) {
 	held := []rune(written)
 	if len(held) != 1 {
-		return 0, failFile("the delimiter has to be one character")
+		return 0, failFile("the delimiter must be one character")
 	}
 	return held[0], nil
 }
 
-// buildColumnNames returns the names of the columns of a CSV: the header row, with a name
-// for every field the header leaves blank, and a name for every repeat. A file with no
-// header row is named by position.
+// buildColumnNames returns unique CSV column names. Missing headers use column positions.
 func buildColumnNames(header []string, hasHeader bool) []string {
 	names := make([]string, 0, len(header))
 	taken := map[string]bool{}
@@ -165,8 +153,7 @@ func buildColumnNames(header []string, hasHeader bool) []string {
 	return names
 }
 
-// readCSVCell returns one field as the value it holds. An empty field, and a field that
-// holds the null text, are a value that is not there.
+// readCSVCell returns nil for empty fields and null markers, or the field text.
 func readCSVCell(field string, nullText string) any {
 	if field == "" || (nullText != "" && field == nullText) {
 		return nil
@@ -185,11 +172,11 @@ func walkCSV(
 
 	reader := csv.NewReader(file)
 	reader.Comma = delimiter
-	// A row of the wrong length is reported by this package, not by the reader.
+	// Import validation checks row lengths.
 	reader.FieldsPerRecord = -1
 	reader.ReuseRecord = false
 
-	// The reader panics for the line of a record it does not hold.
+	// FieldPos panics if the record has no field at index zero.
 	readLine := func(record []string) int {
 		if len(record) == 0 {
 			return 0
@@ -200,7 +187,7 @@ func walkCSV(
 
 	first, err := reader.Read()
 	if errors.Is(err, io.EOF) {
-		return failFile("the file holds no row")
+		return failFile("the file has no rows")
 	}
 	if err != nil {
 		return describeCSVFault(err)
@@ -240,8 +227,7 @@ func describeCSVFault(err error) error {
 	return failFile("the file cannot be read: %v", err)
 }
 
-// buildCSVRow returns one record as a row. A record shorter than the header is filled with
-// values that are not there, and a longer one keeps its extra fields.
+// buildCSVRow pads short records with null values and keeps extra fields in long records.
 func buildCSVRow(line int, record, names []string, options ReadOptions) Row {
 	values := make([]any, 0, max(len(record), len(names)))
 	for _, field := range record {
@@ -253,9 +239,7 @@ func buildCSVRow(line int, record, names []string, options ReadOptions) Row {
 	return Row{Line: line, Values: values}
 }
 
-// walkJSON reads an array of objects, or one object per line. The names of the columns are
-// the names of the first object, in the order it writes them, and every name a later object
-// adds.
+// walkJSON reads an object array or consecutive objects. Column order follows the first appearance of each field.
 func walkJSON(file io.Reader, onNames func([]string) error, onRow func(Row) error) error {
 	counter := &lineCounter{reader: cutByteOrderMark(file)}
 	decoder := json.NewDecoder(counter)
@@ -264,14 +248,14 @@ func walkJSON(file io.Reader, onNames func([]string) error, onRow func(Row) erro
 
 	opening, err := decoder.Token()
 	if errors.Is(err, io.EOF) {
-		return failFile("the file holds no document")
+		return failFile("the file has no documents")
 	}
 	if err != nil {
-		return failFile("the file is no JSON: %v", err)
+		return failFile("invalid JSON: %v", err)
 	}
 	delimiter, isDelimiter := opening.(json.Delim)
 	if !isDelimiter || (delimiter != '[' && delimiter != '{') {
-		return failFile("the file holds no array of documents and no document")
+		return failFile("the file must contain JSON objects or an array of objects")
 	}
 	inArray := delimiter == '['
 
@@ -316,11 +300,11 @@ func walkJSON(file io.Reader, onNames func([]string) error, onRow func(Row) erro
 			break
 		}
 		if tokenErr != nil {
-			return failFile("the file is no JSON: %v", tokenErr)
+			return failFile("invalid JSON: %v", tokenErr)
 		}
 		if delimiter, isDelimiter := token.(json.Delim); isDelimiter && delimiter == ']' {
 			if decoder.More() {
-				return failFile("the file holds more than the array of documents")
+				return failFile("unexpected content after the JSON array")
 			}
 			break
 		}
@@ -330,19 +314,18 @@ func walkJSON(file io.Reader, onNames func([]string) error, onRow func(Row) erro
 	}
 
 	if !reported {
-		return failFile("the file holds no document")
+		return failFile("the file has no documents")
 	}
 	return nil
 }
 
-// readJSONObject reads one object into its fields and the order it writes them in. The
-// opening brace is already read.
+// readJSONObject reads object fields in order after the opening brace.
 func readJSONObject(
 	decoder *json.Decoder, opening json.Token,
 ) (map[string]any, []string, error) {
 	brace, isDelimiter := opening.(json.Delim)
 	if !isDelimiter || brace != '{' {
-		return nil, nil, failFile("the file holds a value that is no document")
+		return nil, nil, failFile("expected a JSON object")
 	}
 
 	fields := map[string]any{}
@@ -350,14 +333,14 @@ func readJSONObject(
 	for {
 		token, err := decoder.Token()
 		if err != nil {
-			return nil, nil, failFile("the file is no JSON: %v", err)
+			return nil, nil, failFile("invalid JSON: %v", err)
 		}
 		if end, isEnd := token.(json.Delim); isEnd && end == '}' {
 			return fields, order, nil
 		}
 		name, isName := token.(string)
 		if !isName {
-			return nil, nil, failFile("the file holds a document with no field name")
+			return nil, nil, failFile("expected a JSON field name")
 		}
 
 		value, valueErr := readJSONValue(decoder)
@@ -374,12 +357,11 @@ func readJSONObject(
 	}
 }
 
-// readJSONValue reads one value of a document. An object and an array come back as
-// json.RawMessage holding the text they were written as.
+// readJSONValue reads a document value. Objects and arrays return as json.RawMessage.
 func readJSONValue(decoder *json.Decoder) (any, error) {
 	token, err := decoder.Token()
 	if err != nil {
-		return nil, failFile("the file is no JSON: %v", err)
+		return nil, failFile("invalid JSON: %v", err)
 	}
 	delimiter, isDelimiter := token.(json.Delim)
 	if !isDelimiter {
@@ -414,13 +396,13 @@ func writeJSONRest(decoder *json.Decoder, written *strings.Builder, closing json
 		if !decoder.More() {
 			token, err := decoder.Token()
 			if err != nil {
-				return failFile("the file is no JSON: %v", err)
+				return failFile("invalid JSON: %v", err)
 			}
 			if end, isEnd := token.(json.Delim); isEnd && end == closing {
 				written.WriteString(string(closing))
 				return nil
 			}
-			return failFile("the file is no JSON")
+			return failFile("invalid JSON")
 		}
 		if !first {
 			written.WriteString(",")
@@ -430,11 +412,11 @@ func writeJSONRest(decoder *json.Decoder, written *strings.Builder, closing json
 		if closing == '}' {
 			name, err := decoder.Token()
 			if err != nil {
-				return failFile("the file is no JSON: %v", err)
+				return failFile("invalid JSON: %v", err)
 			}
 			text, isText := name.(string)
 			if !isText {
-				return failFile("the file holds a document with no field name")
+				return failFile("expected a JSON field name")
 			}
 			written.WriteString(core.WriteJSONText(text) + ":")
 		}
@@ -446,7 +428,7 @@ func writeJSONRest(decoder *json.Decoder, written *strings.Builder, closing json
 	}
 }
 
-// cutByteOrderMark returns the file without the mark a writer can put at its head.
+// cutByteOrderMark removes the optional UTF-8 byte order mark.
 func cutByteOrderMark(file io.Reader) io.Reader {
 	buffered := bufio.NewReader(file)
 	head, err := buffered.Peek(len(byteOrderMark))

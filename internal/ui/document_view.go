@@ -12,8 +12,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
-// The two views that read a row as a document: the tree, which opens one value at a time,
-// and the whole document written out in the form that carries every type.
+// The document tree displays result rows as expandable documents.
 
 // The widths of the tree: the gutter that numbers the documents, the key with the guides
 // before it, and the name of the type at the end. The value takes what is left.
@@ -42,7 +41,7 @@ func (model *Model) renderDocumentTree(
 	theme := model.styles.Theme
 	tree := model.buildDocumentTree(connection, tab)
 	if tree.CountRows() == 0 {
-		return model.renderEmptyState(width, height, "this read answered no rows", nil)
+		return model.renderEmptyState(width, height, "no rows to show", nil)
 	}
 
 	tab.TreeRow = clamp(tab.TreeRow, tree.CountRows())

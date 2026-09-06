@@ -28,8 +28,7 @@ func HomeDirectory() string {
 	return home
 }
 
-// ShortenHomePath returns the path with the home directory written as `~`, which is what a
-// card shows.
+// ShortenHomePath replaces the home directory prefix with `~`.
 func ShortenHomePath(path string) string {
 	home := HomeDirectory()
 	if home == "" || !strings.HasPrefix(path, home) {

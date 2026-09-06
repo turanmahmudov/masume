@@ -1,5 +1,4 @@
-// Package engines is the one place that knows every engine: what each one supports,
-// the driver that opens it, and how a read or a staged edit is composed for it.
+// Package engines registers engine capabilities, adapters, and query composers.
 package engines
 
 import (

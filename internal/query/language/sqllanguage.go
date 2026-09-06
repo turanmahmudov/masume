@@ -6,9 +6,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// sqlLanguage reads a buffer of SQL. The dialects differ in what they accept and in
-// how they mark a comment and a string, not in how a buffer is rated or completed,
-// so every SQL engine shares this one language and passes its own flavour.
+// sqlLanguage provides shared SQL processing with dialect-specific tokenization.
 type sqlLanguage struct{ flavour syntax.SyntaxFlavour }
 
 func (language sqlLanguage) Tokenize(text string) []syntax.Token {
@@ -42,8 +40,7 @@ func (language sqlLanguage) FindLocalDiagnostics(
 	return editor.FindLocalDiagnostics(text, knowledge, language.flavour)
 }
 
-// ResolveWriteRisk weighs the buffer. Every statement runs, so the buffer is as risky
-// as the worst one in it.
+// ResolveWriteRisk returns the highest statement risk in the buffer.
 func (language sqlLanguage) ResolveWriteRisk(text string) statement.WriteRisk {
 	statements := language.SplitStatements(text)
 	risks := make([]statement.WriteRisk, 0, len(statements))
@@ -53,8 +50,7 @@ func (language sqlLanguage) ResolveWriteRisk(text string) statement.WriteRisk {
 	return statement.ResolveStrongestRisk(risks)
 }
 
-// HoldsRowLimit is true if the statement carries a LIMIT or a FETCH of its own. An OFFSET
-// alone moves the start of a result and does not bound it.
+// HoldsRowLimit detects LIMIT or FETCH. OFFSET alone does not limit the result size.
 func (language sqlLanguage) HoldsRowLimit(text string) bool {
 	return statement.HoldsRowLimit(text, language.flavour)
 }
@@ -73,7 +69,7 @@ func (language sqlLanguage) BuildCompletions(
 	return editor.BuildCompletions(prefix, sources, context)
 }
 
-// SQL is the language the eleven SQL engines with standard syntax share.
+// SQL is the shared language with standard SQL tokenization.
 var SQL Language = sqlLanguage{flavour: syntax.FlavourStandard}
 
 // Mysql is the same language, read the way MySQL reads a buffer.

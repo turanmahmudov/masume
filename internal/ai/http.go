@@ -10,19 +10,15 @@ import (
 	"strings"
 )
 
-// The parts both providers share: the form of an error, the way a request is sent, the way
-// the event stream of the answer is read, and the way one tool call is built from it.
+// Shared HTTP requests, provider errors, event streams, and tool argument parsing.
 
 // maxReportedFailure is the number of characters of an error body that are reported.
 const maxReportedFailure = 400
 
-// maxReadFailureBytes is the number of bytes read to get those characters, because UTF-8
-// uses up to four bytes per character.
+// maxReadFailureBytes is the error body byte limit. UTF-8 uses up to four bytes per character.
 const maxReadFailureBytes = maxReportedFailure * 4
 
-// streamingClient is the HTTP client of both providers. It has no time limit of its own,
-// because a reply arrives as a stream and a long reply must not be cut. The transport limits
-// the time before the first byte.
+// streamingClient is the shared HTTP client. Transport timeouts apply to connection setup and response headers, without a total request timeout.
 var streamingClient = &http.Client{Transport: buildTransport()}
 
 // sendJSON sends one request and returns its body, which the caller reads as a stream.
@@ -70,8 +66,7 @@ func describeFailedRequest(answered *http.Response) string {
 	return answered.Status + ": " + written
 }
 
-// findFailureMessage reads the message from the answer of a provider. Both providers use the
-// key `error`, one with an object and one with a string.
+// findFailureMessage accepts provider errors as strings or objects with a message field.
 func findFailureMessage(body []byte) string {
 	read := map[string]any{}
 	if err := json.Unmarshal(body, &read); err != nil {
@@ -93,8 +88,7 @@ type serverEvent struct {
 	data string
 }
 
-// readServerEvents reads the events of one stream and passes each one to the reader. It
-// returns at the end of the stream, or when the reader returns an error.
+// readServerEvents reads server-sent events until EOF or an error.
 func readServerEvents(body io.Reader, onEvent func(serverEvent) error) error {
 	reader := bufio.NewReaderSize(body, 64*1024)
 	held := serverEvent{}
@@ -113,8 +107,7 @@ func readServerEvents(body io.Reader, onEvent func(serverEvent) error) error {
 			}
 			held = serverEvent{}
 		case strings.HasPrefix(trimmed, "data:"):
-			// One space after the colon belongs to the protocol. Every further space
-			// belongs to the data.
+			// SSE permits one optional space after the colon. Additional spaces are data.
 			part := strings.TrimPrefix(trimmed[len("data:"):], " ")
 			if held.data == "" {
 				held.data = part
@@ -140,8 +133,7 @@ func readJSONInto(data string, into any) error {
 	return json.Unmarshal([]byte(data), into)
 }
 
-// openBlock is the block of the stream in progress. It arrives in parts. Both protocols send
-// a call this way: the name first, then the arguments in parts.
+// openBlock is a tool call assembled from streamed argument fragments.
 type openBlock struct {
 	kind      string
 	callID    string
@@ -149,8 +141,7 @@ type openBlock struct {
 	arguments strings.Builder
 }
 
-// readToolCall parses the input the model wrote for one call. An input that cannot be parsed
-// is passed on unchanged, so the tool reports the problem.
+// readToolCall preserves raw arguments. Invalid JSON leaves Input empty.
 func readToolCall(id, name, arguments string) ToolCall {
 	call := ToolCall{ID: id, Name: name, Arguments: arguments, Input: map[string]any{}}
 	if strings.TrimSpace(arguments) == "" {

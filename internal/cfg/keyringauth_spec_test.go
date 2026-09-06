@@ -97,7 +97,7 @@ auth     = "keyring"
 func TestASecretProfileRunsTheCommandOfItsStore(t *testing.T) {
 	loaded := cfg.LoadConfig(writeConfig(t, `
 [secret.work]
-command = "printf %s hunter2-{{ref}}"
+command = "printf hunter2-%s {{ref}}"
 
 [profile.shop]
 engine     = "postgres"
@@ -119,7 +119,7 @@ secret_ref = "shop"
 func TestASecretProfileReportsAStoreThatFails(t *testing.T) {
 	loaded := cfg.LoadConfig(writeConfig(t, `
 [secret.work]
-command = "echo the store is locked >&2; exit 1 # {{ref}}"
+command = "sh -c 'echo the store is locked >&2; exit 1' store {{ref}}"
 
 [profile.shop]
 engine     = "postgres"

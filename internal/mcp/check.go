@@ -8,8 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// The report of `--mcp --check`: one connection to every open profile. A configuration error
-// is easier to find here than through the client of an agent.
+// Connection reports for --mcp --check.
 
 // ProfileCheck is the result of the check of one profile.
 type ProfileCheck struct {
@@ -22,9 +21,7 @@ type ProfileCheck struct {
 	Problem string
 }
 
-// CheckOpenProfiles opens every profile an agent can use, one after the other, so the errors
-// are reported in the order of the file and a tunnel started for one profile can serve the
-// next one.
+// CheckOpenProfiles checks enabled profiles sequentially in configuration order.
 func CheckOpenProfiles(ctx context.Context, deps AccessDeps) []ProfileCheck {
 	checks := []ProfileCheck{}
 

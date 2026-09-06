@@ -14,10 +14,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/writeplan"
 )
 
-// The card that measures a write before it runs, and the undo it leaves behind.
+// The write-plan dialog and saved undo data.
 
-// planReadTimeout is how long the reads of one plan have in all. A user waits on them with
-// the write unanswered, so they get less than a statement of their own.
+// planReadTimeout is the total read timeout for one write plan.
 const planReadTimeout = 10 * time.Second
 
 // measuringPlanTitle is the title of the card while the reads run. An answer that lands
@@ -60,7 +59,7 @@ func (model *Model) askWithWritePlan(
 	profile := connection.Profile()
 	connection.Overlay = app.Overlay{
 		Kind: app.OverlayMessage, Title: measuringPlanTitle,
-		Body: "measuring what this write does…\n\n" + read.Display,
+		Body: "checking affected rows…\n\n" + read.Display,
 	}
 	return model, buildWritePlan(model.ActiveID(), tab.ID, written, connection.Session,
 		writeplan.Request{
@@ -126,7 +125,7 @@ func (model *Model) composeStatementReads(
 // describeWriteOutcome is what the bar says once a planned write has run.
 func (model *Model) describeWriteOutcome(undo writeplan.Undo) string {
 	if !undo.IsHeld() {
-		return "no undo was kept: " + undo.Reason
+		return "undo is not available: " + undo.Reason
 	}
 	return model.registry.FormatActionChords(cfg.ScopeGlobal, ActionUndoWrite) +
 		" undoes this write, " + present.FormatCountOf(int64(undo.Rows), "row", "rows")
@@ -135,13 +134,13 @@ func (model *Model) describeWriteOutcome(undo writeplan.Undo) string {
 // describeMissingUndo says why there is nothing to undo.
 func describeMissingUndo(connection *app.Connection) string {
 	if connection.Profile().WritePlan != cfg.PlanUndo {
-		return `this connection does not keep an undo. Set write_plan = "undo" on the ` +
-			"profile to read the rows of a write before it changes them"
+		return `this connection does not save undo data. Set write_plan = "undo" in the ` +
+			"profile to save row values before a write"
 	}
 	if !connection.Session.Capabilities().PlansWrites {
-		return "this server does not measure a write, so no undo is kept for one"
+		return "write plans and undo are not available for this server"
 	}
-	return "nothing has been written on this connection yet"
+	return "no undo data is available on this connection"
 }
 
 // undoLastWrite asks whether the last write is undone.
@@ -152,11 +151,11 @@ func (model *Model) undoLastWrite(connection *app.Connection) (tea.Model, tea.Cm
 		return model, nil
 	}
 	if !held.Undo.IsHeld() {
-		connection.Show("the last write kept no undo: " + held.Undo.Reason)
+		connection.Show("undo is not available for the last write: " + held.Undo.Reason)
 		return model, nil
 	}
 	if connection.Profile().AccessMode == cfg.AccessReadOnly {
-		connection.ShowError("this connection is read-only, so nothing was written")
+		connection.ShowError("this connection is read-only; no changes were sent")
 		return model, nil
 	}
 
@@ -168,7 +167,7 @@ func (model *Model) undoLastWrite(connection *app.Connection) (tea.Model, tea.Cm
 			if !confirmed {
 				return nil
 			}
-			return carryAnswer(applyUndo(id, session, held.Undo))
+			return carryAnswer(applyUndo(id, session, held.Undo, connection.Autocommit))
 		}},
 	}
 	return model, nil
@@ -177,7 +176,7 @@ func (model *Model) undoLastWrite(connection *app.Connection) (tea.Model, tea.Cm
 func describeUndoQuestion(held app.HeldUndo) string {
 	written := "Undo this write? " +
 		present.FormatCountOf(int64(held.Undo.Rows), "row", "rows") + " of " +
-		held.Undo.Table.Name + " go back to the values they held " +
+		held.Undo.Table.Name + " will return to their values from " +
 		core.FormatLargestUnit(time.Since(held.RanAt)) + " ago.\n\n" + held.SQL
 	if len(held.Undo.Display) > 0 {
 		written += "\n\n" + held.Undo.Display[0]
@@ -199,13 +198,18 @@ type undoWrittenMsg struct {
 
 // applyUndo runs the undo, all of it or none.
 func applyUndo(
-	connectionID int, session db.TransactionKeeper, undo writeplan.Undo,
+	connectionID int, session db.Session, undo writeplan.Undo, autocommit bool,
 ) tea.Cmd {
 	return func() tea.Msg {
 		answered := undoWrittenMsg{
 			ConnectionID: connectionID, Table: undo.Table, Rows: undo.Rows,
 		}
-		if err := session.ApplyChanges(context.Background(), undo.Changes); err != nil {
+		ctx := context.Background()
+		err := beginManualTransaction(ctx, session, autocommit, "")
+		if err == nil {
+			err = session.ApplyChanges(ctx, undo.Changes)
+		}
+		if err != nil {
 			answered.Problem = db.DescribeError(err)
 		}
 		return answered

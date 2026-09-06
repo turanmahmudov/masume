@@ -1,5 +1,4 @@
-// Package mcp gives an agent the same profiles and the same reads over the Model Context
-// Protocol. Only the protocol writes to standard output.
+// Package mcp provides database tools through the Model Context Protocol. stdout is reserved for protocol messages.
 package mcp
 
 import (
@@ -9,8 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/statement"
 )
 
-// The access level of an agent, resolved in one place. The allowlist decides first, the
-// profile sets its own level, and the access mode of the profile limits both.
+// MCP access combines the profile allowlist, global access, profile access, and read-only mode.
 
 // riskNeeds gives the lowest level that allows a statement of each risk.
 var riskNeeds = map[statement.WriteRisk]cfg.McpAccess{
@@ -20,9 +18,7 @@ var riskNeeds = map[statement.WriteRisk]cfg.McpAccess{
 	statement.RiskEveryRow: cfg.McpFull,
 }
 
-// ResolveProfileAccess returns the access level of this profile. A profile that is not in
-// the file is closed. A profile can lower the `[mcp]` level and never raise it. A read-only
-// profile stays read-only, whatever the settings are.
+// ResolveProfileAccess returns the lowest applicable access level. Profiles outside the allowlist have no MCP access.
 func ResolveProfileAccess(config cfg.McpConfig, profile cfg.Profile) cfg.McpAccess {
 	if !namesProfile(config, profile.Name) {
 		return cfg.McpOff
@@ -42,43 +38,40 @@ func namesProfile(config cfg.McpConfig, name string) bool {
 	return slices.Contains(config.Profiles, name)
 }
 
-// FindAccessRefusal returns an empty string if the statement can run, and the error message
-// if it cannot.
+// FindAccessRefusal returns an access error or an empty string when allowed.
 func FindAccessRefusal(access cfg.McpAccess, risk statement.WriteRisk) string {
 	needed := riskNeeds[risk]
 	if cfg.ResolveLowerAccess(access, needed) == needed {
 		return ""
 	}
-	return "this connection is open to MCP as " + string(access) +
-		", and the statement " + statement.DescribeRisk(risk, 1) +
-		"; only " + string(needed) + " or above may run it"
+	return "MCP access is " + string(access) +
+		"; the statement " + statement.DescribeRisk(risk, 1) +
+		" and requires " + string(needed) + " access or higher"
 }
 
-// FindClosedReason returns the reason this profile is closed to an agent, or an empty string
-// if it is open. Three settings can close it, so the message names the correct one.
+// FindClosedReason returns the setting that disables MCP access, or an empty string when enabled.
 func FindClosedReason(config cfg.McpConfig, profile cfg.Profile) string {
 	if !namesProfile(config, profile.Name) {
-		return `"` + profile.Name + `" is not open to MCP; name it under [mcp] profiles ` +
+		return `"` + profile.Name + `" is not enabled for MCP; add it under [mcp] profiles ` +
 			"in the config file"
 	}
 	if profile.McpAccess == cfg.McpOff {
-		return `"` + profile.Name + `" sets mcp = "off" on the profile; raise it to ` +
-			"read-only or above"
+		return `"` + profile.Name + `" has mcp = "off"; MCP access requires ` +
+			"read-only or higher"
 	}
 	if config.Access == cfg.McpOff {
-		return `[mcp] access is "off", so no profile is open; raise it to read-only or above`
+		return `[mcp] access is "off"; MCP access requires read-only or higher`
 	}
 	return ""
 }
 
-// DescribeNoOpenProfiles returns the reason no profile is open. A missing name under
-// `profiles` is not the only reason.
+// DescribeNoOpenProfiles describes disabled or unavailable MCP profiles.
 func DescribeNoOpenProfiles(config cfg.McpConfig) string {
 	if len(config.Profiles) == 0 {
-		return "no profile is open to MCP; name one under [mcp] profiles in the config file"
+		return "no profiles are enabled for MCP; add a profile under [mcp] profiles in the config file"
 	}
 	if config.Access == cfg.McpOff {
-		return `[mcp] access is "off", so no profile is open; raise it to read-only or above`
+		return `[mcp] access is "off"; MCP access requires read-only or higher`
 	}
-	return `every profile named under [mcp] profiles sets mcp = "off" of its own`
+	return `no listed MCP profiles are available; check profile names and profile mcp settings`
 }

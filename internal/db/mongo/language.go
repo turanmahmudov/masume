@@ -482,14 +482,13 @@ func resolveCommandPipelineRisk(document bson.D) (statement.WriteRisk, bool) {
 	return statement.RiskWrite, true
 }
 
-// isEmptyFilter is true for a filter that names nothing, which matches every document.
+// isEmptyFilter is true for empty text or an empty object filter.
 func isEmptyFilter(written string) bool {
 	trimmed := strings.TrimSpace(written)
 	return trimmed == "" || trimmed == "{}"
 }
 
-// HoldsRowLimit is true for a statement that bounds its own result: a `limit` call, or a
-// `findOne`, which returns one document by its name.
+// HoldsRowLimit is true for a limit modifier or findOne call.
 func (mongoLanguage) HoldsRowLimit(text string) bool {
 	parsed, _, ok := ParseStatement(text)
 	if !ok {
@@ -502,8 +501,7 @@ func (mongoLanguage) HoldsRowLimit(text string) bool {
 	return held
 }
 
-// ChangesCatalog is true where the call adds, removes or renames something the tree
-// draws.
+// ChangesCatalog is true for calls that change catalog objects.
 func (mongoLanguage) ChangesCatalog(text string) bool {
 	parsed, _, ok := ParseStatement(text)
 	return ok && catalogMethods[parsed.ReadMethod()]
@@ -515,8 +513,7 @@ func (mongoLanguage) CanExplain(text string) bool {
 	return ok && explainMethods[parsed.ReadMethod()]
 }
 
-// FindLocalDiagnostics returns the faults the client can find without the server: a
-// statement it cannot read, a call it does not know, and an argument that is no value.
+// FindLocalDiagnostics returns syntax errors, unsupported calls, and invalid arguments without a server connection.
 func (held mongoLanguage) FindLocalDiagnostics(
 	text string, _ editor.SchemaKnowledge,
 ) []editor.Diagnostic {
@@ -541,7 +538,7 @@ func findCallProblems(parsed Statement, offset int) []editor.Diagnostic {
 	for _, call := range parsed.Calls {
 		if !knownMethods[call.Name] {
 			problems = append(problems, editor.Diagnostic{
-				Message: call.Name + " is not a call this client knows",
+				Message: "unsupported call: " + call.Name,
 				Start:   offset + call.Start, End: offset + call.End,
 			})
 			continue
@@ -549,7 +546,7 @@ func findCallProblems(parsed Statement, offset int) []editor.Diagnostic {
 		for _, argument := range call.Args {
 			if _, err := ReadValue(argument); err != nil {
 				problems = append(problems, editor.Diagnostic{
-					Message: "the argument of " + call.Name + " is no value: " + err.Error(),
+					Message: "invalid argument for " + call.Name + ": " + err.Error(),
 					Start:   offset + call.Start, End: offset + call.End,
 				})
 				break

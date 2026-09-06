@@ -14,8 +14,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 )
 
-// Turns a theme file into a theme. A file names colours, points one name at another, styles
-// a highlight and inherits the rest. Nothing here draws.
+// Theme files contain colours, colour references, syntax styles, and inherited settings.
 
 //go:embed themes/*.toml
 var shippedThemes embed.FS
@@ -66,7 +65,7 @@ func NewThemeRegistry() *ThemeRegistry {
 	entries, err := shippedThemes.ReadDir("themes")
 	if err != nil {
 		registry.builtInProblems = append(registry.builtInProblems,
-			fmt.Sprintf("the themes the app ships did not read: %v", err))
+			fmt.Sprintf("cannot read built-in themes: %v", err))
 		return registry
 	}
 
@@ -128,7 +127,7 @@ func (registry *ThemeRegistry) RegisterDocuments(added []cfg.ThemeDocument) []st
 	for _, document := range added {
 		if document.Name == SystemThemeName {
 			problems = append(problems, fmt.Sprintf(
-				"theme %q follows the terminal and cannot be written", SystemThemeName))
+				"theme %q follows the terminal and cannot be replaced by a file", SystemThemeName))
 			continue
 		}
 		registry.keep(document)
@@ -161,14 +160,14 @@ func (registry *ThemeRegistry) collectChain(name string) ([]cfg.ThemeDocument, [
 	for next != "" && len(chain) < chainLimit {
 		if seen[next] {
 			problems = append(problems, fmt.Sprintf(
-				"theme %q extends itself, so the chain stops there", next))
+				"theme %q has an inheritance loop; inheritance stops here", next))
 			break
 		}
 		seen[next] = true
 		document, known := registry.documents[next]
 		if !known {
 			problems = append(problems, fmt.Sprintf(
-				"there is no theme called %q", next))
+				"unknown theme: %q", next))
 			break
 		}
 		chain = append(chain, document)
@@ -303,7 +302,7 @@ func resolveWrittenColors(merged mergedTheme) (colorsDraft, []string) {
 		if !present {
 			if !derivedColors[entry.written] {
 				problems = append(problems, fmt.Sprintf(
-					"theme %q names no %s", merged.name, entry.written))
+					"theme %q is missing colour %s", merged.name, entry.written))
 				*entry.read(&draft.ThemeColors) = lipgloss.Color(missingColor)
 			}
 			continue
@@ -311,7 +310,7 @@ func resolveWrittenColors(merged mergedTheme) (colorsDraft, []string) {
 		resolved := resolveColorValue(written, merged.ThemeTables, map[string]bool{})
 		if resolved == "" {
 			problems = append(problems, fmt.Sprintf(
-				"%s of theme %q is %q, which is neither a hex colour nor a name it gives",
+				"%s in theme %q has an invalid colour value or reference: %q",
 				entry.written, merged.name, written))
 			resolved = missingColor
 		}
@@ -362,7 +361,7 @@ func flattenRule(
 	}
 	if seen[rule.Link] || len(seen) >= chainLimit {
 		problem := fmt.Sprintf(
-			"highlight %q links back to itself, so the link is dropped", kind)
+			"highlight %q has a link loop or exceeds the link limit; the link is ignored", kind)
 		rule.Link, rule.HasLink = "", false
 		return rule, []string{problem}
 	}
@@ -387,13 +386,13 @@ func resolveHighlight(
 			return resolved, true
 		}
 		problems = append(problems, fmt.Sprintf(
-			"the %s of highlight %q is %q, which names no colour", part, kind, written))
+			"invalid %s colour for highlight %q: %q", part, kind, written))
 		return nil, false
 	}
 
 	style := HighlightStyle{Bold: rule.Bold, Italic: rule.Italic, Underline: rule.Underline}
-	style.Foreground, style.HasForeground = readColor(rule.Foreground, rule.HasForeground, "colour")
-	style.Background, style.HasBackground = readColor(rule.Background, rule.HasBackground, "ground")
+	style.Foreground, style.HasForeground = readColor(rule.Foreground, rule.HasForeground, "foreground")
+	style.Background, style.HasBackground = readColor(rule.Background, rule.HasBackground, "background")
 	return style, problems
 }
 

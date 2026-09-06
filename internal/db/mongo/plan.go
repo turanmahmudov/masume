@@ -10,18 +10,15 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 )
 
-// The plan of a statement. The server explains a read only, and returns a tree of
-// stages: the planner alone, or the planner with what each stage did when it ran.
+// Query plans include stage trees, with optional execution measurements.
 
-// planDetailFields are the fields of a stage that say what it did, in the order the
-// detail names them. Every other field is a counter the tree already shows.
+// planDetailFields is the ordered list of stage details displayed beside counters.
 var planDetailFields = []string{
 	"indexName", "keyPattern", "direction", "sortPattern", "filter", "indexBounds",
 	"transformBy", "keysExamined", "docsExamined",
 }
 
-// ExplainQuery returns the plan of a read. A write is refused, because the server plans
-// no statement that changes a document.
+// ExplainQuery returns a read plan. The client rejects unsupported calls.
 func (session *mongoSession) ExplainQuery(
 	ctx context.Context, written string, analyze bool,
 ) (db.QueryPlan, error) {
@@ -53,7 +50,7 @@ func verbosityOf(analyze bool) string {
 // buildExplainCommand writes the command that asks the server to explain this statement.
 func buildExplainCommand(parsed Statement, analyze bool) (bson.D, error) {
 	if parsed.Collection == "" {
-		return nil, newSyntaxError("only a read of a collection is planned")
+		return nil, newSyntaxError("query plans require a collection read")
 	}
 	inner, err := buildExplainedCall(parsed)
 	if err != nil {
@@ -107,7 +104,7 @@ func buildExplainedCall(parsed Statement) (bson.D, error) {
 			{Key: "key", Value: field}, {Key: "query", Value: filter},
 		}, nil
 	}
-	return nil, newSyntaxError("the server does not plan " + call.Name)
+	return nil, newSyntaxError("query plans are unsupported for " + call.Name)
 }
 
 // buildExplainedFind writes a find as the command form the explain takes.
@@ -215,8 +212,7 @@ func readPipelineStage(value any) db.PlanNode {
 	return node
 }
 
-// takeChildTime leaves a stage with the time it took on its own, which is what is left
-// of it after the stages under it.
+// takeChildTime subtracts child execution time from a stage total.
 func takeChildTime(node db.PlanNode) db.PlanNode {
 	node.SelfMs = node.TotalMs - sumChildTime(node.Children)
 	if node.SelfMs < 0 {
@@ -295,7 +291,7 @@ func readStageName(stage bson.D) string {
 	return "stage"
 }
 
-// buildStageDetail writes what a stage says about the way it works.
+// buildStageDetail formats the selected stage details.
 func buildStageDetail(stage bson.D) string {
 	written := []string{}
 	for _, name := range planDetailFields {

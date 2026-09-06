@@ -50,7 +50,7 @@ func TestNoUserTransactionsRefuseToOpen(t *testing.T) {
 			t.Errorf("%s does not read as a database error: %v", held.name, err)
 		}
 		if described := db.DescribeError(err); described !=
-			"this server does not hold a transaction the user drives" {
+			"this server does not support user-managed transactions" {
 			t.Errorf("%s describes as %q", held.name, described)
 		}
 	}
@@ -71,7 +71,7 @@ func TestNoServerSessionsRefuseEveryCall(t *testing.T) {
 				t.Errorf("activity answered %v", activity)
 			}
 			return err
-		}, "this server does not list its sessions"},
+		}, "this server does not list sessions"},
 		{"cancel of another session", func() error {
 			stopped, err := admin.CancelBackend(ctx, 1, false)
 			if stopped {

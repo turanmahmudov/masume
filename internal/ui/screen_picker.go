@@ -276,7 +276,7 @@ func (model *Model) renderPicker() string {
 	}
 	if model.connections.count() > 0 {
 		lines = append(lines, model.styles.Muted().Render(
-			model.icons.Icon(cfg.IconDot)+" already open · Esc goes back to it"))
+			model.icons.Icon(cfg.IconDot)+" already open · Esc returns to the workspace"))
 	}
 
 	return model.renderCard(" connections ", cardWidth, lines, plainCard)
@@ -359,11 +359,7 @@ type FieldLook struct {
 	KeepsPlaceholder bool
 }
 
-// renderDraftRows draws a draft that runs over several lines, one string per row of the field.
-// A field is one row of a card, so a renderer that answered one string with a line break in it
-// would put every line after the first outside the card. The rows follow the caret, so the line
-// being typed is always among them, and each row is filled out to the width on the ground of the
-// field.
+// renderDraftRows draws a multiline field and keeps the caret visible.
 func (model *Model) renderDraftRows(
 	buffer *app.EditorBuffer, width, rows int, look FieldLook,
 ) []string {

@@ -72,12 +72,15 @@ func (model *Model) readWorkspaceKey(key tea.Key) (next tea.Model, command tea.C
 		case app.PaneSidebar:
 			scopes = append(scopes, cfg.ScopeTree)
 		case app.PaneResult:
-			switch tab.ActiveView(connection.Session) {
+			switch view := tab.ActiveView(connection.Session); view {
 			case app.ViewPlan:
-				scopes = append(scopes, cfg.ScopePlan)
+				scopes = append(scopes, cfg.ScopeList, cfg.ScopePlan)
 			case app.ViewTree:
-				scopes = append(scopes, cfg.ScopeDocument)
+				scopes = append(scopes, cfg.ScopeDocument, cfg.ScopeList)
 			default:
+				if view != app.ViewData {
+					scopes = append(scopes, cfg.ScopeList)
+				}
 				scopes = append(scopes, cfg.ScopeGrid)
 			}
 		}
@@ -85,7 +88,7 @@ func (model *Model) readWorkspaceKey(key tea.Key) (next tea.Model, command tea.C
 
 	// A key with no modifier that types a character belongs to the editor while the
 	// caret is in it, so a full stop writes a full stop and does not step a statement.
-	if typesInEditor && typesCharacter(key) {
+	if typesInEditor && typesCharacter(key) && !model.keymap.Pending() {
 		return model.readEditorKey(connection, tab, key)
 	}
 	// The completion list owns the keys that work it, so Tab takes a candidate rather
@@ -93,26 +96,16 @@ func (model *Model) readWorkspaceKey(key tea.Key) (next tea.Model, command tea.C
 	if typesInEditor && ownsCompletionKey(tab, key) {
 		return model.readEditorKey(connection, tab, key)
 	}
-	// A view of the result that is not the grid holds no cursor: it scrolls with the keys
-	// of a list, which is what its hint offers.
-	// The tree holds a cursor of its own, so it takes the keys that move one before the
-	// rows of a list are scrolled under it.
-	if tab.Focus == app.PaneResult && !typesInEditor &&
-		tab.ActiveView(connection.Session) == app.ViewTree {
-		if match, matched := model.keymap.Match(key, cfg.ScopeDocument); matched {
+
+	match, matched := model.keymap.MatchExcept(key, []ActionID{ActionChooseRow}, scopes...)
+	if matched {
+		switch match.Scope {
+		case cfg.ScopeDocument:
 			return model.runDocumentTreeAction(connection, tab, match)
-		}
-	}
-	if tab.Focus == app.PaneResult && !typesInEditor &&
-		tab.ActiveView(connection.Session) != app.ViewData {
-		if match, matched := model.keymap.Match(key, cfg.ScopeList); matched &&
-			scrollDetailView(tab, match) {
+		case cfg.ScopeList:
+			scrollDetailView(tab, match)
 			return model, nil
 		}
-	}
-
-	match, matched := model.keymap.Match(key, scopes...)
-	if matched {
 		next, command := model.runAction(connection, tab, match)
 		// A restored tab reads what it describes the first time it is shown.
 		if _, read := model.readWhenShown(connection); read != nil {
@@ -256,7 +249,7 @@ func (model *Model) runGlobalAction(
 		return model.requestCloseTab(connection)
 	case ActionReopenTab:
 		if !connection.ReopenTab() {
-			connection.Show("no tab was closed yet")
+			connection.Show("no closed tab to reopen")
 		}
 	case ActionPreviousTab:
 		connection.StepTab(-1)
@@ -473,10 +466,10 @@ func (model *Model) requestCloseTab(connection *app.Connection) (tea.Model, tea.
 	connection.Overlay = app.Overlay{
 		Kind:  app.OverlayChoice,
 		Title: " close tab ",
-		Body:  "This tab holds " + present.DescribeStagedChanges(staged) + ".",
+		Body:  "This tab has " + present.DescribeStagedChanges(staged) + ".",
 		Choices: []app.Choice{
 			{Key: "r",
-				ID: "apply", Label: "run and close",
+				ID: "apply", Label: "apply and close",
 				Detail: "applies " + one + ", then closes the tab"},
 			{Key: "d",
 				ID: "discard", Label: "discard and close",
@@ -531,7 +524,7 @@ func (model *Model) requestCloseConnection(connection *app.Connection) (tea.Mode
 	question := " Close the connection and every tab?"
 	if staged > 0 {
 		body += holds + present.DescribeStagedChanges(staged) + "."
-		question = " Close the connection? Every tab closes, and the staged changes go."
+		question = " Close the connection? All tabs will close and all staged changes will be discarded."
 	}
 	connection.Overlay = app.Overlay{
 		Kind:  app.OverlayConfirm,
@@ -623,7 +616,7 @@ func (model *Model) revealSQL(
 	if !tab.EditorVisible() {
 		opened := connection.OpenQueryTab(tab.EffectiveSQL(connection.Session))
 		opened.Focus = app.PaneEditor
-		connection.Show("the read is now a query in the editor")
+		connection.Show("the query is open in the editor")
 		return model, nil
 	}
 
@@ -782,7 +775,7 @@ func (model *Model) stepEditorAction(
 	case ActionCommentLines:
 		mark := connection.Session.Language().LineComment()
 		if mark == "" {
-			connection.Show("this server has no comment mark")
+			connection.Show("line comments are not available for this query language")
 			return model, nil
 		}
 		if !buffer.CommentLines(mark) {
@@ -822,7 +815,7 @@ func (model *Model) startFinding(
 	// Replace writes over the matches of the term the reader last looked for, so without one
 	// there is nothing to replace. Saying so here saves them typing a replacement first.
 	if kind == app.PromptReplace && tab.Find.Term == "" {
-		connection.Show("find something in the statement first")
+		connection.Show("enter search text first")
 		return model, nil
 	}
 
@@ -851,7 +844,7 @@ func (model *Model) turnFindIntoReplace(
 ) (tea.Model, tea.Cmd) {
 	term := overlay.Draft.Text
 	if term == "" {
-		connection.Show("type what to find first")
+		connection.Show("enter search text first")
 		return model, nil
 	}
 	tab.Find.Term = term
@@ -866,7 +859,7 @@ func (model *Model) stepMatch(
 ) (tea.Model, tea.Cmd) {
 	term := tab.Find.Term
 	if term == "" {
-		connection.Show("type what to find first")
+		connection.Show("enter search text first")
 		return model, nil
 	}
 	found := tab.Editor.FindMatches(term)
@@ -928,7 +921,7 @@ func (model *Model) stepProblem(
 ) (tea.Model, tea.Cmd) {
 	faults := model.findDiagnostics(connection, tab)
 	if len(faults) == 0 {
-		connection.Show("the statement reports no problem")
+		connection.Show("no query problems found")
 		return model, nil
 	}
 	at := 0
@@ -959,7 +952,7 @@ func (model *Model) resolveEditorPageRows() int {
 // undoEdit takes back the last edit of the buffer.
 func (model *Model) undoEdit(connection *app.Connection, tab *app.Tab) tea.Cmd {
 	if !tab.Editor.Undo() {
-		connection.Show("there is nothing more to undo")
+		connection.Show("no more editor changes to undo")
 		return nil
 	}
 	return model.reportEdit(connection, tab)
@@ -968,7 +961,7 @@ func (model *Model) undoEdit(connection *app.Connection, tab *app.Tab) tea.Cmd {
 // redoEdit writes the edit that was taken back again.
 func (model *Model) redoEdit(connection *app.Connection, tab *app.Tab) tea.Cmd {
 	if !tab.Editor.Redo() {
-		connection.Show("there is nothing more to redo")
+		connection.Show("no more editor changes to redo")
 		return nil
 	}
 	return model.reportEdit(connection, tab)
@@ -978,7 +971,7 @@ func (model *Model) redoEdit(connection *app.Connection, tab *app.Tab) tea.Cmd {
 // system clipboard, and a paste it makes arrives as a paste of its own.
 func (model *Model) pasteIntoEditor(connection *app.Connection, tab *app.Tab) tea.Cmd {
 	if model.clipboard == "" {
-		connection.Show("nothing was copied in this client yet; use the paste key of the terminal")
+		connection.Show("no text copied in this client; use the terminal's paste key")
 		return nil
 	}
 	tab.Editor.Insert(model.clipboard)
@@ -1316,13 +1309,13 @@ func (model *Model) requestDiscardChanges(
 ) (tea.Model, tea.Cmd) {
 	staged := core.CountChanges(tab.Pending)
 	if staged == 0 {
-		connection.Show("nothing is staged")
+		connection.Show("no staged changes")
 		return model, nil
 	}
 	connection.Overlay = app.Overlay{
 		Kind:  app.OverlayConfirm,
 		Title: " discard changes ",
-		Body:  "Throw away " + present.DescribeStagedChanges(staged) + "?",
+		Body:  "Discard " + present.DescribeStagedChanges(staged) + "?",
 		Answers: app.OverlayAnswers{Answer: func(confirmed bool) app.AnswerCommand {
 			if !confirmed {
 				return nil

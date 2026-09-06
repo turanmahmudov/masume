@@ -1,7 +1,4 @@
-// Package detect finds the databases that run in containers on this machine, so the client
-// opens one without a profile in the config file and without a URL to type.
-//
-// The container tool is asked and its answer is read. Nothing here connects to a database.
+// Package detect finds local database containers through Docker or Podman without opening database connections.
 package detect
 
 import (
@@ -22,18 +19,16 @@ import (
 // scanTimeout is the time the container tool has to answer.
 const scanTimeout = 10 * time.Second
 
-// containerTools are the tools that are asked, in this order.
+// containerTools are the container tools in search order.
 var containerTools = []string{"docker", "podman"}
 
 // localHost is the address of a container that publishes a port on every interface.
 const localHost = "127.0.0.1"
 
-// everyInterface are the addresses a published port carries when it is bound to all of them.
+// everyInterface is the set of wildcard addresses for published ports.
 var everyInterface = []string{"", "0.0.0.0", "::", "[::]"}
 
-// imageEngines give the engine of an image, by a part of its name. The list is read in
-// order, so an image of a server that is built on another one is matched first:
-// `supabase/postgres` and `timescale/timescaledb` both hold `postgres`.
+// imageEngines is the ordered set of image names and database engines.
 var imageEngines = []struct {
 	part   string
 	engine core.Engine
@@ -53,7 +48,7 @@ var imageEngines = []struct {
 	{"pgvector", core.EnginePostgres},
 }
 
-// container is the part of the answer of the container tool that this package reads.
+// container is the supported subset of a container inspection response.
 type container struct {
 	Name   string
 	Config struct {
@@ -77,17 +72,17 @@ func findContainerTool() (string, error) {
 		}
 	}
 	return "", errors.New(
-		"neither docker nor podman is on the path, so no container can be read")
+		"container detection requires docker or podman on PATH")
 }
 
-// runTool runs one command of the container tool and returns what it wrote.
+// runTool runs a container command and returns its output.
 func runTool(ctx context.Context, tool string, arguments ...string) ([]byte, error) {
 	command := exec.CommandContext(ctx, tool, arguments...)
 	command.Stdin = nil
 	written, err := command.Output()
 
 	if ctx.Err() != nil {
-		return nil, fmt.Errorf("%s %s did not answer within %.0fs",
+		return nil, fmt.Errorf("%s %s exceeded the %.0fs time limit",
 			tool, arguments[0], scanTimeout.Seconds())
 	}
 	if reported, is := errors.AsType[*exec.ExitError](err); is {
@@ -96,7 +91,7 @@ func runTool(ctx context.Context, tool string, arguments ...string) ([]byte, err
 			said = line
 		}
 		if said == "" {
-			said = fmt.Sprintf("code %d", reported.ExitCode())
+			said = fmt.Sprintf("exit code %d", reported.ExitCode())
 		}
 		return nil, fmt.Errorf("%s %s failed: %s", tool, arguments[0], said)
 	}
@@ -106,8 +101,7 @@ func runTool(ctx context.Context, tool string, arguments ...string) ([]byte, err
 	return written, nil
 }
 
-// readInspectedContainers returns the containers that run on this machine, as the tool
-// describes them.
+// readInspectedContainers returns inspection output for running containers.
 func readInspectedContainers(ctx context.Context, tool string) ([]byte, error) {
 	listed, err := runTool(ctx, tool, "ps", "--quiet", "--no-trunc")
 	if err != nil {
@@ -121,8 +115,7 @@ func readInspectedContainers(ctx context.Context, tool string) ([]byte, error) {
 	return runTool(ctx, tool, append([]string{"inspect"}, identifiers...)...)
 }
 
-// findImageEngine returns the engine of an image. The tag and the registry are cut first,
-// so `ghcr.io/org/postgres:18-alpine` is read as `org/postgres`.
+// findImageEngine matches the image organization and repository without the registry, tag, or digest.
 func findImageEngine(image string) (core.Engine, bool) {
 	name := strings.ToLower(image)
 	if at := strings.LastIndex(name, "@"); at != -1 {
@@ -131,8 +124,7 @@ func findImageEngine(image string) (core.Engine, bool) {
 	if at := strings.LastIndex(name, ":"); at > strings.LastIndex(name, "/") {
 		name = name[:at]
 	}
-	// Matching anywhere in the name would take `mongo-express`, a web page for a MongoDB
-	// server, and `mysql-workbench`, a client.
+	// Client images such as mongo-express and mysql-workbench are excluded.
 	repository, organisation := name, ""
 	if at := strings.LastIndex(repository, "/"); at != -1 {
 		organisation, repository = repository[:at], repository[at+1:]
@@ -159,11 +151,10 @@ var imageOrganisations = map[string]core.Engine{
 	"cockroachdb": core.EngineCockroach,
 }
 
-// imageVariants are the marks a server puts after its own name, so `postgres-alpine` and
-// `timescaledb-ha` are the server and `mongo-express` is not.
+// imageVariants are the supported database image suffixes.
 var imageVariants = []string{"-alpine", "-ha", "-server", "-community-server", "-ee", "-ce"}
 
-// holdsImageVariant is true where the repository is the server under a variant name.
+// holdsImageVariant is true for a supported database image variant.
 func holdsImageVariant(repository, part string) bool {
 	rest, cut := strings.CutPrefix(repository, part)
 	if !cut || rest == "" {
@@ -182,7 +173,7 @@ func findPublishedPort(held container, containerPort int) (string, int, bool) {
 	if !mapped {
 		return "", 0, false
 	}
-	// A port published on both stacks is listed twice, so the IPv4 binding is taken first.
+	// A loopback or wildcard binding takes priority over other addresses.
 	fallbackHost, fallbackPort, hasFallback := "", 0, false
 	for _, binding := range published {
 		port, err := strconv.Atoi(binding.HostPort)
@@ -282,8 +273,7 @@ func applyMongoEnvironment(profile *cfg.Profile, environment map[string]string) 
 	}
 }
 
-// resolveContainerSSLMode returns the SSL mode of a container, which listens without TLS
-// where the hosted service of the same engine does not.
+// resolveContainerSSLMode permits non-TLS connections for local containers.
 func resolveContainerSSLMode(engine core.Engine) core.SSLMode {
 	mode := core.ResolveEngineInfo(engine).DefaultSSLMode
 	switch core.ResolveSSLPolicy(mode) {
@@ -303,8 +293,7 @@ func describeContainer(held container, name string) string {
 	return said
 }
 
-// buildContainerProfile returns the connection to the database of the container, and false
-// for a container that holds no database this client opens or publishes no port for it.
+// buildContainerProfile returns a profile for a supported database container with a published port.
 func buildContainerProfile(held container) (cfg.Profile, bool) {
 	engine, known := findImageEngine(held.Config.Image)
 	if !known {
@@ -355,7 +344,7 @@ func BuildProfilesFromInspection(written []byte) ([]cfg.Profile, error) {
 
 	containers := []container{}
 	if err := json.Unmarshal(written, &containers); err != nil {
-		return nil, fmt.Errorf("the container tool wrote no JSON this client reads: %w", err)
+		return nil, fmt.Errorf("invalid container inspection JSON: %w", err)
 	}
 
 	for _, held := range containers {

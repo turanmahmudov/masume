@@ -9,20 +9,19 @@ import (
 	"github.com/turanmahmudov/masume/internal/detect"
 )
 
-// Reads what the command was given: a connection target, or the name of a profile of the
-// config file. The client opens that connection as it starts.
+// Startup arguments select a connection target or a configured profile.
 
 // databaseURLVariable is read when the command is given no target of its own.
 const databaseURLVariable = "DATABASE_URL"
 
-// argumentError is a mistake in what the command was given. It exits with 2.
+// argumentError is an invalid argument. The exit code is 2.
 type argumentError struct{ reason string }
 
 func (err argumentError) Error() string { return err.reason }
 
 func failArgument(reason string) error { return argumentError{reason: reason} }
 
-// invocation is what the command line asked for.
+// invocation is the parsed startup request.
 type invocation struct {
 	target      string
 	profileName string
@@ -37,43 +36,42 @@ func parseArguments(argv []string) (invocation, error) {
 		switch {
 		case argument == "--profile" || argument == "-p":
 			if at+1 >= len(argv) || strings.HasPrefix(argv[at+1], "-") {
-				return invocation{}, failArgument(argument + " needs the name of a profile")
+				return invocation{}, failArgument(argument + " requires a profile name")
 			}
 			at++
 			held.profileName = argv[at]
 		case strings.HasPrefix(argument, "--profile="):
 			held.profileName = strings.TrimPrefix(argument, "--profile=")
 			if held.profileName == "" {
-				return invocation{}, failArgument("--profile= names no profile")
+				return invocation{}, failArgument("--profile requires a profile name")
 			}
 		case argument == "--detect":
 			held.detect = true
 		case strings.HasPrefix(argument, "-"):
 			return invocation{}, failArgument(
-				argument + " is not an argument this command reads")
+				"unknown option: " + argument)
 		case strings.TrimSpace(argument) == "":
-			return invocation{}, failArgument("an argument of this command cannot be empty")
+			return invocation{}, failArgument("arguments cannot be empty")
 		default:
 			if held.target != "" {
 				return invocation{}, failArgument(
-					"this command opens one connection, and " + argument + " is a second")
+					"only one connection target is allowed; extra target: " + argument)
 			}
 			held.target = argument
 		}
 	}
 	if held.target != "" && held.profileName != "" {
 		return invocation{}, failArgument(
-			"--profile and a connection target are two ways to name one connection")
+			"use either --profile or a connection target, not both")
 	}
 	if held.detect && (held.target != "" || held.profileName != "") {
 		return invocation{}, failArgument(
-			"--detect finds the connections itself, so it takes no connection to open")
+			"--detect cannot be combined with --profile or a connection target")
 	}
 	return held, nil
 }
 
-// resolveStartProfile returns the profiles the picker lists and the one the client opens as
-// it starts. A target of the command line is added to the list.
+// resolveStartProfile returns the available profiles and the startup profile, including any command-line target.
 func resolveStartProfile(
 	held invocation, profiles []cfg.Profile, environment func(string) string,
 ) ([]cfg.Profile, *cfg.Profile, error) {
@@ -89,7 +87,7 @@ func resolveStartProfile(
 		}
 		return nil, nil, failArgument(
 			"profile " + held.profileName +
-				" is not one the config file or the project file has")
+				" was not found in the config or project file")
 	}
 
 	target := held.target
@@ -108,18 +106,17 @@ func resolveStartProfile(
 	return append([]cfg.Profile{built}, profiles...), &built, nil
 }
 
-// readEnvironment is the source resolveStartProfile reads outside the tests.
+// readEnvironment reads a process environment variable.
 func readEnvironment(name string) string { return os.Getenv(name) }
 
-// listDetectedProfiles returns the databases of the containers of this machine, before the
-// profiles of the config file.
+// listDetectedProfiles returns detected container databases before configured profiles.
 func listDetectedProfiles(profiles []cfg.Profile) ([]cfg.Profile, error) {
 	found, err := detect.BuildContainerProfiles()
 	if err != nil {
 		return nil, err
 	}
 	if len(found) == 0 {
-		return nil, errors.New("no database runs in a container on this machine")
+		return nil, errors.New("no container databases detected on this machine")
 	}
 
 	listed := []cfg.Profile{}

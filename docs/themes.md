@@ -1,19 +1,21 @@
 # Themes
 
-Press `Alt+O` then `T` to see the built-in themes and select one. There are seventeen.
+`Alt+O`, then lowercase `t`, opens the theme picker. The picker includes seventeen built-in themes, custom themes, and `System`.
+
+Selecting a theme applies the theme and saves `[ui] theme` in the user configuration file. A save error appears in the client. [Usage](usage.md) covers the client controls.
 
 Dark: Ayu Dark, Tokyo Night, Catppuccin Mocha, Gruvbox Dark, Dracula, Nord, One Dark, Monokai, GitHub Dark, Rosé Pine, Solarized Dark.
 
 Light: Catppuccin Latte, GitHub Light, One Light, Gruvbox Light, Solarized Light, Rosé Pine Dawn.
 
-To set one in the config instead:
+The same setting is available in the configuration file:
 
 ```toml
 [ui]
 theme = "tokyonight"
 ```
 
-The name is the file name without `.toml`. Ayu Dark is the base theme. Every other theme inherits from it the keys it does not define.
+The theme name is the file name without `.toml`. Ayu Dark is the default theme and the fallback parent.
 
 ## Using the terminal colours
 
@@ -22,13 +24,13 @@ The name is the file name without `.toml`. Ayu Dark is the base theme. Every oth
 theme = "system"
 ```
 
-masume uses the colours of the terminal: the background, the foreground and the sixteen palette colours.
+masume uses the terminal background, foreground and sixteen palette colours.
 
-It keeps them in sync. If you change the terminal theme while masume is running, masume updates within about two seconds.
+masume checks terminal colours about every two seconds. Colour updates require terminal support for colour queries.
 
 ## A custom theme
 
-A custom theme is a TOML file in `$XDG_CONFIG_HOME/masume/themes/`. The file name without `.toml` is the name you set under `[ui]`. A file with the same name as a built-in theme replaces that theme.
+A custom theme is a TOML file in `$XDG_CONFIG_HOME/masume/themes/`, normally `~/.config/masume/themes/`. The file name without `.toml` is the `[ui] theme` value. A custom file with a built-in name replaces that theme. `system` is reserved; masume reports and ignores `system.toml`.
 
 ```toml
 title = "My Theme"
@@ -47,9 +49,11 @@ text         = "ink"
 accent       = "blue"
 ```
 
-`title` is the name shown in the picker. `appearance` is `dark` or `light`. `extends` copies every colour of a built-in theme first. The file then defines only what it changes.
+`title` is the picker title, with the file name as the default. `appearance` is `dark` or `light`. An absent appearance inherits from the parent, with `dark` as the final fallback.
 
-`[palette]` holds named colours for reuse. A colour can refer to a palette entry or to another colour by name: `border_focus = "blue"` or `border_focus = "accent"`. A palette entry must be a hex value, not a name.
+`extends` is the parent theme name. The parent can be a built-in or custom theme, but not `system`. An absent parent uses `ayu-dark`, except in `ayu-dark` itself. Child values override inherited palette entries, colours and syntax properties. Missing parents and inheritance cycles produce reports. The inheritance chain includes at most eight themes.
+
+`[palette]` contains named hex colours. Palette values cannot reference other names. A colour can reference a palette entry or another colour, such as `border_focus = "blue"` or `border_focus = "accent"`.
 
 ## The colour names
 
@@ -61,28 +65,28 @@ accent       = "blue"
 | `zebra` | Every second row of the grid |
 | `border` | A pane border |
 | `border_focus` | The border of the focused pane |
-| `selection` | A selected row or a drag selection. Mixed from `panel` and `text` if not set |
+| `selection` | A selected row or drag selection. Derived from `panel` and `text` when absent from the resolved theme |
 | `text` | Normal text |
 | `muted` | A hint or a label |
 | `faint` | A line number or a separator line |
 | `accent` | The main highlight |
 | `accent_alt` | A second highlight |
 | `accent_warm` | A third highlight |
-| `on_accent` | Text on an accent background. Chosen for contrast if not set |
+| `on_accent` | Text on an accent background. Derived for contrast when absent from the resolved theme |
 | `info` | An informational message |
 | `success` | A statement that succeeded |
 | `warning` | A warning |
 | `danger` | A destructive action |
 | `error` | A failure |
-| `env_dev` | The title bar on dev. Same as `success` if not set |
-| `env_test` | The title bar on test. Same as `warning` if not set |
-| `env_prod` | The title bar on prod. Same as `danger` if not set |
+| `env_dev` | The development title bar. Defaults to `success` when absent from the resolved theme |
+| `env_test` | The test title bar. Defaults to `warning` when absent from the resolved theme |
+| `env_prod` | The production title bar. Defaults to `danger` when absent from the resolved theme |
 
-To change a few colours without a theme file, set them under `[ui.colors]` in the config. They override the active theme.
+`[ui.palette]`, `[ui.colors]` and `[ui.syntax]` in the user configuration override the selected theme. These overrides also apply after a theme change.
 
 ## Syntax highlighting
 
-`[syntax]` styles the editor. Each token kind has its own table. Ayu Dark defines the rules that every other theme inherits when it defines none.
+`[syntax]` contains editor highlight rules. Each token kind has a table. Missing properties inherit from the parent theme.
 
 ```toml
 [syntax]
@@ -95,7 +99,7 @@ guide      = { bg = "header" }
 match      = { fg = "on_accent", bg = "accent_warm" }
 ```
 
-`fg` and `bg` take a hex value or a colour name. `bold`, `italic` and `underline` are flags. `link` copies another highlight first, then the other keys apply on top.
+`fg` and `bg` are hex values or colour names. `bold`, `italic` and `underline` are boolean flags. `link` is another token kind. A linked rule replaces the inherited rule, then applies its own properties over the linked style.
 
 | Kind | Applies to |
 | --- | --- |

@@ -61,8 +61,7 @@ func DecodeDocument(text string) (Table, error) {
 	return Table(document), nil
 }
 
-// ReadThemeDocuments reads the themes of the user and the errors in their files. The
-// result is empty if the directory does not exist, which is the usual case.
+// ReadThemeDocuments loads user themes and reports file errors. An unreadable directory returns no themes or errors.
 func ReadThemeDocuments(themesPath string) ([]ThemeDocument, []string) {
 	documents := []ThemeDocument{}
 	problems := []string{}
@@ -110,9 +109,7 @@ func buildDefaultConfig(path, reason string, themes []ThemeDocument, themeProble
 	}
 }
 
-// describeConfigFault returns the reason the config file could not be used. A missing file
-// is the first run of the client. A file that exists but cannot be read loses every profile,
-// and so does a file that is not TOML. The user needs to know which of the three it is.
+// describeConfigFault distinguishes missing files, read errors, and invalid TOML.
 func describeConfigFault(err error) string {
 	if errors.Is(err, fs.ErrNotExist) {
 		return "config file not found"
@@ -124,11 +121,9 @@ func describeConfigFault(err error) string {
 	return fmt.Sprintf("invalid TOML: %v", err)
 }
 
-// LoadConfig reads the file one time, because the profiles and the settings are in the
-// same file.
+// LoadConfig loads profiles, settings, and user themes.
 func LoadConfig(path string) LoadedConfig {
-	// The themes are read whatever the config file contains, because the palette can
-	// select a theme the config file does not name.
+	// User themes load independently of the config file.
 	themes, themeProblems := ReadThemeDocuments(ResolveThemesPath(path))
 
 	document, err := ReadDocument(path)
@@ -147,9 +142,7 @@ func LoadConfig(path string) LoadedConfig {
 	}
 }
 
-// LoadConfigForDirectory reads the config file of the user and the nearest project file of
-// the directory, and returns the two together. A profile of the user replaces a project
-// profile of the same name.
+// LoadConfigForDirectory loads user settings and the nearest project file. User profiles replace project profiles with matching names.
 func LoadConfigForDirectory(path, directory string) LoadedConfig {
 	loaded := LoadConfig(path)
 	projectPath, found := FindProjectFile(directory)
@@ -161,8 +154,7 @@ func LoadConfigForDirectory(path, directory string) LoadedConfig {
 	return loaded
 }
 
-// LoadConfigForWorkingDirectory reads the config file of the user and the project file the
-// shell stands in.
+// LoadConfigForWorkingDirectory loads user settings and the working directory project file.
 func LoadConfigForWorkingDirectory(path string) LoadedConfig {
 	directory, err := os.Getwd()
 	if err != nil {

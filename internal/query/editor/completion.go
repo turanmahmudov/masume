@@ -9,7 +9,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
-// CompletionKind says what a suggestion names.
+// CompletionKind is the suggestion category.
 type CompletionKind string
 
 // The kinds a suggestion can have.
@@ -25,7 +25,7 @@ const (
 type Completion struct {
 	Text string
 	Kind CompletionKind
-	// What the catalog says about the name, shown beside it.
+	// Catalog detail displayed beside the suggestion.
 	Detail string
 }
 
@@ -47,8 +47,7 @@ type CompletionSources struct {
 	ColumnsByQualifier map[string][]CompletionColumn
 }
 
-// CompletionContext says where the caret is, for the places where SQL limits what
-// may follow.
+// CompletionContext is the syntax context at the caret.
 type CompletionContext struct {
 	// False where a qualified name is refused, such as the column of an UPDATE.
 	AllowQualified bool
@@ -64,7 +63,7 @@ var completionKeywords = []string{
 	"coalesce", "case", "when", "then", "else", "end",
 }
 
-// maxCompletions is how many suggestions the popup holds.
+// maxCompletions is the maximum displayed suggestions.
 const maxCompletions = 12
 
 // splitQualifier returns the name before the last dot, and the text typed after it.
@@ -78,8 +77,7 @@ func splitQualifier(prefix string) (string, string, bool) {
 
 var prefixWord = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_.$]*$`)
 
-// ReadPrefix returns the word being typed, which a completion replaces. It is empty
-// where none is.
+// ReadPrefix returns the word prefix before the caret, or an empty string.
 func ReadPrefix(sql string, offset int) string {
 	if offset > len(sql) {
 		offset = len(sql)
@@ -87,9 +85,7 @@ func ReadPrefix(sql string, offset int) string {
 	return prefixWord.FindString(sql[:offset])
 }
 
-// How well a candidate matches what was typed, the best first. A rank of rankNoMatch or
-// worse is not offered, which drops the exact match as well: a word already typed in full
-// needs no suggestion.
+// Match ranks in display order. Unmatched and exact candidates are excluded.
 const (
 	rankPrefix   = 0
 	rankContains = 1
@@ -97,8 +93,7 @@ const (
 	rankExact    = 3
 )
 
-// rankCandidate returns how well the candidate matches what was typed. Lower comes
-// first.
+// rankCandidate returns the match rank. Lower ranks appear first.
 func rankCandidate(lowered, needle string) int {
 	if lowered == needle {
 		return rankExact
@@ -112,9 +107,7 @@ func rankCandidate(lowered, needle string) int {
 	return rankNoMatch
 }
 
-// kindOrder says what each place in a statement expects first. Without this the
-// shortest name wins, so `a` where a column belongs offered `as`, `and` and `asc`
-// before any column of the relation.
+// kindOrder is the suggestion category order for each syntax position.
 var kindOrder = map[NamePosition][]CompletionKind{
 	PositionColumn: {
 		CompleteColumn, CompleteFunction, CompleteTable, CompleteSchema, CompleteKeyword,
@@ -156,8 +149,7 @@ func (kept *collector) add(text string, kind CompletionKind, detail string) {
 	kept.addAgainst(text, kind, kept.needle, detail)
 }
 
-// addAgainst keeps a candidate weighed against other text than the prefix. The text
-// after a dot is weighed on its own, and an empty one matches every column.
+// addAgainst ranks a candidate against an explicit prefix, including the suffix after a dot.
 func (kept *collector) addAgainst(text string, kind CompletionKind, against, detail string) {
 	lowered := strings.ToLower(text)
 	rank := rankCandidate(lowered, against)
@@ -187,8 +179,7 @@ func (kept *collector) take(limit int) []Completion {
 	return taken
 }
 
-// sortedQualifiers returns the qualifiers in a stable order, so two runs with the
-// same catalog offer the same list.
+// sortedQualifiers returns sorted qualifier names.
 func sortedQualifiers(byQualifier map[string][]CompletionColumn) []string {
 	names := make([]string, 0, len(byQualifier))
 	for name := range byQualifier {
@@ -198,8 +189,7 @@ func sortedQualifiers(byQualifier map[string][]CompletionColumn) []string {
 	return names
 }
 
-// buildPositionCompletions returns what the place expects, in the order of the
-// catalog, because there is no prefix to rank by.
+// buildPositionCompletions returns suggestions for a syntax position without a prefix.
 func buildPositionCompletions(sources CompletionSources, position NamePosition) []Completion {
 	kept := newCollector("")
 
@@ -235,8 +225,7 @@ func collectColumnCandidates(
 	qualifier, partial, qualified := splitQualifier(prefix)
 
 	if !qualified {
-		// A bare word can be a column of any relation the statement reads. The
-		// columns come from the catalog, so they are offered before the statement runs.
+		// Unqualified prefixes include columns from every known table reference.
 		for _, name := range sortedQualifiers(sources.ColumnsByQualifier) {
 			for _, column := range sources.ColumnsByQualifier[name] {
 				kept.add(column.Name, CompleteColumn, column.Detail)
@@ -247,8 +236,7 @@ func collectColumnCandidates(
 
 	columns := sources.ColumnsByQualifier[strings.ToLower(qualifier)]
 
-	// A name before a dot names the relation of the column, so the whole name is
-	// offered and replaces what was typed.
+	// Preserve the qualifier when the syntax position allows it.
 	if context.AllowQualified {
 		for _, column := range columns {
 			kept.add(qualifier+"."+column.Name, CompleteColumn, column.Detail)
@@ -256,17 +244,14 @@ func collectColumnCandidates(
 		return
 	}
 
-	// A qualifier is refused here, so the bare column is offered for the text after
-	// the dot, and it replaces the qualifier too.
+	// Match the suffix and replace the qualified prefix with an unqualified column.
 	lowered := strings.ToLower(partial)
 	for _, column := range columns {
 		kept.addAgainst(column.Name, CompleteColumn, lowered, column.Detail)
 	}
 }
 
-// BuildCompletions returns what could be typed next. The match comes first, then
-// the kind the statement expects. On a tie the shorter name wins, so "customer"
-// comes before "customer_id" for "cust".
+// BuildCompletions sorts suggestions by match rank, syntax category, then name length.
 func BuildCompletions(
 	prefix string, sources CompletionSources, context CompletionContext,
 ) []Completion {
@@ -313,8 +298,7 @@ func BuildCompletions(
 	return kept.take(maxCompletions)
 }
 
-// buildInsertText writes the chosen candidate. A name the server would change case
-// on is quoted, part by part.
+// buildInsertText quotes each identifier part when needed and adds parentheses for functions.
 func buildInsertText(completion Completion, dialect *query.Dialect) string {
 	if completion.Kind == CompleteKeyword {
 		return completion.Text

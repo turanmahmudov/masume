@@ -7,14 +7,9 @@ import (
 	"time"
 )
 
-// A document holds values that JSON cannot express: an id, a timestamp, a decimal number.
-// Extended JSON writes each of them as an object with one member whose name starts with a
-// dollar sign. A reader that does not know these names displays the wrapper instead of the
-// value, so this file unwraps them.
+// Extended JSON wrappers preserve BSON types such as ObjectId, timestamps, and decimals.
 
-// The type names of a document value, as the server uses them. They are also the type
-// names of a MongoDB column, so an unwrapped value and a column value use the same
-// names.
+// Document values and MongoDB columns use these type names.
 const (
 	DocumentTypeObjectID  = "objectId"
 	DocumentTypeString    = "string"
@@ -101,8 +96,7 @@ func readWrappedText(held JSONValue, named string) (DocumentScalar, bool) {
 	return DocumentScalar{Text: text, Type: named}, true
 }
 
-// readWrappedNumber reads a wrapper that holds a number. Extended JSON writes the number
-// as text, so that a reader in another language does not round it.
+// readWrappedNumber reads an Extended JSON number from a string or scalar.
 func readWrappedNumber(held JSONValue, named string) (DocumentScalar, bool) {
 	if text, isText := ReadJSONTextValue(held.Scalar); isText {
 		return DocumentScalar{Text: text, Type: named}, true
@@ -132,8 +126,7 @@ func readWrappedDate(held JSONValue) (DocumentScalar, bool) {
 	}, true
 }
 
-// readWrappedBinary reads bytes, which are written as base64 with a subtype. The display
-// shows the number of bytes, because the base64 of a photograph is not readable.
+// readWrappedBinary returns the decoded byte count for an Extended JSON binary value.
 func readWrappedBinary(held JSONValue) (DocumentScalar, bool) {
 	if !held.IsObject {
 		return DocumentScalar{}, false
@@ -176,7 +169,7 @@ func readWrappedTimestamp(held JSONValue) (DocumentScalar, bool) {
 	return DocumentScalar{Text: seconds + ":" + within, Type: DocumentTypeTimestamp}, true
 }
 
-// findMember returns the member with that name, and false if the object has none.
+// findMember returns the named member value, or an empty JSONValue if absent.
 func findMember(value JSONValue, name string) JSONValue {
 	for _, member := range value.Members {
 		if member.Name == name {
@@ -199,8 +192,7 @@ func ReadJSONTextValue(written string) (string, bool) {
 	return held, true
 }
 
-// ReadJSONScalarType returns the type of a value without a wrapper, so every row of a
-// document tree shows a type for a wrapped and for an unwrapped value.
+// ReadJSONScalarType returns the type of an unwrapped JSON scalar.
 func ReadJSONScalarType(written string) string {
 	switch {
 	case written == "" || written == "null":
@@ -216,9 +208,7 @@ func ReadJSONScalarType(written string) string {
 	return DocumentTypeLong
 }
 
-// ReadDocumentValue returns a document value in display form, with the name of its type.
-// An object and an array are returned unchanged, because the tree expands them instead of
-// showing them on one line.
+// ReadDocumentValue returns display text and type. Objects and arrays return only their type.
 func ReadDocumentValue(value JSONValue) DocumentScalar {
 	if held, isWrapped := ReadDocumentScalar(value); isWrapped {
 		return held
@@ -235,9 +225,7 @@ func ReadDocumentValue(value JSONValue) DocumentScalar {
 	return DocumentScalar{Text: value.Scalar, Type: ReadJSONScalarType(value.Scalar)}
 }
 
-// RelaxDocumentJSON returns the text with every extended JSON wrapper replaced by the value
-// it holds. It returns false where the text is not one JSON value. A reader outside MongoDB
-// reads the answer this way: a number is a number, and an id is a string.
+// RelaxDocumentJSON replaces Extended JSON wrappers with display values. Invalid JSON returns false.
 func RelaxDocumentJSON(text string) (string, bool) {
 	value, isJSON := ReadJSON(text)
 	if !isJSON {

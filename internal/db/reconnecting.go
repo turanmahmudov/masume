@@ -9,21 +9,17 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/language"
 )
 
-// A session that can be replaced under the tabs that use it, so a reconnect does not rebuild
-// every tab. It never runs a statement again, because a statement that failed can still have
-// reached the server.
+// Reconnection replaces the session without rebuilding tabs. Statements are never retried; a failed statement can still reach the server.
 
 // ReconnectOutcome is the result of one attempt at reconnecting.
 type ReconnectOutcome struct {
 	Reconnected bool
-	// True where a transaction was open. The server drops it whether or not the
-	// connection comes back.
+	// True if the previous session reported an active or failed transaction.
 	TransactionLost bool
 	Problem         string
 }
 
-// heldSession is one session with the calls inside it counted, so a session a reconnect
-// replaced closes only once the last call leaves it.
+// heldSession is a session with an active call count. Retired sessions close after their final call.
 type heldSession struct {
 	session Session
 	calls   int
@@ -35,16 +31,14 @@ type ReconnectingSession struct {
 	adapter  Adapter
 	password string
 
-	// guard holds the swap of the session and the count of the calls inside each one,
-	// because a read of the frame and a reconnect run on their own goroutines.
+	// The mutex protects session replacement and active call counts.
 	guard sync.Mutex
 	inner *heldSession
 	// True while a reconnect runs, so two failures start only one.
 	reconnecting bool
 }
 
-// MakeReconnectable wraps the session so it can be replaced. A profile with the keepalive
-// turned off is answered as it is, because nothing checks it and nothing reconnects it.
+// MakeReconnectable wraps sessions with keepalive enabled. Other sessions remain unchanged.
 func MakeReconnectable(inner Session, adapter Adapter, password string) Session {
 	if inner.Describe().Profile.Keepalive <= 0 {
 		return inner
@@ -54,8 +48,7 @@ func MakeReconnectable(inner Session, adapter Adapter, password string) Session 
 	}
 }
 
-// FindReconnectable returns the session as a reconnecting one, and reports whether it is one.
-// A session inside another is found too, so a wrapper above it hides nothing.
+// FindReconnectable searches the session and its wrappers for a ReconnectingSession.
 func FindReconnectable(session Session) (*ReconnectingSession, bool) {
 	for session != nil {
 		if held, is := session.(*ReconnectingSession); is {
@@ -70,8 +63,7 @@ func FindReconnectable(session Session) (*ReconnectingSession, bool) {
 	return nil, false
 }
 
-// hold returns the session every call goes to, and what gives it back. A call is counted
-// while it runs, so a reconnect cannot close the connection it is reading.
+// hold returns the current session and a release callback. The active call prevents retirement from closing the session.
 func (session *ReconnectingSession) hold() (Session, func()) {
 	session.guard.Lock()
 	defer session.guard.Unlock()
@@ -92,9 +84,7 @@ func (session *ReconnectingSession) leave(held *heldSession) {
 	}
 }
 
-// Reconnect opens a connection in place of the one that stopped answering. The old session
-// is retired at once and closes when the last call inside it leaves, so a read already
-// under way returns before its connection goes.
+// Reconnect opens a replacement connection. After success, the old session closes when its final active call returns.
 func (session *ReconnectingSession) Reconnect(ctx context.Context) ReconnectOutcome {
 	session.guard.Lock()
 	if session.reconnecting {

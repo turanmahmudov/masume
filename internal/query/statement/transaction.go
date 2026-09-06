@@ -4,12 +4,9 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// A transaction the user typed. The screens hold a mark of what the connection is in, and
-// a `begin` or a `commit` written into the editor has to move that mark, or the mark and
-// the server drift apart: a staged write would then join a transaction that is already
-// committed, and commit on its own.
+// Transaction state classification for statements entered in the editor.
 
-// TransactionEffect is what a statement leaves the transaction of the user as.
+// TransactionEffect is a statement effect on transaction state.
 type TransactionEffect string
 
 // The three effects a statement can have.
@@ -22,16 +19,13 @@ const (
 	EffectEnd TransactionEffect = "end"
 )
 
-// transactionOpeners name the words that open a transaction. `begin` opens one in every
-// dialect this client reads, and `start` only opens one before `transaction`.
+// transactionOpeners is the set of possible transaction opening keywords. START requires TRANSACTION.
 var transactionOpeners = map[string]bool{"begin": true, "start": true}
 
-// transactionEnders name the words that end one. `end` is a commit in PostgreSQL and in
-// SQLite, and MySQL has no statement of that name.
+// transactionEnders is the set of transaction closing keywords. PostgreSQL and SQLite accept END as COMMIT.
 var transactionEnders = map[string]bool{"commit": true, "rollback": true, "end": true}
 
-// ResolveTransactionEffect returns what this buffer leaves the transaction as. The last
-// statement that opens or ends one decides, because a buffer runs in order.
+// ResolveTransactionEffect returns the last nonempty transaction effect in statement order.
 func ResolveTransactionEffect(sql string, flavour syntax.SyntaxFlavour) TransactionEffect {
 	effect := EffectNone
 	for _, one := range SplitStatements(sql, flavour) {
@@ -49,8 +43,7 @@ func resolveStatementEffect(sql string, flavour syntax.SyntaxFlavour) Transactio
 	second, hasSecond := syntax.TokenAt(tokens, 1)
 
 	if transactionOpeners[opening] {
-		// `start` opens nothing on its own, and `begin` opens the body of a routine
-		// where a word follows it that is not `transaction` or `work`.
+		// Recognize START TRANSACTION and BEGIN with optional TRANSACTION or WORK.
 		if opening == "start" {
 			if hasSecond && second.Text == "transaction" {
 				return EffectOpen
@@ -63,8 +56,7 @@ func resolveStatementEffect(sql string, flavour syntax.SyntaxFlavour) Transactio
 		return EffectNone
 	}
 	if transactionEnders[opening] {
-		// `rollback to` returns to a savepoint and leaves the transaction open, and
-		// `commit` or `rollback` with `chain` opens the next one straight away.
+		// ROLLBACK TO keeps the transaction open. CHAIN starts a new transaction.
 		if hasSecond && second.Text == "to" {
 			return EffectNone
 		}
@@ -76,8 +68,7 @@ func resolveStatementEffect(sql string, flavour syntax.SyntaxFlavour) Transactio
 	return EffectNone
 }
 
-// holdsChainWord is true for a `commit and chain`, which ends one transaction and opens
-// the next in its place. `and no chain` is the plain end, and names the word too.
+// holdsChainWord detects CHAIN without a preceding NO.
 func holdsChainWord(tokens []syntax.CodeToken) bool {
 	for at, token := range tokens {
 		if token.Text != "chain" || !syntax.IsWordKind(token.Kind) {

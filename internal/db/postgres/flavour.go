@@ -1,18 +1,14 @@
 package postgres
 
-// Flavour holds the parts each PostgreSQL-protocol server does differently.
-// They share the wire, the catalog and the SQL, so they share one adapter. The rest is
-// here, one entry per server.
+// Flavour is the engine-specific configuration for the shared PostgreSQL adapter.
 type Flavour struct {
-	// PostgreSQL takes options in brackets, CockroachDB takes none, and Redshift
-	// measures nothing.
+	// PostgreSQL uses parenthesized EXPLAIN options. CockroachDB omits parentheses; Redshift supports estimates only.
 	BuildExplainPrefix func(analyze bool) string
 	// The statement that opens a session where the server refuses every write.
 	ReadOnlyStatement string
 	// The function that stops another session. The name differs per server.
 	BuildCancelFunction func(terminate bool) string
-	// True where the server holds pg_extension. Redshift documents the catalogs of
-	// PostgreSQL 8.0 and this is not among them.
+	// True if pg_extension is available. Redshift lacks this catalog.
 	HasExtensionCatalog bool
 }
 

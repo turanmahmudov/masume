@@ -10,29 +10,25 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// The project file: the connections and the statements a team commits next to its code. It
-// holds no setting of the person who opens it, and nothing that reaches a secret, because it
-// is a file in a repository that everybody reads and anybody can change.
+// Project files contain shared connection profiles and queries. Personal settings and secret access settings are excluded.
 
 // ProjectFileName is the file masume looks for from the working directory upward.
 const ProjectFileName = ".masume.toml"
 
-// projectSections are the sections a project file provides. Every other key belongs to the
-// user alone: a repository must not set the keys, the theme, the interface or the AI
-// provider of the person who opens it, and it must not name the profiles an agent reaches.
+// projectSections are the supported project file sections.
 var projectSections = []string{"profile", "query"}
 
 // ProjectQuery is one statement a project file holds under a name.
 type ProjectQuery struct {
 	Name string
 	SQL  string
-	// What the statement answers, shown instead of its text.
+	// The query description, displayed in place of SQL text.
 	Description string
 	// The profiles the statement is offered on. An empty list offers it on every one.
 	Profiles []string
 }
 
-// MatchesProfile is true where the statement is offered on the profile of that name.
+// MatchesProfile is true if the query is available for the profile.
 func (query ProjectQuery) MatchesProfile(name string) bool {
 	if len(query.Profiles) == 0 {
 		return true
@@ -40,14 +36,13 @@ func (query ProjectQuery) MatchesProfile(name string) bool {
 	return slices.Contains(query.Profiles, name)
 }
 
-// ProjectConfig is what one project file provides.
+// ProjectConfig is the loaded project configuration.
 type ProjectConfig struct {
-	// The path of the file. Empty where the walk found none.
+	// The project file path, or empty if absent.
 	Path     string
 	Profiles []Profile
 	Queries  []ProjectQuery
-	// What the file could not provide, one line each, ready to show. Each line names the
-	// path, because the user did not choose this file on the command line.
+	// Errors and warnings, each with the project file path.
 	Problems []string
 }
 
@@ -71,8 +66,7 @@ func FindProjectFile(directory string) (string, bool) {
 	}
 }
 
-// LoadProjectConfig reads one project file. A file that cannot be read reports the reason
-// and provides nothing, so a broken file in a repository does not stop the client.
+// LoadProjectConfig reads a project file. An unreadable file returns an error message and no profiles or queries.
 func LoadProjectConfig(path string) ProjectConfig {
 	found := ProjectConfig{Path: path}
 	document, err := ReadDocument(path)
@@ -89,18 +83,13 @@ func LoadProjectConfig(path string) ProjectConfig {
 	return found
 }
 
-// refusedProjectKeys are the profile keys a project file must not set, with the reason. The
-// file is committed, so anyone who can open a pull request can set them. `command` and
-// `password_command` run a shell on connect, and would be arbitrary code from a repository.
-// The secret keys read a secret of the store of the user, and a profile names the server that
-// secret is then sent to. A `password` in any file is ignored everywhere, so it needs no entry
-// here.
+// refusedProjectKeys are forbidden project settings and their operations. All config files ignore the password key.
 var refusedProjectKeys = map[string]string{
-	"command":          "it runs a shell command on connect",
-	"password_command": "it runs a shell command on connect",
-	"password_env":     "it reads a variable of your shell",
-	"secret":           "it reads a secret of your own store",
-	"secret_ref":       "it reads a secret of your own store",
+	"command":          "shell commands are forbidden in project files",
+	"password_command": "shell commands are forbidden in project files",
+	"password_env":     "environment password access is forbidden in project files",
+	"secret":           "secret store access is forbidden in project files",
+	"secret_ref":       "secret store access is forbidden in project files",
 }
 
 // findRefusedProjectKeys returns the keys of one profile a project file must not set, sorted.
@@ -115,15 +104,11 @@ func findRefusedProjectKeys(source Table) []string {
 	return found
 }
 
-// parseProjectProfiles reads the `[profile]` section of a project file and refuses every
-// profile that sets a key of refusedProjectKeys. A profile of a repository says where the
-// server is; it never says how to reach a secret.
+// parseProjectProfiles reads project profiles and rejects profiles with forbidden settings.
 func parseProjectProfiles(document Table, path string) ([]Profile, []string) {
 	written, _ := FindSection(document, "profile")
 
-	// The refused keys are read from the file itself, before a profile is built from it. A
-	// profile that reaches for a secret is refused for that reason and for no other, so the
-	// report says what is wrong rather than what the missing half of it broke.
+	// Forbidden settings are checked before profile validation.
 	problems := []string{}
 	refusedNames := map[string]bool{}
 	names := make([]string, 0, len(written))
@@ -139,7 +124,7 @@ func parseProjectProfiles(document Table, path string) ([]Profile, []string) {
 		for _, key := range findRefusedProjectKeys(source) {
 			refusedNames[name] = true
 			problems = append(problems, fmt.Sprintf(
-				"%s: skipped profile %q: a project file cannot set %q, because %s. "+
+				"%s: skipped profile %q: forbidden setting %q; %s. "+
 					"Use auth = \"prompt\" or auth = \"keyring\"",
 				path, name, key, refusedProjectKeys[key]))
 		}
@@ -173,9 +158,7 @@ func parseProjectProfiles(document Table, path string) ([]Profile, []string) {
 	return kept, problems
 }
 
-// resolveProjectDatabasePath returns the database file of a profile against the directory of
-// the project file. A committed `./notes.db` means the file of the repository, whichever
-// directory of it masume was started in.
+// resolveProjectDatabasePath resolves relative database paths against the project file directory.
 func resolveProjectDatabasePath(profile Profile, path string) string {
 	if !core.OpensFile(profile.Engine) {
 		return profile.Database
@@ -225,8 +208,7 @@ func parseProjectQueries(document Table, path string) ([]ProjectQuery, []string)
 	return queries, problems
 }
 
-// reportIgnoredKeys names the top-level keys of a project file the client does not read, so
-// a setting written in the wrong file is not lost in silence.
+// reportIgnoredKeys reports unsupported top-level project settings.
 func reportIgnoredKeys(document Table, path string) []string {
 	names := make([]string, 0, len(document))
 	for name := range document {
@@ -239,15 +221,13 @@ func reportIgnoredKeys(document Table, path string) []string {
 	problems := make([]string, 0, len(names))
 	for _, name := range names {
 		problems = append(problems, fmt.Sprintf(
-			"%s: %q is not read from a project file; write it in the config file of "+
-				"the user instead", path, name))
+			"%s: %q is unsupported in project files; use the user "+
+				"config file", path, name))
 	}
 	return problems
 }
 
-// AddProjectProfiles returns the profiles of the user with the ones of the project it does
-// not name. A profile of the user replaces the project profile of the same name, so a
-// personal setting always wins over a committed one.
+// AddProjectProfiles merges user and project profiles. User profiles replace project profiles with the same name.
 func AddProjectProfiles(user, project []Profile) []Profile {
 	merged := make([]Profile, 0, len(user)+len(project))
 	merged = append(merged, user...)

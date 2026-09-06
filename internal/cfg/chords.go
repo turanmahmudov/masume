@@ -7,11 +7,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 )
 
-// KeyScope is the area a key works in. The focus selects the scope. `grid`, `plan` and
-// `document` are never displayed together, so each one can use the keys of the others.
-// `editor` is the statement under edit. `list` is any list that moves with keys and is not
-// a pane. `dialog` takes all key presses while it is open, so it can use the same keys as a
-// pane.
+// KeyScope is the interface area for a binding. Focus selects the active scope; dialogs receive all keys while open.
 type KeyScope string
 
 // The eight scopes a chord can be bound to.
@@ -19,9 +15,7 @@ const (
 	ScopeGlobal KeyScope = "global"
 	ScopeGrid   KeyScope = "grid"
 	ScopePlan   KeyScope = "plan"
-	// ScopeDocument is the tree that shows the rows of a result as documents. It is a
-	// separate scope from the object tree: the two contain different rows and use
-	// different keys, and the user configures each one separately.
+	// ScopeDocument is the result document tree, separate from the catalog tree.
 	ScopeDocument KeyScope = "document"
 	ScopeTree     KeyScope = "tree"
 	ScopeEditor   KeyScope = "editor"
@@ -107,8 +101,7 @@ func SplitActionKey(actionKey string) (KeyScope, string) {
 	return KeyScope(before), after
 }
 
-// modifiers give the modifier for each name the user can write. A terminal sends Alt as
-// Meta.
+// modifiers are the supported modifier names and aliases. Terminals send Alt as Meta.
 var modifiers = map[string]string{
 	"ctrl": "ctrl", "control": "ctrl",
 	"alt": "meta", "meta": "meta", "option": "meta",
@@ -191,9 +184,7 @@ func ParseChord(text string) (Chord, bool) {
 	return chord, isKnownKey(chord.Key)
 }
 
-// ParseChordSequence parses a binding in the form the user writes: one chord, or several
-// chords separated by spaces. It fails if any part fails, because a partial sequence would
-// run the wrong action.
+// ParseChordSequence parses space-separated chords and rejects a sequence with any invalid chord.
 func ParseChordSequence(text string) (ChordSequence, bool) {
 	written := strings.Fields(text)
 	if len(written) == 0 {
@@ -210,14 +201,12 @@ func ParseChordSequence(text string) (ChordSequence, bool) {
 	return sequence, true
 }
 
-// ambiguousChords give the key an old terminal sends in place of a chord. Only the kitty
-// protocol reports the chord itself. Ctrl+J is handled separately, because it arrives as a
-// line feed.
+// ambiguousChords are legacy terminal key codes shared with Ctrl chords. Ctrl+J arrives separately as a line feed.
 var ambiguousChords = map[string]string{
 	"h": "Backspace", "i": "Tab", "m": "Enter", "[": "Escape",
 }
 
-const needsProtocol = "unless the terminal speaks the kitty keyboard protocol"
+const needsProtocol = "without the kitty keyboard protocol"
 
 // carriesOneCode are the keys that Ctrl reduces to one code. An arrow, function or page key
 // is sent as a sequence that includes the modifiers, so the modifiers are not lost.
@@ -244,13 +233,13 @@ func FindUndeliverableChord(chord Chord) string {
 
 	// A digit with Ctrl has no code, so a standard terminal sends nothing.
 	if chord.Key == DigitKey || digitOnly.MatchString(chord.Key) {
-		return "is sent by no terminal but one that speaks the kitty keyboard protocol"
+		return "requires the kitty keyboard protocol"
 	}
 
 	// Ctrl has one code per character and Shift does not change it, so Ctrl+Shift+P
 	// arrives as Ctrl+P.
 	if chord.Shift && carriesOneCode[chord.Key] {
-		return "cannot be told apart from Ctrl+" + strings.ToUpper(chord.Key) + " " + needsProtocol
+		return "is the same key as Ctrl+" + strings.ToUpper(chord.Key) + " " + needsProtocol
 	}
 
 	// Enter is a carriage return, and Ctrl does not change it.
@@ -262,5 +251,5 @@ func FindUndeliverableChord(chord Chord) string {
 	if !ambiguous {
 		return ""
 	}
-	return "cannot be told apart from " + sent + " " + needsProtocol
+	return "is the same key as " + sent + " " + needsProtocol
 }

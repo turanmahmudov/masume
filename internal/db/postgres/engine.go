@@ -11,8 +11,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
 
-// postgresIncomparableTypes are the types PostgreSQL has no equality for, so a
-// comparison is an error and not a false. `jsonb` is another type, and it compares.
+// postgresIncomparableTypes is the set of types without equality operators. jsonb supports equality.
 var postgresIncomparableTypes = map[string]bool{"json": true, "xml": true}
 
 // Dialect writes SQL the way every PostgreSQL-protocol server reads it.
@@ -59,8 +58,7 @@ var Support = db.EngineSupport{
 	Compose:    db.NewSQLComposer(Dialect),
 }
 
-// BuildSupport joins the facts of a server that speaks the PostgreSQL protocol to this
-// dialect and language, so each of those engines names only what it differs in.
+// BuildSupport combines engine metadata with the PostgreSQL dialect and language.
 func BuildSupport(engine core.Engine) db.EngineSupport {
 	return db.EngineSupport{
 		EngineInfo: core.ResolveEngineInfo(engine),

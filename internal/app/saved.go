@@ -9,8 +9,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/hist"
 )
 
-// SavedRow is one row of the saved statements: one the user kept under a name in the history
-// file, or one the project file holds for the whole team.
+// SavedRow is a saved statement from query history or the project file.
 type SavedRow struct {
 	Name string
 	SQL  string
@@ -18,19 +17,16 @@ type SavedRow struct {
 	SavedAt time.Time
 	// The path of the project file that holds it. Empty for one the user saved.
 	ProjectFile string
-	// What the statement answers, shown instead of its text where the file says.
+	// The optional statement description.
 	Description string
 }
 
-// IsFromProject is true for a statement the project file holds, which the user cannot
-// delete.
+// IsFromProject is true for a project statement, which the saved query list cannot delete.
 func (row SavedRow) IsFromProject() bool {
 	return row.ProjectFile != ""
 }
 
-// BuildSavedRows returns the statements the user saved on this profile with the ones the
-// project file offers on it, sorted by name. A statement the user saved replaces a project
-// statement of the same name, so a personal statement always wins over a committed one.
+// BuildSavedRows merges saved and project statements by name. User-saved statements replace project statements with the same name.
 func BuildSavedRows(
 	saved []hist.SavedQuery, project cfg.ProjectConfig, profileName string,
 ) []SavedRow {

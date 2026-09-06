@@ -32,7 +32,7 @@ func TestFindLocalDiagnosticsMarksAnUnclosedPart(t *testing.T) {
 		holds string
 	}{
 		{"an unclosed string", "select * from orders where customer = 'ada", "string"},
-		{"an unclosed name", `select * from "orders`, "name"},
+		{"an unclosed name", `select * from "orders`, "identifier"},
 		{"an unclosed comment", "select 1 /* why", "comment"},
 	} {
 		t.Run(held.name, func(t *testing.T) {

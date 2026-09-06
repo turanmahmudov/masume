@@ -5,17 +5,13 @@ import (
 	"strings"
 )
 
-// mysqlCannotPrepare is the code MySQL reports for a statement it cannot prepare, which
-// is not a statement that is wrong.
+// mysqlCannotPrepare is the error code for statements unsupported by PREPARE.
 const mysqlCannotPrepare = 1295
 
-// mysqlDeadlock is the code the server reports where it chose this connection to break a
-// deadlock. It always rolls the whole transaction back.
+// mysqlDeadlock is the deadlock error code. The server rolls back the whole transaction.
 const mysqlDeadlock uint16 = 1213
 
-// mysqlLockTimeout is the code the server reports where a lock was waited for too long. It
-// rolls back the statement alone and leaves the transaction open, unless the server was
-// started with `innodb_rollback_on_timeout`, which is off by default.
+// mysqlLockTimeout is the lock wait timeout code. Only the statement rolls back unless innodb_rollback_on_timeout is enabled.
 const mysqlLockTimeout uint16 = 1205
 
 var atLine = regexp.MustCompile(`at line (\d+)`)
@@ -47,8 +43,7 @@ func findMysqlOffset(sql, message string) (int, bool) {
 		}
 	}
 
-	// Every other error names what it could not find, sometimes with the database in
-	// front. The statement holds the last part of that name.
+	// Other errors can include a qualified object name. Match the final name segment.
 	if named := quotedName.FindStringSubmatch(message); named != nil {
 		parts := strings.Split(named[1], ".")
 		last := parts[len(parts)-1]
@@ -74,8 +69,7 @@ func readInt(written string) int {
 	return value
 }
 
-// isUnfinishedMysqlStatement is true where MySQL quoted nothing, which it does at the
-// end of the input.
+// isUnfinishedMysqlStatement is true for an error at the end of input.
 func isUnfinishedMysqlStatement(message string) bool {
 	return unfinishedNear.MatchString(message)
 }
