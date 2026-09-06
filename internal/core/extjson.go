@@ -234,3 +234,50 @@ func ReadDocumentValue(value JSONValue) DocumentScalar {
 	}
 	return DocumentScalar{Text: value.Scalar, Type: ReadJSONScalarType(value.Scalar)}
 }
+
+// RelaxDocumentJSON returns the text with every extended JSON wrapper replaced by the value
+// it holds. It returns false where the text is not one JSON value. A reader outside MongoDB
+// reads the answer this way: a number is a number, and an id is a string.
+func RelaxDocumentJSON(text string) (string, bool) {
+	value, isJSON := ReadJSON(text)
+	if !isJSON {
+		return "", false
+	}
+	return relaxJSONValue(value).Write(), true
+}
+
+func relaxJSONValue(value JSONValue) JSONValue {
+	if held, isWrapped := ReadDocumentScalar(value); isWrapped {
+		return JSONValue{Scalar: writeRelaxedScalar(held)}
+	}
+	switch {
+	case value.IsObject:
+		members := make([]JSONMember, 0, len(value.Members))
+		for _, member := range value.Members {
+			members = append(members,
+				JSONMember{Name: member.Name, Value: relaxJSONValue(member.Value)})
+		}
+		return JSONValue{IsObject: true, Members: members}
+	case value.IsArray:
+		items := make([]JSONValue, 0, len(value.Items))
+		for _, item := range value.Items {
+			items = append(items, relaxJSONValue(item))
+		}
+		return JSONValue{IsArray: true, Items: items}
+	}
+	return value
+}
+
+// writeRelaxedScalar returns the unwrapped value in its JSON form. A number stays a number,
+// and every other type becomes a string.
+func writeRelaxedScalar(held DocumentScalar) string {
+	switch held.Type {
+	case DocumentTypeInt, DocumentTypeLong, DocumentTypeDouble, DocumentTypeDecimal:
+		if _, err := strconv.ParseFloat(held.Text, 64); err == nil {
+			return held.Text
+		}
+	case DocumentTypeUndefined:
+		return "null"
+	}
+	return WriteJSONText(held.Text)
+}

@@ -144,9 +144,20 @@ func buildCSVRow(row []any, columns []query.ResultColumn, options CSVOptions) st
 		if index < len(columns) {
 			dataType = columns[index].DataType
 		}
-		written = append(written, escapeCSVField(core.FormatCell(cell, dataType), options))
+		written = append(written, escapeCSVField(buildExportText(cell, dataType), options))
 	}
 	return strings.Join(written, options.Delimiter)
+}
+
+// buildExportText returns the text of one cell for a file. A document keeps no extended
+// JSON wrapper, because a reader of the file reads plain JSON.
+func buildExportText(value any, dataType string) string {
+	if held, isDocument := value.(core.DocumentValue); isDocument {
+		if relaxed, isJSON := core.RelaxDocumentJSON(held.Text); isJSON {
+			return relaxed
+		}
+	}
+	return core.FormatCell(value, dataType)
 }
 
 // castToJSONValue keeps a value with a JSON type as it is. The rest are written as in
@@ -167,18 +178,18 @@ func castToJSONValue(value any, dataType string) any {
 	// text of the cell rather than refused by the encoder.
 	if held, isFloat := readFloatValue(value); isFloat {
 		if math.IsNaN(held) || math.IsInf(held, 0) {
-			return core.FormatCell(value, dataType)
+			return buildExportText(value, dataType)
 		}
 	}
 	switch value.(type) {
 	case string, bool, float32, float64,
 		int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 		if _, isBytes := value.([]byte); isBytes {
-			return core.FormatCell(value, dataType)
+			return buildExportText(value, dataType)
 		}
 		return value
 	}
-	return core.FormatCell(value, dataType)
+	return buildExportText(value, dataType)
 }
 
 // readFloatValue returns the value as a float, and reports nothing where it is no float.
@@ -195,7 +206,7 @@ func readFloatValue(value any) (float64, bool) {
 // embedJSONDocument returns the value as the JSON it holds, and reports nothing where the
 // text is no document the file can carry.
 func embedJSONDocument(value any, dataType string) (json.RawMessage, bool) {
-	written := core.FormatCell(value, dataType)
+	written := buildExportText(value, dataType)
 	if !json.Valid([]byte(written)) {
 		return nil, false
 	}
@@ -232,7 +243,7 @@ func buildTextRecord(
 		if index < len(row) {
 			cell = row[index]
 		}
-		record[key] = core.FormatCell(cell, column.DataType)
+		record[key] = buildExportText(cell, column.DataType)
 	}
 	return record
 }

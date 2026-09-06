@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/query"
 	"github.com/turanmahmudov/masume/internal/query/result"
 )
@@ -292,6 +293,30 @@ func TestJSONExportWritesADriverListAsAnArray(t *testing.T) {
 	}
 	if empty, isList := read[0]["empty"].([]any); !isList || len(empty) != 0 {
 		t.Errorf("the empty list reads back as %#v, wanted an empty array", read[0]["empty"])
+	}
+}
+
+// A document from MongoDB reaches the writer as canonical extended JSON, and the file
+// holds the values it wraps.
+func TestExportUnwrapsExtendedJSON(t *testing.T) {
+	columns := []query.ResultColumn{{Name: "nums", DataType: "array"}}
+	rows := [][]any{{core.DocumentValue{
+		Text:  `[{"$numberInt":"1"},{"$numberInt":"2"}]`,
+		Count: 2, IsArray: true,
+	}}}
+
+	for _, held := range []struct {
+		format result.ExportFormat
+		want   string
+	}{
+		{result.ExportJSON, `"nums":[1,2]`},
+		{result.ExportCSV, `"[1,2]"`},
+	} {
+		writer := result.CreateExportWriter(held.format, result.DefaultCSVOptions())
+		written := writer.Begin(columns) + writer.WriteRows(rows, columns) + writer.End()
+		if !strings.Contains(written, held.want) {
+			t.Errorf("%s holds %s, wanted %s", held.format, written, held.want)
+		}
 	}
 }
 
