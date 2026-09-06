@@ -118,6 +118,19 @@ func TestAFailedCallAnswersWithTheReason(t *testing.T) {
 	}
 }
 
+// A statement the server refused is an error of the call, so a client that reads
+// `isError` does not take the failure for a result.
+func TestAnAnswerThatHoldsAnErrorIsMarkedAsOne(t *testing.T) {
+	responder, _ := buildTestResponder(func(map[string]any) (any, error) {
+		return map[string]any{"ran": true, "error": "syntax error at or near \"selct\""}, nil
+	})
+	answered := answerOne(t, responder,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"one_tool"}}`)
+	if !strings.Contains(answered, `"isError":true`) {
+		t.Errorf("the answer reads %s, wanted isError", answered)
+	}
+}
+
 func TestToolsListDescribesEveryTool(t *testing.T) {
 	responder, _ := buildTestResponder(nil)
 	answered := answerOne(t, responder, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)

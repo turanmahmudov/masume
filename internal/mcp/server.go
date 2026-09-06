@@ -132,6 +132,17 @@ func buildError(id any, code int, message string) any {
 }
 
 // buildToolResult returns the answer of a tool and whether the call failed.
+// holdsToolError is true for an answer that reports an error of its own, such as a
+// statement the server refused. A client reads the failure from `isError`.
+func holdsToolError(answered any) bool {
+	named, isObject := answered.(map[string]any)
+	if !isObject {
+		return false
+	}
+	message, isText := named["error"].(string)
+	return isText && message != ""
+}
+
 func buildToolResult(text string, failed bool) toolResult {
 	return toolResult{
 		Content: []toolContent{{Type: "text", Text: text}}, IsError: failed,
@@ -346,7 +357,7 @@ func (responder *Responder) callTool(
 		written, err = encodeJSON(answered, "  ")
 		if err == nil {
 			responder.deps.LogEvent("< tool " + tool.Name + " " + core.CutForLog(written))
-			return buildToolResult(written, false), nil
+			return buildToolResult(written, holdsToolError(answered)), nil
 		}
 	}
 	// A refusal and an error go into the answer and not into a protocol error, so the
