@@ -33,6 +33,11 @@ func TestFindQueryParametersNamesEveryMarkOnce(t *testing.T) {
 		{"a mark inside text", "select ':id'", nil},
 		{"a mark in a line comment", "select 1 -- :id", nil},
 		{"a mark in a block comment", "select /* :id */ 1", nil},
+
+		// A mongo shell object writes a colon after the key.
+		{"an object key", "db.orders.insertOne({paid:true})", nil},
+		{"a quoted object key", `db.orders.insertOne({"paid":true})`, nil},
+		{"an object value that is a mark", "db.orders.find({id: :id})", []string{"id"}},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			answered := statement.FindQueryParameters(held.sql)

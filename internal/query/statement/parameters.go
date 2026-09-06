@@ -19,7 +19,8 @@ type parameterMark struct {
 }
 
 // readParameterMarks returns every `:name`, in order. A `::` is a cast, and the name
-// must follow the colon directly.
+// must follow the colon directly. A colon that closes a key, as in the mongo shell
+// object `{a:true}`, is not a mark.
 func readParameterMarks(sql string) []parameterMark {
 	tokens := []syntax.Token{}
 	for _, token := range syntax.Tokenize(sql, syntax.FlavourStandard) {
@@ -38,6 +39,9 @@ func readParameterMarks(sql string) []parameterMark {
 		}
 		next := tokens[index+1]
 		if !syntax.IsWordKind(next.Kind) || next.Start != token.End {
+			continue
+		}
+		if index > 0 && closesObjectKey(tokens[index-1], token) {
 			continue
 		}
 		marks = append(marks, parameterMark{
@@ -61,6 +65,18 @@ func FindQueryParameters(sql string) []string {
 		names = append(names, mark.name)
 	}
 	return names
+}
+
+// closesObjectKey is true where the colon follows a key directly. No SQL statement writes
+// a mark against a name, a string or a number.
+func closesObjectKey(previous syntax.Token, colon syntax.Token) bool {
+	if previous.End != colon.Start {
+		return false
+	}
+	return syntax.IsWordKind(previous.Kind) ||
+		previous.Kind == syntax.TokenString ||
+		previous.Kind == syntax.TokenQuoted ||
+		previous.Kind == syntax.TokenNumber
 }
 
 // ErrParameter marks a fault in the values a statement binds.
