@@ -8,7 +8,7 @@ before:
 
 builds:
   - id: masume
-    main: ./cmd/masume
+    main: .
     binary: masume
     env:
       - CGO_ENABLED=0
@@ -21,7 +21,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{ .Version }}
+      - -s -w -X github.com/turanmahmudov/masume/internal/cli.Version={{ .Version }}
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
@@ -46,8 +46,6 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - "^docs:"
-      - "^test:"
       - Merge pull request
       - Merge branch
 
@@ -58,7 +56,11 @@ release:
     ## Install
 
     ```sh
-    go install github.com/turanmahmudov/masume/cmd/masume@{{ .Tag }}
+    curl -fsSL https://raw.githubusercontent.com/turanmahmudov/masume/{{ .Tag }}/install.sh | MASUME_VERSION={{ .Tag }} sh
+    ```
+
+    ```sh
+    go install github.com/turanmahmudov/masume@{{ .Tag }}
     ```
 
     Or take an archive below, unpack it, and put `masume` on the PATH.

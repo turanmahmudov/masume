@@ -40,8 +40,6 @@ body:
         - The config file
         - An engine
         - Something else
-    validations:
-      required: true
 
   - type: textarea
     id: alternatives

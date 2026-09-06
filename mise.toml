@@ -3,6 +3,7 @@
 # with an older Go cannot read the packages that this tree compiles.
 go = "1.27"
 staticcheck = "2026.2.1"
+"aqua:goreleaser/goreleaser" = "2.18.0"
 "go:golang.org/x/tools/cmd/goimports" = "latest"
 "go:golang.org/x/vuln/cmd/govulncheck" = "latest"
 "go:golang.org/x/tools/cmd/deadcode" = "latest"
@@ -20,7 +21,7 @@ description = "Build a stripped release binary, stamped with the version"
 run = """
 set -eu
 version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
-go build -trimpath -ldflags "-s -w -X main.version=$version" -o masume ./cmd/masume
+go build -trimpath -ldflags "-s -w -X github.com/turanmahmudov/masume/internal/cli.Version=$version" -o masume .
 echo "built masume $version"
 ls -la masume
 """
@@ -30,7 +31,7 @@ description = "Install a release binary into the Go bin directory"
 run = """
 set -eu
 version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
-go install -trimpath -ldflags "-s -w -X main.version=$version" ./cmd/masume
+go install -trimpath -ldflags "-s -w -X github.com/turanmahmudov/masume/internal/cli.Version=$version" .
 echo "installed masume $version to $(go env GOBIN GOPATH | head -1)"
 """
 
@@ -140,6 +141,10 @@ run = "go vet ./..."
 description = "Run staticcheck with the settings in staticcheck.conf"
 run = "staticcheck ./..."
 
+[tasks.release-check]
+description = "Validate .goreleaser.yaml"
+run = "goreleaser check"
+
 [tasks.lint]
 description = "Run every check that needs no server"
 depends = [
@@ -149,6 +154,7 @@ depends = [
   "staticcheck",
   "errcheck",
   "deadcode",
+  "release-check",
 ]
 
 [tasks.check]
@@ -168,7 +174,7 @@ docker compose exec -T postgres psql -q -U postgres -d shop < vhs/seed.sql
 rm -rf .demo
 mkdir -p .demo/config/masume .demo/state .demo/bin
 cp vhs/config.toml .demo/config/masume/config.toml
-go build -o .demo/bin/masume ./cmd/masume
+go build -o .demo/bin/masume .
 """
 
 [tasks.demo]

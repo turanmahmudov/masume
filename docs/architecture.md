@@ -1,6 +1,6 @@
 # Architecture
 
-masume is one binary with three front ends. `cmd/masume` parses arguments, builds connection targets, and starts the selected front end.
+masume is one binary with three front ends. `internal/cli` parses arguments, builds connection targets, and starts the selected front end. The root package calls it.
 
 `internal/ui` is the terminal interface. `internal/mcp` is the MCP server. `internal/headless` runs statements without a screen and returns an exit code.
 

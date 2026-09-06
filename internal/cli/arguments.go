@@ -1,8 +1,7 @@
-package main
+package cli
 
 import (
 	"errors"
-	"os"
 	"strings"
 
 	"github.com/turanmahmudov/masume/internal/cfg"
@@ -13,6 +12,19 @@ import (
 
 // databaseURLVariable is read when the command is given no target of its own.
 const databaseURLVariable = "DATABASE_URL"
+
+// clientShortFlagNames are the short flags of the client that take a value, and the long flag of each.
+var clientShortFlagNames = map[string]string{"-p": "--profile"}
+
+// expandShortFlag expands a short flag with an attached value, such as -p=shop.
+func expandShortFlag(argument string, shortFlagNames map[string]string) string {
+	name, value, attached := strings.Cut(argument, "=")
+	long, isShort := shortFlagNames[name]
+	if !attached || !isShort {
+		return argument
+	}
+	return long + "=" + value
+}
 
 // argumentError is an invalid argument. The exit code is 2.
 type argumentError struct{ reason string }
@@ -32,7 +44,7 @@ type invocation struct {
 func parseArguments(argv []string) (invocation, error) {
 	held := invocation{}
 	for at := 0; at < len(argv); at++ {
-		argument := expandShortFlag(argv[at])
+		argument := expandShortFlag(argv[at], clientShortFlagNames)
 		switch {
 		case argument == "--profile" || argument == "-p":
 			if at+1 >= len(argv) || strings.HasPrefix(argv[at+1], "-") {
@@ -105,9 +117,6 @@ func resolveStartProfile(
 	built.Name = cfg.ResolveUniqueProfileName(profiles, built.Name)
 	return append([]cfg.Profile{built}, profiles...), &built, nil
 }
-
-// readEnvironment reads a process environment variable.
-func readEnvironment(name string) string { return os.Getenv(name) }
 
 // listDetectedProfiles returns detected container databases before configured profiles.
 func listDetectedProfiles(profiles []cfg.Profile) ([]cfg.Profile, error) {

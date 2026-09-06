@@ -1,11 +1,9 @@
-// Command masume is a terminal database client for PostgreSQL, MySQL, SQLite, MongoDB, and protocol-compatible servers.
-package main
+package cli
 
 import (
 	"errors"
 	"fmt"
 	"os"
-	"runtime/debug"
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
@@ -17,15 +15,14 @@ import (
 	"github.com/turanmahmudov/masume/internal/ui"
 )
 
-// version is the release version, set with -ldflags "-X main.version=...". Development builds use the recorded revision.
-var version = "dev"
+// Dispatch of the process arguments. internal/ui draws the client the arguments select.
 
 // usage is the --help text.
 const usage = `masume - a database client for the terminal
 
 usage:
   masume                        open the client
-  masume run [TARGET] STATEMENT  run statements, write results, and exit
+  masume run [TARGET] STATEMENT run statements, write results, and exit
   masume URL                    open a supported URL, for example postgres://you@host/shop
   masume FILE                   open an existing SQLite file, for example ./notes.db
   masume DSN                    open a keyword connection string, for example "host=db dbname=shop"
@@ -47,66 +44,36 @@ The config file is $XDG_CONFIG_HOME/masume/config.toml.
 The history file is $XDG_STATE_HOME/masume/history.sqlite.
 The nearest .masume.toml in or above the working directory supplies project profiles and queries.`
 
-func main() {
-	argv := os.Args[1:]
+// Run reads the arguments of the process and returns the exit code.
+func Run(argv []string) int {
 	// Parse subcommand arguments before client flags.
 	if len(argv) > 0 && argv[0] == "run" {
-		os.Exit(runHeadless(argv[1:]))
+		return runHeadless(argv[1:])
 	}
 	if slices.Contains(argv, "--help") || slices.Contains(argv, "-h") {
 		fmt.Println(usage)
-		return
+		return 0
 	}
 	if slices.Contains(argv, "--version") || slices.Contains(argv, "-v") {
-		fmt.Println("masume " + resolveVersion())
-		return
+		fmt.Println("masume " + ResolveVersion())
+		return 0
 	}
 	if slices.Contains(argv, "--mcp") {
-		os.Exit(mcp.RunServer(argv, resolveVersion()))
+		return mcp.RunServer(argv, ResolveVersion())
 	}
 	held, err := parseArguments(argv)
 	if err == nil {
 		err = runApp(held)
 	}
 	if err == nil {
-		return
+		return 0
 	}
 	fmt.Fprintln(os.Stderr, "masume: "+err.Error())
 	if _, isArgument := errors.AsType[argumentError](err); isArgument {
 		fmt.Fprintln(os.Stderr, "run masume --help for usage")
-		os.Exit(2)
+		return 2
 	}
-	os.Exit(1)
-}
-
-// resolveVersion returns the release version or the recorded revision.
-func resolveVersion() string {
-	if version != "dev" {
-		return version
-	}
-	info, read := debug.ReadBuildInfo()
-	if !read {
-		return version
-	}
-	revision, modified := "", false
-	for _, setting := range info.Settings {
-		switch setting.Key {
-		case "vcs.revision":
-			revision = setting.Value
-		case "vcs.modified":
-			modified = setting.Value == "true"
-		}
-	}
-	if revision == "" {
-		return version
-	}
-	if len(revision) > 12 {
-		revision = revision[:12]
-	}
-	if modified {
-		return version + "+" + revision + "-dirty"
-	}
-	return version + "+" + revision
+	return 1
 }
 
 func runApp(held invocation) error {
@@ -124,7 +91,7 @@ func runApp(held invocation) error {
 	problems = append(problems, loaded.Project.Problems...)
 
 	// Read before anything is opened, while the terminal still shows the shell.
-	listed, start, err := resolveStartProfile(held, loaded.Profiles, readEnvironment)
+	listed, start, err := resolveStartProfile(held, loaded.Profiles, os.Getenv)
 	if err != nil {
 		return err
 	}

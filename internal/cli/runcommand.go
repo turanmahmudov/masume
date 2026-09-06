@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -56,19 +56,9 @@ type runInvocation struct {
 	help     bool
 }
 
-// shortFlagNames are the short flags that take a value, and the long flag of each.
-var shortFlagNames = map[string]string{
+// runShortFlagNames are the short flags of masume run that take a value, and the long flag of each.
+var runShortFlagNames = map[string]string{
 	"-p": "--profile", "-e": "--execute", "-l": "--limit", "-f": "--format",
-}
-
-// expandShortFlag expands short flags with attached values, such as -f=csv.
-func expandShortFlag(argument string) string {
-	name, value, attached := strings.Cut(argument, "=")
-	long, isShort := shortFlagNames[name]
-	if !attached || !isShort {
-		return argument
-	}
-	return long + "=" + value
 }
 
 // readFlagText returns the value written after the equals sign of a flag.
@@ -104,7 +94,7 @@ func parseRunArguments(argv []string) (runInvocation, error) {
 	positional := []string{}
 
 	for at := 0; at < len(argv); at++ {
-		argument := expandShortFlag(argv[at])
+		argument := expandShortFlag(argv[at], runShortFlagNames)
 		var value string
 		var err error
 
@@ -293,7 +283,7 @@ func runHeadless(argv []string) int {
 	for _, warning := range loaded.Warnings {
 		fmt.Fprintln(os.Stderr, "masume: "+warning.DescribeWarning())
 	}
-	profile, err := resolveRunProfile(held, loaded.Profiles, readEnvironment)
+	profile, err := resolveRunProfile(held, loaded.Profiles, os.Getenv)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "masume: "+err.Error())
 		return 2

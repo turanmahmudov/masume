@@ -60,8 +60,6 @@ body:
         - PlanetScale
         - Aurora MySQL
         - Not about an engine
-    validations:
-      required: true
 
   - type: input
     id: server-version
@@ -76,8 +74,6 @@ body:
       label: Operating system and terminal
       description: The system, the terminal program and its version.
       placeholder: Linux 6.12, WezTerm 20240203
-    validations:
-      required: true
 
   - type: textarea
     id: frame

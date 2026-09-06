@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <code>go install github.com/turanmahmudov/masume/cmd/masume@master</code>
+  <code>mise use -g github:turanmahmudov/masume@latest</code>
 </p>
 
 <p align="center">
@@ -110,10 +110,11 @@ Both interfaces share database tools, but their policies differ. See [AI data sh
 
 ## Install
 
-There is no tagged release yet, so there are no prebuilt binaries. Each command below builds the latest commit on `master`.
+Each command below installs the latest tagged release.
 
-- **Go 1.27 or later:** `go install github.com/turanmahmudov/masume/cmd/masume@master`
-- **mise:** `mise use -g "go:github.com/turanmahmudov/masume/cmd/masume@master"`
+- **Script:** `curl -fsSL https://raw.githubusercontent.com/turanmahmudov/masume/master/install.sh | sh` installs `masume` in `~/.local/bin`.
+- **mise:** `mise use -g github:turanmahmudov/masume@latest` downloads the release archive.
+- **Go 1.27 or later:** `go install github.com/turanmahmudov/masume@latest` builds from the module proxy.
 
 ### From source
 
@@ -201,7 +202,7 @@ The config file is `$XDG_CONFIG_HOME/masume/config.toml`. The history file is `$
 
 ## Status
 
-The project is in an early stage. There is no tagged release yet, and the config file format can change before `v1`. It builds on Linux and macOS, for amd64 and arm64. There is no Windows build.
+The project is in an early stage. The config file format can change before `v1`. It builds on Linux and macOS, for amd64 and arm64.
 
 Tier 1 engines have integration coverage in CI; SQLite uses temporary files. Tier 2 services share protocols but have no real-server integration coverage. See [engine limits](docs/engines.md) before production use.
 
