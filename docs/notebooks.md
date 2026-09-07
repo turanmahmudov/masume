@@ -6,7 +6,7 @@ The [key reference](keys.md#notebook) lists the bindings of the cell list.
 
 ## Opening a notebook
 
-`Alt+B` opens an empty notebook, and so does `Alt+Shift+N` where the terminal reports the Shift. `Alt+O n` opens the notebooks card, which lists the notebooks of the project and of the user with the directory each one is kept in. Enter opens the row in this tab, `Alt+Enter` in a new tab, `n` opens an empty notebook, `e` renames the file, and `d` deletes it after a question. The filter field also matches the place a notebook is kept, so `project` lists the notebooks of the team.
+`Alt+B` opens an empty notebook, and so does `Alt+Shift+N` where the terminal reports the Shift. `Alt+O n` opens the notebooks card, which lists the notebooks of the project and of the user. A notebook of an extra directory names that directory. Enter opens the row in this tab, `Alt+Enter` in a new tab, `n` opens an empty notebook, `e` renames the file, and `d` deletes it after a question. The filter field also matches the place a notebook is kept, so `project` lists the notebooks of the team.
 
 `masume ./review.masume.md` opens a notebook file by path, together with the connection the arguments name.
 

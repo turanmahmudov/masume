@@ -142,8 +142,13 @@ func (model *Model) buildNotebookRows(
 	connection *app.Connection, tab *app.Tab, inner int, focused bool,
 ) []notebookRow {
 	book := tab.Notebook
-	rows := make([]notebookRow, 0, len(book.Cells)*3)
+	rows := make([]notebookRow, 0, len(book.Cells)*4)
 	for at, cell := range book.Cells {
+		// A blank row stands between one cell and the next, so the head of a cell reads
+		// apart from the body of the cell above it.
+		if at > 0 {
+			rows = append(rows, notebookRow{cell: at - 1})
+		}
 		onCell := at == book.Focused && focused
 		rows = append(rows, notebookRow{
 			cell: at, header: true,

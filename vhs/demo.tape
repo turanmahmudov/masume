@@ -7,6 +7,7 @@
 # grid and renders it with more pixels.
 
 Output vhs/demo.gif
+Output vhs/demo.mp4
 
 Require masume
 
@@ -87,6 +88,31 @@ Ctrl+e
 Sleep 3s
 Ctrl+y
 Sleep 3500ms
+
+# A notebook is a fourth kind of tab: cells of prose, values and statements over one
+# connection, kept as a Markdown file.
+Alt+o
+Type "n"
+Sleep 2200ms
+Enter
+Sleep 2500ms
+
+# Alt+R runs every cell, in order, one result each.
+Alt+r
+Sleep 3500ms
+
+# The cell list moves with j and k. The result pane draws the result of the cell it stands
+# on, and a chart cell draws the result of the cell it names.
+Type "j" Sleep 900ms
+Type "j" Sleep 1600ms
+Type "j" Sleep 2500ms
+Type "j" Sleep 2500ms
+
+# A new cell asks for its kind first.
+Type "b"
+Sleep 2200ms
+Escape
+Sleep 800ms
 
 # The command palette searches actions by name.
 Ctrl+k

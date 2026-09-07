@@ -75,16 +75,17 @@ MASUME_TEST_MYSQL_IMAGE=mysql:8.0 \
   mise run test-integration-full
 ```
 
-## The demo recording and the screenshots
+## The demo recordings and the screenshots
 
-Both use the postgres container and the schema in `vhs/seed.sql`:
+They use the postgres container, the schema in `vhs/seed.sql`, and the notebook in `vhs/notebook.masume.md`:
 
 ```sh
-mise run demo    # vhs/demo.gif for the README
-mise run shots   # the screenshots in vhs/shots
+mise run demo           # vhs/demo.gif for the README, and vhs/demo.mp4
+mise run demo-notebook  # vhs/notebook.mp4, the notebook recording
+mise run shots          # the screenshots in vhs/shots
 ```
 
-Both need Docker and install VHS, ttyd, and FFmpeg through mise when they run. `vhs/config.toml` contains the glyph settings, which need a Nerd Font. Rebuild captures when a change affects the displayed content.
+All three need Docker and install VHS, ttyd, and FFmpeg through mise when they run. `vhs/config.toml` contains the glyph settings, which need a Nerd Font. Rebuild captures when a change affects the displayed content.
 
 ## Code style
 

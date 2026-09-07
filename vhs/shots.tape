@@ -90,6 +90,28 @@ Screenshot vhs/shots/10-plan.png
 Ctrl+k
 Sleep 2s
 Screenshot vhs/shots/11-palette.png
+Escape Sleep 800ms
+
+# A notebook of prose, values, statements and a chart, with every cell run.
+Alt+o
+Type "n"
+Sleep 2s
+Screenshot vhs/shots/12-notebooks-card.png
+
+Enter
+Sleep 2s
+Alt+r
+Sleep 4s
+Screenshot vhs/shots/13-notebook.png
+
+Type "j" Sleep 400ms
+Type "j" Sleep 400ms
+Type "j" Sleep 2s
+Screenshot vhs/shots/14-notebook-chart.png
+
+# The palette again, for the light theme frame.
+Ctrl+k
+Sleep 1500ms
 
 # And the same screen in a light theme.
 Type "theme" Sleep 1500ms
@@ -104,5 +126,5 @@ Down Sleep 200ms
 Down Sleep 1500ms
 Enter
 Sleep 2500ms
-Screenshot vhs/shots/12-light-theme.png
+Screenshot vhs/shots/15-light-theme.png
 Sleep 500ms

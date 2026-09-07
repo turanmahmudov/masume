@@ -52,6 +52,12 @@ Query plans are displayed as a tree, with estimated or measured costs.
 
 ![A query plan drawn as a tree](vhs/shots/10-plan.png)
 
+### Notebooks
+
+Cells of prose, values, statements and charts over one connection. Each cell keeps its own result and its own view. A notebook is a Markdown file, and `masume nb run` runs it without a screen.
+
+![A notebook of prose, values, statements and a chart](vhs/shots/13-notebook.png)
+
 ### Agents
 
 masume has a built-in AI chat and an MCP server over stdio. The AI chat uses the current connection and asks before each query, including reads. MCP opens separate connections to explicitly allowed profiles. MCP access levels and profile settings apply to its queries and write confirmations.
@@ -79,6 +85,8 @@ Both interfaces share database tools, but their policies differ. See [AI data sh
 **Foreign keys:** open rows matching the selected foreign-key column. Composite keys require additional filtering.
 
 **Query plans** as a tree with estimated or measured costs, or as raw text
+
+**SQL notebooks:** an ordered list of cells over one connection: prose, the values every cell binds, statements, and charts of what they answered. Each cell keeps its own result and its own view. A notebook is a Markdown file, and `masume nb run` runs one without a screen. See [notebooks](docs/notebooks.md).
 
 **Named parameters:** a statement with `:name` placeholders opens a form for the values
 
@@ -157,7 +165,7 @@ The client prompts when the connection requires a missing password. Temporary co
 
 Supported URLs are not complete native driver connection strings. Most native URL options are ignored. See [connection targets](docs/configuration.md#a-connection-on-the-command-line) before using authentication or TLS options.
 
-The [user guide](docs/usage.md) covers navigation, SQL, editing, transactions, imports, exports, history and troubleshooting.
+The [user guide](docs/usage.md) covers navigation, SQL, editing, transactions, imports, exports, history and troubleshooting. The [notebook guide](docs/notebooks.md) covers cells, charts and `masume nb run`.
 
 ### Without a screen
 

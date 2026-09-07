@@ -272,8 +272,10 @@ func describeNotebookEntry(entry notebook.Entry) string {
 	if entry.Title != "" && entry.Title != entry.Name {
 		parts = append(parts, entry.Title)
 	}
-	if directory := filepath.Dir(entry.Path); directory != "" {
-		parts = append(parts, core.ShortenHomePath(directory))
+	// The place of a project or a personal notebook is the label of its row, so only a
+	// notebook of an extra directory says which directory it is.
+	if entry.Origin == notebook.OriginExtra {
+		parts = append(parts, core.ShortenHomePath(filepath.Dir(entry.Path)))
 	}
 	return strings.Join(parts, " · ")
 }

@@ -172,8 +172,9 @@ set -eu
 docker compose up -d --wait postgres
 docker compose exec -T postgres psql -q -U postgres -d shop < vhs/seed.sql
 rm -rf .demo
-mkdir -p .demo/config/masume .demo/state .demo/bin
+mkdir -p .demo/config/masume .demo/state/masume/notebooks .demo/bin
 cp vhs/config.toml .demo/config/masume/config.toml
+cp vhs/notebook.masume.md .demo/state/masume/notebooks/revenue-review.masume.md
 go build -o .demo/bin/masume .
 """
 
@@ -186,7 +187,19 @@ PATH="$PWD/.demo/bin:$PATH" mise exec \\
   "go:github.com/charmbracelet/vhs@latest" ttyd@latest ffmpeg@latest \\
   -- vhs vhs/demo.tape
 rm -rf .demo
-ls -la vhs/demo.gif
+ls -la vhs/demo.gif vhs/demo.mp4
+"""
+
+[tasks.demo-notebook]
+description = "Rebuild the notebook recording"
+depends = ["demo-fixture"]
+run = """
+set -eu
+PATH="$PWD/.demo/bin:$PATH" mise exec \\
+  "go:github.com/charmbracelet/vhs@latest" ttyd@latest ffmpeg@latest \\
+  -- vhs vhs/notebook.tape
+rm -rf .demo
+ls -la vhs/notebook.mp4
 """
 
 [tasks.shots]
