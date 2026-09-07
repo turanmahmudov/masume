@@ -175,17 +175,25 @@ In Plan, `r` toggles the raw server plan and `y` copies the raw plan. `i` reques
 
 ## Tabs and history
 
-`Alt+Up` and `Alt+Down` switch tabs; `Alt+1` through `Alt+9` select tabs directly. `Alt+T` names a query tab with a first-line comment. Table and object tabs keep their object names.
+`Alt+Up` and `Alt+Down` switch tabs; `Alt+1` through `Alt+9` select tabs directly. `Alt+T` names a query tab with a first-line comment, and titles a notebook tab. Table and object tabs keep their object names.
 
 `Alt+W` closes a tab; `Alt+Shift+W` reopens the last closed tab during the session. Closing a tab with staged edits offers apply, discard, or cancel. The last tab stays open. `Ctrl+W` closes the connection; multiple tabs or staged changes require confirmation.
 
 `Ctrl+N` returns to the connection picker. `Alt+Left` and `Alt+Right` switch open connections. `Alt+S` toggles the sidebar; `Alt+D` toggles the result pane.
 
-`Ctrl+P` saves the query under a name. `Ctrl+Q` opens saved queries; `Ctrl+T` opens query history. Type to filter either list. Enter replaces the current query text; `Alt+Enter` loads a new query tab. On a table or object tab, either choice opens a query tab. Loading does not execute SQL.
+`Ctrl+P` saves the query under a name. On a notebook tab, `Ctrl+P` writes the notebook file. `Ctrl+Q` opens saved queries; `Ctrl+T` opens query history. Type to filter either list. Enter replaces the current query text; `Alt+Enter` loads a new query tab. On a table or object tab, either choice opens a query tab. Loading does not execute SQL.
 
 `Ctrl+D` removes a selected personal saved query. Project queries require changes to the [project file](configuration.md#the-project-file).
 
-Restoration uses stored tab identities, query text, active tab, caret, sort, and server filters. Results, staged edits, transaction state, screen filters, column widths, and frozen columns are not restored. Restored query tabs do not execute automatically. Restored table and object tabs read data when first shown.
+Restoration uses stored tab identities, query text, notebook text, active tab, caret, sort, and server filters. Results, staged edits, transaction state, screen filters, column widths, and frozen columns are not restored. Restored query tabs do not execute automatically. Restored table and object tabs read data when first shown.
+
+## Notebooks
+
+`Alt+B` opens a notebook: an ordered list of cells over one connection, stored as a Markdown file. `Alt+O n` lists the notebooks of the project and of the user. Opening one runs no cell.
+
+The cell list stands where a query tab draws its editor. Up and Down move between cells, `Enter` puts the caret in the focused cell, and `Esc` brings it back to the list. `b` adds a cell and asks for its kind. `r` runs the focused cell, `R` runs it and the cells below it, and `Alt+R` runs every cell. `Alt+O r` writes a report of the rows every cell answered.
+
+Each cell keeps the view of its own result: the view, the cursor, the frozen columns, the sort and the filter. A reopened notebook comes back on the cell it was left on, with the cells that were folded still folded. See the [notebook guide](notebooks.md) for the cell kinds, the run policy, the file format and `masume nb run`.
 
 ## Server activity
 
@@ -203,7 +211,7 @@ MongoDB lists operations instead of SQL sessions. Both stop actions use `killOp`
 
 `Ctrl+K` opens the searchable command palette. Type a command name, select a row, and press Enter. Commands require their target state, such as a result for copying.
 
-Palette-only operations include Reload the theme files and AI provider selection. Ask AI: explain this query and Ask AI: optimize this query are also palette-only operations. Config problems appears when configuration reports exist. These operations have no default direct binding.
+Palette-only operations include Reload the theme files and AI provider selection. Ask AI: explain this query, Ask AI: optimize this query and Ask AI: build a notebook are also palette-only operations. Config problems appears when configuration reports exist. These operations have no default direct binding.
 
 `Alt+O t` opens the theme picker. Movement previews themes, Enter saves the selection, and Esc cancels. See [themes](themes.md).
 
@@ -211,6 +219,7 @@ Palette-only operations include Reload the theme files and AI provider selection
 
 ## Mouse controls
 
+- Scroll the cell list of a notebook with the wheel or the bar at its right. Click a row to move to that cell; click it again to open it.
 - Click a pane to focus the pane. Click tabs, connections, statement results, and view labels to select each target.
 - Click a tree row to select the row; double-click opens the row. Click the fold marker to expand or collapse.
 - Click a grid cell to select the cell; double-click a row to open row details.

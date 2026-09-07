@@ -16,6 +16,7 @@ A scope is the pane or card where a binding applies. Cards and input fields hand
 | `grid` | The Data grid |
 | `document` | The result document tree |
 | `plan` | The Plan view |
+| `notebook` | The cell list of a notebook tab |
 | `list` | Lists in cards, and scrolling in detail views |
 | `dialog` | The active card, connection picker, or form |
 
@@ -72,6 +73,7 @@ Every registered action has a default binding. Some palette operations have no r
 | `list-secondary` | `ctrl+d` |
 | `new-ai-chat` | `ctrl+l` |
 | `new-connection` | `n` |
+| `chat-to-notebook` | `ctrl+g` |
 | `next-turn` | `ctrl+n` |
 | `open-in-new-tab` | `alt+return` |
 | `prettify-json` | `ctrl+f` |
@@ -156,12 +158,14 @@ See [editing SQL](usage.md#editing-sql) for search, replacement, completion, and
 | `focus-result` | `alt+p r` |
 | `focus-sidebar` | `alt+p s` |
 | `name-tab` | `alt+t` |
+| `new-notebook-tab` | `alt+b` or `alt+shift+n` |
 | `new-query-tab` | `alt+n` |
 | `next-connection` | `}` or `alt+right` |
 | `next-page` | `ctrl+f` |
 | `next-statement` | `'` |
 | `next-tab` | `]` or `alt+down` |
 | `next-view` | `.` |
+| `notebook-run-policy` | `alt+o p` |
 | `open-picker` | `ctrl+n` |
 | `previous-connection` | `{` or `alt+left` |
 | `previous-statement` | `;` |
@@ -180,6 +184,8 @@ See [editing SQL](usage.md#editing-sql) for search, replacement, completion, and
 | `show-ai-chat` | `ctrl+i` |
 | `show-help` | `?` |
 | `show-history` | `ctrl+t` |
+| `show-notebooks` | `alt+o n` |
+| `write-notebook-report` | `alt+o r` |
 | `show-palette` | `ctrl+k` |
 | `show-saved` | `ctrl+q` |
 | `show-themes` | `alt+o t` |
@@ -280,6 +286,38 @@ The Tree view opens result values with fields or elements, including MongoDB doc
 | `pop-filter` | `u` |
 | `search-columns` | `/` |
 | `unfold-row` | `right` |
+
+## Notebook
+
+`[keys.notebook]`
+
+The cell list takes no typed text, so single letters are free there. `Enter` puts the caret in the focused cell, and `Esc` brings it back to the list.
+
+| Action | Key |
+| --- | --- |
+| `add-cell-above` | `a` |
+| `add-cell-below` | `b` |
+| `copy-cell` | `y` |
+| `cursor-down` | `down` or `j` |
+| `cursor-first-row` | `home` |
+| `cursor-last-row` | `end` |
+| `cursor-up` | `up` or `k` |
+| `cut-cell` | `x` |
+| `delete-cell` | `d d` |
+| `edit-cell-source` | `return` |
+| `mark-cell` | `space` |
+| `move-cell-down` | `J` |
+| `move-cell-up` | `K` |
+| `name-cell` | `t` |
+| `paste-cell` | `p` |
+| `redo-cell-change` | `Z` |
+| `run-cell` | `r` |
+| `run-from-cell` | `R` |
+| `run-marked-cells` | `m` |
+| `set-cell-kind` | `c` |
+| `toggle-cell-output` | `o` |
+| `toggle-every-output` | `O` |
+| `undo-cell-change` | `u` |
 
 ## Object tree
 

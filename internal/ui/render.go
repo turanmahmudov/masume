@@ -10,6 +10,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
+	"github.com/turanmahmudov/masume/internal/notebook"
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
@@ -315,6 +316,9 @@ func (model *Model) describeConfigProblems() string {
 // renderStatusBar draws the bottom bar: the keys on the left, the report on the right.
 func (model *Model) renderStatusBar(hints []Hint, message string, tone app.NoticeTone) string {
 	theme := model.styles.Theme
+	// A report longer than the bar is cut. The strip gives way on its left, so a report
+	// that kept its whole length would reach past the end of the row.
+	message = present.TruncateText(message, max(model.width-4, 0))
 	// The blank column on each side of the message, and the gap before the keys.
 	room := model.width - present.MeasureText(message) - 4
 
@@ -402,7 +406,9 @@ func (model *Model) renderWorkspaceStatusBar() string {
 
 	hints := model.registry.BuildHints(HintContext{
 		Pane: tab.Focus, Capabilities: connection.Session.Capabilities(),
-		TabKind: tab.Kind, View: tab.View, Views: tab.Views(connection.Session),
+		TabKind: tab.Kind, ListsCells: tab.ListsCells(),
+		CellKind: readFocusedCellKind(tab),
+		View:     tab.View, Views: tab.Views(connection.Session),
 		HasResult: hasResult, Connections: model.connections.count(),
 		HasSelection: model.holdsSelection(), SidebarVisible: connection.SidebarVisible,
 		Rewritten: tab.HasRewrite(), FilterSteps: len(tab.Filter),
@@ -453,4 +459,13 @@ func (model *Model) describeStatus(
 		return warning + "autocommit is off", app.NoticeInfo
 	}
 	return "", app.NoticeInfo
+}
+
+// readFocusedCellKind returns the kind of the focused cell, and nothing for a tab that
+// holds no notebook.
+func readFocusedCellKind(tab *app.Tab) notebook.CellKind {
+	if tab.Kind != app.TabNotebook || tab.Notebook == nil {
+		return ""
+	}
+	return tab.Notebook.GetFocusedCell().Kind
 }

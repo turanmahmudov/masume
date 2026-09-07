@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -112,6 +113,9 @@ func (model *Model) runChatAction(
 	case ActionInsertAiSQL:
 		held, command := model.insertAiSQL(connection, tab)
 		return true, held, command
+	case ActionChatToNotebook:
+		held, command := model.buildNotebookOfChat(connection)
+		return true, held, command
 	case ActionNewAiChat:
 		// The conversation on screen stays in the file, so nothing is lost.
 		chat.Stopped()
@@ -171,12 +175,94 @@ func (model *Model) insertAiSQL(
 	if found {
 		if sql, wrote := query.FindSQLBlock(reply); wrote {
 			connection.Overlay = app.Overlay{}
+			// A notebook takes the statement as a cell of its own, under the focused one.
+			if tab.Kind == app.TabNotebook && tab.Notebook != nil {
+				cell := tab.Notebook.AddCell(true)
+				cell.Editor.SetText(sql)
+				tab.Editor = cell.Editor
+				tab.Focus = app.PaneEditor
+				connection.Show("the statement is a new cell")
+				return model, nil
+			}
 			// A tab that shows a relation has no editor, so the statement opens a query
 			// tab of its own rather than a buffer nothing draws.
 			return model.loadSQL(connection, tab, sql, false)
 		}
 	}
 	chat.Notice = "no query in the last reply yet"
+	return model, nil
+}
+
+// notebookRequest is what the model is asked for when it builds a notebook. The system
+// prompt asks for one fenced block per answer, and a notebook is several, so this asks for
+// several plainly.
+const notebookRequest = "Build a notebook of this database for: %s\n\n" +
+	"Answer as a notebook, not as one query. Write a short line of prose for each step, " +
+	"and one fenced sql block per query. Use several fenced blocks in this answer, one " +
+	"for each query, and open every query with a `-- name` comment line that names it. " +
+	"Where a value belongs to the reader, write it as a :name mark rather than a literal. " +
+	"Run nothing."
+
+// askAiForNotebook asks what the notebook is to cover.
+func (model *Model) askAiForNotebook(connection *app.Connection) (tea.Model, tea.Cmd) {
+	connection.Overlay = app.Overlay{
+		Kind: app.OverlayPrompt, Prompt: app.PromptAiNotebook, Title: "build a notebook",
+		Hint:  "the model answers with one cell per query, and runs nothing",
+		Draft: app.NewEditorBuffer("", 0),
+	}
+	return model, nil
+}
+
+// sendNotebookRequest asks the model for a notebook, and marks the run so the reply opens
+// as one.
+func (model *Model) sendNotebookRequest(
+	connection *app.Connection, tab *app.Tab, subject string,
+) (tea.Model, tea.Cmd) {
+	if subject == "" {
+		return model, nil
+	}
+	model.openAiChat(connection, "")
+	connection.Chat.BuildsNotebook = true
+	return model.sendChatMessage(connection, tab, fmt.Sprintf(notebookRequest, subject))
+}
+
+// openReplyNotebook opens the reply of the model as a notebook. It runs no cell.
+func (model *Model) openReplyNotebook(connection *app.Connection) (tea.Model, tea.Cmd) {
+	chat := connection.Chat
+	chat.BuildsNotebook = false
+	reply, found := chat.FindLastReply()
+	if !found {
+		chat.Notice = "the model wrote no reply to keep"
+		return model, nil
+	}
+	book := app.BuildReplyNotebook(reply, chat.NotebookSubject)
+	if len(book.Cells) == 0 {
+		chat.Notice = "the reply holds no cell to keep"
+		return model, nil
+	}
+	connection.Overlay = app.Overlay{}
+	tab := connection.OpenNotebook(book, "", "")
+	tab.Focus = app.PaneEditor
+	tab.Notebook.Dirty = true
+	connection.Show("the reply is a notebook; nothing ran")
+	return model, model.saveWorkspace(connection)
+}
+
+// buildNotebookOfChat opens the conversation as a notebook.
+func (model *Model) buildNotebookOfChat(
+	connection *app.Connection,
+) (tea.Model, tea.Cmd) {
+	chat := connection.Chat
+	book := app.BuildChatNotebook(chat.Messages)
+	if len(book.Cells) == 0 {
+		chat.Notice = "this conversation holds nothing to keep yet"
+		return model, nil
+	}
+	connection.Overlay = app.Overlay{}
+	tab := connection.OpenNotebook(book, "", "")
+	tab.Focus = app.PaneEditor
+	tab.Notebook.Dirty = true
+	connection.Show("the conversation is a notebook; the save key writes it to a file")
 	return model, nil
 }
 
@@ -339,6 +425,16 @@ func (model *Model) readChatEvents(held chatEventsMsg) (tea.Model, tea.Cmd) {
 	}
 	for _, event := range held.Events {
 		model.applyChatEvent(connection, event)
+	}
+	// A run that was asked for a notebook opens its reply as one, the moment it ends. A
+	// run that failed opens none, and the next one is not taken for this one.
+	if chat := connection.Chat; chat.BuildsNotebook {
+		switch chat.Status {
+		case app.ChatIdle:
+			return model.openReplyNotebook(connection)
+		case app.ChatFailed:
+			chat.BuildsNotebook = false
+		}
 	}
 	if held.Source == nil {
 		return model, nil

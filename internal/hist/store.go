@@ -39,6 +39,9 @@ type SavedTabState struct {
 	Caret  int               `json:"caret"`
 	Sort   []core.SortState  `json:"sort"`
 	Filter []core.FilterStep `json:"filter"`
+	// The cell of a notebook the list stood on, and the cells that were folded away.
+	Cell   int      `json:"cell,omitempty"`
+	Folded []string `json:"folded,omitempty"`
 }
 
 // SavedTab is a stored query buffer, table reference, or object reference. Table and object tabs use generated statements.

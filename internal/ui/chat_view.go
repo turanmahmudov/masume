@@ -568,6 +568,7 @@ func (model *Model) describeChatKeys(chat *app.Chat) *KeyLine {
 		// The field returns the arrows itself, so the registry cannot move these either.
 		name("↑↓", "scroll").
 		bind(cfg.ScopeDialog, ActionInsertAiSQL, "last reply query to editor").
+		bind(cfg.ScopeDialog, ActionChatToNotebook, "to a notebook").
 		bind(cfg.ScopeDialog, ActionNewAiChat, "new").
 		bind(cfg.ScopeDialog, ActionShowAiChats, "chats").
 		bind(cfg.ScopeDialog, ActionClose, "close")

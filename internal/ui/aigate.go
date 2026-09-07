@@ -7,14 +7,15 @@ package ui
 
 // aiActions is every action the AI features own.
 var aiActions = map[ActionID]bool{
-	ActionShowAiChat:  true,
-	ActionSendToAi:    true,
-	ActionAiFixError:  true,
-	ActionAiCheckPlan: true,
-	ActionInsertAiSQL: true,
-	ActionStopAiReply: true,
-	ActionNewAiChat:   true,
-	ActionShowAiChats: true,
+	ActionShowAiChat:     true,
+	ActionSendToAi:       true,
+	ActionAiFixError:     true,
+	ActionAiCheckPlan:    true,
+	ActionInsertAiSQL:    true,
+	ActionStopAiReply:    true,
+	ActionNewAiChat:      true,
+	ActionShowAiChats:    true,
+	ActionChatToNotebook: true,
 }
 
 // IsAiAction reports whether this action belongs to the AI features.
@@ -27,6 +28,7 @@ var aiPaletteRows = map[string]bool{
 	"ai-explain-query":  true,
 	"ai-optimize-query": true,
 	"ai-fix-error":      true,
+	"ai-build-notebook": true,
 }
 
 // aiHelpSection is the title of the help section the AI features own.

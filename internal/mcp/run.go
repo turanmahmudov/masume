@@ -58,11 +58,21 @@ func RunServer(argv []string, version string) int {
 	if check {
 		return reportCheck(ctx, deps)
 	}
-	return serveClient(ctx, deps, version)
+	return serveClient(ctx, deps, notebookSources{
+		projectFile: loaded.Project.Path, paths: loaded.Notebooks.Paths,
+	}, version)
+}
+
+// notebookSources is where the notebook tools read their files.
+type notebookSources struct {
+	projectFile string
+	paths       []string
 }
 
 // serveClient processes one MCP client stream.
-func serveClient(ctx context.Context, deps AccessDeps, version string) int {
+func serveClient(
+	ctx context.Context, deps AccessDeps, sources notebookSources, version string,
+) int {
 	// A history failure does not stop startup.
 	history, err := hist.Open(hist.DefaultPath())
 	if err != nil {
@@ -76,7 +86,9 @@ func serveClient(ctx context.Context, deps AccessDeps, version string) int {
 		Asker:      asker,
 		Plans:      CreatePlanTokens(),
 		// Record agent statements in the shared query history.
-		RecordQuery: func(entry hist.HistoryEntry) { _ = history.Record(entry) },
+		RecordQuery:   func(entry hist.HistoryEntry) { _ = history.Record(entry) },
+		ProjectFile:   sources.projectFile,
+		NotebookPaths: sources.paths,
 	})
 
 	// Serialize responses and confirmation requests on stdout.

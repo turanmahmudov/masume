@@ -39,6 +39,8 @@ const (
 	TabObject TabKind = "object"
 	// TabQuery is bound to the text in its editor.
 	TabQuery TabKind = "query"
+	// TabNotebook holds an ordered list of cells that share one connection.
+	TabNotebook TabKind = "notebook"
 )
 
 // The views of each kind of tab, before the plan is removed.

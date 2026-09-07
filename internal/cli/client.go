@@ -23,8 +23,10 @@ const usage = `masume - a database client for the terminal
 usage:
   masume                        open the client
   masume run [TARGET] STATEMENT run statements, write results, and exit
+  masume nb run [TARGET] FILE   run a notebook, write results, and exit
   masume URL                    open a supported URL, for example postgres://you@host/shop
   masume FILE                   open an existing SQLite file, for example ./notes.db
+  masume FILE.masume.md         open a notebook file
   masume DSN                    open a keyword connection string, for example "host=db dbname=shop"
   masume --profile NAME         open a user or project profile
   masume --detect               list detected container databases
@@ -34,7 +36,7 @@ usage:
   masume --version              print the version and exit
   masume --help                 print this help and exit
 
-Run masume run --help for headless options.
+Run masume run --help for headless options, and masume nb --help for notebooks.
 
 A command-line connection remains temporary until saved.
 Press Ctrl+N, then e, then Ctrl+S to save the selected profile.
@@ -49,6 +51,9 @@ func Run(argv []string) int {
 	// Parse subcommand arguments before client flags.
 	if len(argv) > 0 && argv[0] == "run" {
 		return runHeadless(argv[1:])
+	}
+	if len(argv) > 0 && argv[0] == "nb" {
+		return runNotebookCommand(argv[1:])
 	}
 	if slices.Contains(argv, "--help") || slices.Contains(argv, "-h") {
 		fmt.Println(usage)
@@ -121,6 +126,9 @@ func runApp(held invocation) error {
 	model := ui.NewModel(loaded, engines.CreateAdapters(), historyStore, problems)
 	if start != nil {
 		model.OpenAtStart(*start)
+	}
+	if held.notebookPath != "" {
+		model.OpenNotebookAtStart(held.notebookPath)
 	}
 	_, runErr := tea.NewProgram(model).Run()
 	return runErr

@@ -126,6 +126,13 @@ const (
 	ActionUndoWrite           ActionID = "undo-write"
 	ActionShowThemes          ActionID = "show-themes"
 
+	ActionNewNotebookTab      ActionID = "new-notebook-tab"
+	ActionShowNotebooks       ActionID = "show-notebooks"
+	ActionSaveNotebook        ActionID = "save-notebook"
+	ActionSaveNotebookAs      ActionID = "save-notebook-as"
+	ActionNotebookRunPolicy   ActionID = "notebook-run-policy"
+	ActionWriteNotebookReport ActionID = "write-notebook-report"
+
 	// The statement being written. A move takes the selection with it while Shift is held,
 	// so one action returns a chord and its shifted twin.
 	ActionCaretLeft          ActionID = "caret-left"
@@ -215,6 +222,27 @@ const (
 
 	ActionChooseRow ActionID = "choose-row"
 
+	// The cell list of a notebook.
+	ActionEditCellSource    ActionID = "edit-cell-source"
+	ActionRunCell           ActionID = "run-cell"
+	ActionRunFromCell       ActionID = "run-from-cell"
+	ActionRunMarkedCells    ActionID = "run-marked-cells"
+	ActionAddCellBelow      ActionID = "add-cell-below"
+	ActionAddCellAbove      ActionID = "add-cell-above"
+	ActionSetCellKind       ActionID = "set-cell-kind"
+	ActionDeleteCell        ActionID = "delete-cell"
+	ActionUndoCellChange    ActionID = "undo-cell-change"
+	ActionRedoCellChange    ActionID = "redo-cell-change"
+	ActionMoveCellUp        ActionID = "move-cell-up"
+	ActionMoveCellDown      ActionID = "move-cell-down"
+	ActionCopyCell          ActionID = "copy-cell"
+	ActionCutCell           ActionID = "cut-cell"
+	ActionPasteCell         ActionID = "paste-cell"
+	ActionToggleCellOutput  ActionID = "toggle-cell-output"
+	ActionToggleEveryOutput ActionID = "toggle-every-output"
+	ActionMarkCell          ActionID = "mark-cell"
+	ActionNameCell          ActionID = "name-cell"
+
 	ActionClose            ActionID = "close"
 	ActionAnswerYes        ActionID = "answer-yes"
 	ActionAnswerNo         ActionID = "answer-no"
@@ -246,6 +274,7 @@ const (
 	ActionScrollForward    ActionID = "scroll-forward"
 	ActionPreviousTurn     ActionID = "previous-turn"
 	ActionNextTurn         ActionID = "next-turn"
+	ActionChatToNotebook   ActionID = "chat-to-notebook"
 )
 
 // globalActions are the ones the workspace handles wherever the focus is.
@@ -273,6 +302,10 @@ var globalActions = []ActionDefinition{
 	{ID: ActionShowActivity, Needs: NeedsServerSessions, WhileRunning: true},
 	{ID: ActionUndoWrite, Needs: NeedsPlansWrites, WhileRunning: true},
 	{ID: ActionShowThemes, WhileRunning: true},
+	{ID: ActionNewNotebookTab, WhileRunning: true},
+	{ID: ActionShowNotebooks, WhileRunning: true},
+	{ID: ActionNotebookRunPolicy, WhileRunning: true},
+	{ID: ActionWriteNotebookReport, WhileRunning: true},
 	{ID: ActionFocusSidebar, WhileRunning: true},
 	{ID: ActionFocusEditor, WhileRunning: true},
 	{ID: ActionFocusResult, WhileRunning: true},
@@ -380,6 +413,23 @@ var editorActions = []ActionDefinition{
 	{ID: ActionNextProblem},
 }
 
+// notebookActions answer while the cell list of a notebook holds the keyboard.
+var notebookActions = []ActionDefinition{
+	{ID: ActionCursorUp}, {ID: ActionCursorDown},
+	{ID: ActionCursorFirstRow}, {ID: ActionCursorLastRow},
+	{ID: ActionEditCellSource},
+	{ID: ActionRunCell, AnswersInResult: true},
+	{ID: ActionRunFromCell, AnswersInResult: true},
+	{ID: ActionRunMarkedCells, AnswersInResult: true},
+	{ID: ActionAddCellBelow}, {ID: ActionAddCellAbove},
+	{ID: ActionSetCellKind}, {ID: ActionDeleteCell},
+	{ID: ActionUndoCellChange}, {ID: ActionRedoCellChange},
+	{ID: ActionMoveCellUp}, {ID: ActionMoveCellDown},
+	{ID: ActionCopyCell}, {ID: ActionCutCell}, {ID: ActionPasteCell},
+	{ID: ActionToggleCellOutput}, {ID: ActionToggleEveryOutput},
+	{ID: ActionMarkCell}, {ID: ActionNameCell},
+}
+
 // listActions move any list moved by keys that is not the grid or the tree: palette,
 // history, saved queries, connections, column values. One preset moves them all.
 var listActions = []ActionDefinition{
@@ -410,6 +460,7 @@ var dialogActions = []ActionDefinition{
 	{ID: ActionNewAiChat}, {ID: ActionShowAiChats},
 	{ID: ActionScrollBack}, {ID: ActionScrollForward},
 	{ID: ActionPreviousTurn}, {ID: ActionNextTurn},
+	{ID: ActionChatToNotebook},
 }
 
 // ActionCatalog holds every action of every scope.
@@ -427,6 +478,7 @@ var ActionCatalog = func() []ActionDefinition {
 	add(cfg.ScopeDocument, documentActions)
 	add(cfg.ScopeTree, treeActions)
 	add(cfg.ScopeEditor, editorActions)
+	add(cfg.ScopeNotebook, notebookActions)
 	add(cfg.ScopeList, listActions)
 	add(cfg.ScopeDialog, dialogActions)
 	return catalog

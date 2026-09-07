@@ -32,6 +32,15 @@ func (model *Model) runStatementAtCursor(
 	if model.refuseSecondRun(connection, tab) {
 		return model, nil
 	}
+	if tab.Kind == app.TabNotebook {
+		// The cell the list stands on, or the selection inside it.
+		if tab.EditsText() && strings.TrimSpace(tab.Editor.Selection()) != "" {
+			tab.View = resolveRowView(tab.View)
+			return model.execute(connection, tab, connection.Session.Language().
+				SplitStatements(tab.Editor.Selection()))
+		}
+		return model.runNotebook(connection, tab, app.RunCell)
+	}
 	tab.View = resolveRowView(tab.View)
 	if !tab.EditorVisible() {
 		return model.runTabRead(connection, tab)
@@ -57,6 +66,9 @@ func (model *Model) runWholeBuffer(
 	if model.refuseSecondRun(connection, tab) {
 		return model, nil
 	}
+	if tab.Kind == app.TabNotebook {
+		return model.runNotebook(connection, tab, app.RunEveryCell)
+	}
 	tab.View = resolveRowView(tab.View)
 	if !tab.EditorVisible() {
 		return model.runTabRead(connection, tab)
@@ -78,6 +90,11 @@ func (model *Model) refuseSecondRun(connection *app.Connection, tab *app.Tab) bo
 func (model *Model) runTabRead(
 	connection *app.Connection, tab *app.Tab,
 ) (tea.Model, tea.Cmd) {
+	// A read of a notebook is a run of the focused cell, so it binds the values of the
+	// parameter cells and writes the results onto the cell they belong to.
+	if tab.Kind == app.TabNotebook {
+		return model.runNotebook(connection, tab, app.RunCell)
+	}
 	if tab.Kind == app.TabObject {
 		return model, readObjectDDL(
 			model.ActiveID(), tab.ID, connection.Session, tab.Object)
@@ -240,6 +257,10 @@ func (model *Model) startRun(
 	// The list of names belongs to the editor, so it closes with the move.
 	connection.ResultVisible = true
 	tab.Focus = app.PaneResult
+	// The cell list keeps the keyboard, so the next cell is one key away.
+	if tab.Kind == app.TabNotebook {
+		tab.Focus = app.PaneEditor
+	}
 	tab.Completion.Close()
 
 	runID := model.startBatch(connection, tab, reads, pageSize, undo)
@@ -320,14 +341,25 @@ func (model *Model) readQueryAnswer(answered queryRanMsg) (tea.Model, tea.Cmd) {
 
 	if answered.Problem != "" {
 		tab.Results.Fail(answered.Index, answered.Problem)
+		// A notebook whose policy continues on an error asks for the cells after the
+		// failed one, so a missing table is a finding and not the end of the run.
+		if continuesAfterFailure(tab) && !answered.Last {
+			model.reportFailedCell(connection, tab, answered.Index)
+			return model, model.resumesAfterFailure(connection, tab,
+				model.askNextStatement(connection, answered))
+		}
 		// The statements after this one were written for a state the server no longer
 		// holds, so they are never asked for.
 		tab.Results.SkipRest(answered.Index+1, "not run: an earlier statement failed")
 		model.stopBatch(answered.ConnectionID, answered.TabID)
+		model.reportFailedCell(connection, tab, answered.Index)
 		return model, nil
 	}
+	commit := tea.Cmd(nil)
 	if answered.Last {
 		model.stopBatch(answered.ConnectionID, answered.TabID)
+		// The one transaction of a notebook is committed after its last cell.
+		commit = model.closeNotebookRun(connection, tab)
 	}
 
 	tab.Results.Succeed(answered.Index, answered.Read, answered.Result)
@@ -356,10 +388,10 @@ func (model *Model) readQueryAnswer(answered queryRanMsg) (tea.Model, tea.Cmd) {
 	}
 	if source != "" && connection.Session.Language().ChangesCatalog(source) {
 		connection.Catalog.Loading = true
-		return model, tea.Batch(readColumns, topUp, next,
+		return model, tea.Batch(readColumns, topUp, next, commit,
 			readCatalog(answered.ConnectionID, connection.Session, quietCatalogRead))
 	}
-	return model, tea.Batch(readColumns, topUp, next)
+	return model, tea.Batch(readColumns, topUp, next, commit)
 }
 
 // askNextStatement asks the server for the statement after the one that just answered, and

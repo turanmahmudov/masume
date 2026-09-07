@@ -53,6 +53,25 @@ func TestParseArgumentsReadsATargetAndAProfileName(t *testing.T) {
 	}
 }
 
+// A notebook file is not a database file, so the command opens it as a notebook and keeps
+// the connection target apart from it.
+func TestParseArgumentsReadsANotebookPath(t *testing.T) {
+	held, err := parseArguments([]string{"./notes.db", "./review.masume.md"})
+	if err != nil {
+		t.Fatalf("the arguments do not read: %v", err)
+	}
+	if held.target != "./notes.db" {
+		t.Errorf("target %q", held.target)
+	}
+	if held.notebookPath != "./review.masume.md" {
+		t.Errorf("notebook %q", held.notebookPath)
+	}
+	if _, err := parseArguments(
+		[]string{"./one.masume.md", "./two.masume.md"}); err == nil {
+		t.Errorf("two notebooks were accepted")
+	}
+}
+
 // A scan of the containers of this machine finds the connections itself, so it takes
 // nothing else.
 func TestParseArgumentsReadsTheDetectFlag(t *testing.T) {

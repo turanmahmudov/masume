@@ -43,11 +43,19 @@ type ToolDeps struct {
 	Plans *PlanTokens
 	// RecordQuery writes the statement into the history the screens read.
 	RecordQuery func(entry hist.HistoryEntry)
+	// The project file of the working directory, which holds the notebooks of the team.
+	ProjectFile string
+	// The extra notebook directories the config file names.
+	NotebookPaths []string
 }
 
 // BuildTools returns profile discovery and database tools.
 func BuildTools(deps ToolDeps) []Tool {
-	tools := []Tool{buildListProfilesTool(deps)}
+	tools := []Tool{
+		buildListProfilesTool(deps),
+		buildListNotebooksTool(deps),
+		buildReadNotebookTool(deps),
+	}
 	for _, definition := range agent.Definitions() {
 		tools = append(tools, buildConnectionTool(deps, definition))
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/app"
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
+	"github.com/turanmahmudov/masume/internal/notebook"
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
@@ -194,6 +195,20 @@ func TestFrameHoldsNothingATerminalCannotDraw(t *testing.T) {
 				Cell: app.CellTarget{Column: columns[1], RowIndex: 0, ColumnIndex: 1},
 			}, present.FormatForViewer(row[1], "text"))
 		}},
+		// A notebook comes out of a repository, so every part of a cell reaches the
+		// frame as the file wrote it: the title, the prose, the fence of a chart and
+		// the statement itself.
+		{"the notebook cell list", func() {
+			opened := connection.OpenNotebook(notebook.Parse(nastyNotebook), "", "")
+			opened.Focus = app.PaneEditor
+		}},
+		{"a notebook cell being edited", func() {
+			opened := connection.Active()
+			opened.Notebook.FocusCell(2)
+			opened.Notebook.Editing = true
+			opened.Editor = opened.Notebook.GetFocusedCell().Editor
+			opened.Focus = app.PaneEditor
+		}},
 	} {
 		connection.Overlay = app.Overlay{}
 		held.open()
@@ -212,6 +227,14 @@ func TestFrameHoldsNothingATerminalCannotDraw(t *testing.T) {
 		}
 	}
 }
+
+// nastyNotebook is a notebook file whose every part carries bytes a terminal would act on.
+const nastyNotebook = "+++\ntitle = \"rev\\u001b[31miew\"\n+++\n\n" +
+	"pro\x1b[31mse\aline\n\n" +
+	"```param\nday = \"20\x1b[31m26\"\n```\n\n" +
+	"```sql id=nasty\n-- na\x1b[31mme\aof it\nselect \a1 from orders\x1b[31m\n```\n\n" +
+	"```chart source=na\x1b[31msty label=co\auntry value=revenue\n```\n\n" +
+	"```mermaid the\x1b[31mme=dark\ngraph\aTD;\n```\n"
 
 // documentSeparator is what a path of the document tree puts between one key and the next.
 const documentSeparator = "\x1f"

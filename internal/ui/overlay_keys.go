@@ -115,7 +115,8 @@ func takesListKeys(overlay app.Overlay) bool {
 		// A cell picked from a list is a list; a cell written into is a field.
 		return len(overlay.Cell.Choices) > 0
 	case app.OverlayParameters, app.OverlayExport, app.OverlayImport, app.OverlayPrompt,
-		app.OverlayChoice, app.OverlayMessage, app.OverlayConfirm, app.OverlayAiChat:
+		app.OverlayChart, app.OverlayChoice, app.OverlayMessage, app.OverlayConfirm,
+		app.OverlayAiChat:
 		return false
 	}
 	return true
@@ -233,6 +234,8 @@ func (model *Model) overlayRowCount(connection *app.Connection, overlay app.Over
 		return len(model.filterHistory(overlay))
 	case app.OverlaySaved:
 		return len(model.filterSaved(overlay))
+	case app.OverlayNotebooks:
+		return len(model.filterNotebooks(overlay))
 	case app.OverlayPalette:
 		return len(model.filterPalette(overlay))
 	case app.OverlayObjectMenu, app.OverlayCopyMenu, app.OverlayActionMenu:
@@ -554,6 +557,12 @@ func (model *Model) runOverlayAction(
 			return true, model, nil
 		}
 
+	case app.OverlayChart:
+		if match.Action == ActionSaveForm {
+			held, command := model.applyChartForm(connection, tab, *overlay)
+			return true, held, command
+		}
+
 	case app.OverlayExport:
 		if match.Action == ActionWriteExport {
 			held, command := model.writeExport(connection, tab, *overlay)
@@ -563,6 +572,20 @@ func (model *Model) runOverlayAction(
 	case app.OverlaySaved:
 		if match.Action == ActionListSecondary {
 			held, command := model.deleteSavedQuery(connection, overlay)
+			return true, held, command
+		}
+
+	case app.OverlayNotebooks:
+		switch match.Action {
+		case ActionEditConnection:
+			held, command := model.renameNotebookRow(connection, overlay)
+			return true, held, command
+		case ActionNewConnection:
+			connection.Overlay = app.Overlay{}
+			held, command := model.openNewNotebook(connection)
+			return true, held, command
+		case ActionDeleteConnection:
+			held, command := model.deleteNotebookRow(connection, overlay)
 			return true, held, command
 		}
 
@@ -615,6 +638,12 @@ func (model *Model) chooseOverlayRow(
 		connection.Overlay = app.Overlay{}
 		return model.loadSQL(connection, tab, statement, inNewTab)
 
+	case app.OverlayChart:
+		return model.applyChartForm(connection, tab, *overlay)
+
+	case app.OverlayNotebooks:
+		return model.openNotebookRow(connection, overlay, inNewTab)
+
 	case app.OverlaySaved:
 		queries := model.filterSaved(*overlay)
 		if overlay.List.Cursor >= len(queries) {
@@ -656,6 +685,14 @@ func (model *Model) chooseOverlayRow(
 		}
 		chosen := actions[overlay.List.Cursor].ID
 		connection.Overlay = app.Overlay{}
+		if strings.HasPrefix(chosen, cellKindPrefix) ||
+			strings.HasPrefix(chosen, newCellKindPrefix) {
+			return model.applyCellKind(connection, tab, chosen)
+		}
+		if strings.HasPrefix(chosen, policyTransactionPrefix) ||
+			strings.HasPrefix(chosen, policyErrorPrefix) {
+			return model.applyNotebookPolicy(connection, tab, chosen)
+		}
 		action, known := FindActionID(chosen)
 		if !known {
 			return model, nil
@@ -861,6 +898,11 @@ func (model *Model) answerPrompt(
 
 	switch overlay.Prompt {
 	case app.PromptTabName:
+		if tab.Kind == app.TabNotebook && tab.Notebook != nil {
+			tab.Notebook.Title = written
+			tab.Notebook.Dirty = true
+			return model, nil
+		}
 		tab.Editor.SetText(statement.ApplyQueryName(tab.Editor.Text, written))
 		return model, nil
 
@@ -905,6 +947,28 @@ func (model *Model) answerPrompt(
 		}
 		connection.Show(present.FormatCountOf(int64(count), "match", "matches") + " replaced")
 		return model, model.reportEdit(connection, tab)
+
+	case app.PromptCellName:
+		if tab.Notebook == nil {
+			return model, nil
+		}
+		cell := tab.Notebook.GetFocusedCell()
+		cell.Editor.SetText(statement.ApplyQueryName(cell.Editor.Text, written))
+		tab.Notebook.Dirty = true
+		return model, nil
+
+	case app.PromptNotebookName:
+		return model.answerNotebookName(connection, tab, written)
+
+	case app.PromptNotebookReport:
+		return model.answerNotebookReport(connection, tab, written)
+
+	case app.PromptNotebookRename:
+		return model.answerNotebookRename(connection, overlay, written)
+
+	case app.PromptAiNotebook:
+		connection.Chat.NotebookSubject = written
+		return model.sendNotebookRequest(connection, tab, written)
 
 	case app.PromptSaveName:
 		if written == "" {
@@ -1171,6 +1235,24 @@ func (model *Model) readOverlayField(
 		}
 	}
 
+	// Every row of the chart form is a choice, so the arrows are the whole of it.
+	if overlay.Kind == app.OverlayChart {
+		switch key.Code {
+		case tea.KeyUp:
+			StepChartField(overlay, -1)
+			return model, nil
+		case tea.KeyDown, tea.KeyTab:
+			StepChartField(overlay, 1)
+			return model, nil
+		case tea.KeyLeft:
+			model.StepChartChoice(tab, overlay, -1)
+			return model, nil
+		case tea.KeyRight:
+			model.StepChartChoice(tab, overlay, 1)
+			return model, nil
+		}
+	}
+
 	// A form returns the arrows itself: one moves through the rows, the other steps
 	// through the values of the row under the cursor.
 	if overlay.Kind == app.OverlayExport {
@@ -1343,7 +1425,8 @@ func (model *Model) scrollChatFromField(
 // what the term kept, and a card whose cursor points past its rows takes no answer at all.
 func (model *Model) resetOverlayCursor(connection *app.Connection, overlay *app.Overlay) {
 	switch overlay.Kind {
-	case app.OverlayHistory, app.OverlaySaved, app.OverlayPalette, app.OverlayHelp,
+	case app.OverlayHistory, app.OverlaySaved, app.OverlayNotebooks,
+		app.OverlayPalette, app.OverlayHelp,
 		app.OverlayThemePicker, app.OverlayActionMenu, app.OverlayObjectMenu,
 		app.OverlayCopyMenu, app.OverlayAiChats:
 		overlay.List.Cursor, overlay.List.Offset, overlay.List.Rolled = 0, 0, false

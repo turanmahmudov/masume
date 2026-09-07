@@ -52,6 +52,12 @@ func (model *Model) readWorkspaceKey(key tea.Key) (next tea.Model, command tea.C
 			tab.Completion.Dismiss()
 			return model, nil
 		}
+		// The caret leaves a cell of a notebook before a selection is let go, so one key
+		// steps back out of the cell it stands in.
+		if tab.Kind == app.TabNotebook && tab.EditsText() {
+			model.leaveCellSource(tab)
+			return model, nil
+		}
 		tab.Editor.ClearSelection()
 		model.selection = screenSelection{}
 		return model, nil
@@ -59,15 +65,18 @@ func (model *Model) readWorkspaceKey(key tea.Key) (next tea.Model, command tea.C
 
 	// The editor returns a key without a modifier while it holds the caret, so a letter
 	// types rather than running an action.
-	typesInEditor := tab.Focus == app.PaneEditor && tab.EditorVisible()
+	typesInEditor := tab.Focus == app.PaneEditor && tab.EditsText()
 
 	// The editor is a scope of its own, so its keys are bound, checked for conflicts and
 	// written into the help like the keys of every other pane. The workspace is read first,
 	// so a chord the user gives the workspace still wins.
 	scopes := []cfg.KeyScope{cfg.ScopeGlobal}
-	if typesInEditor {
+	switch {
+	case typesInEditor:
 		scopes = append(scopes, cfg.ScopeEditor)
-	} else {
+	case tab.Focus == app.PaneEditor && tab.ListsCells():
+		scopes = append(scopes, cfg.ScopeNotebook)
+	default:
 		switch tab.Focus {
 		case app.PaneSidebar:
 			scopes = append(scopes, cfg.ScopeTree)
@@ -183,6 +192,8 @@ func (model *Model) runAction(
 		return model.runDocumentTreeAction(connection, tab, match)
 	case cfg.ScopeEditor:
 		return model.runEditorAction(connection, tab, match)
+	case cfg.ScopeNotebook:
+		return model.runNotebookAction(connection, tab, match)
 	}
 	return model.runGlobalAction(connection, tab, match)
 }
@@ -245,6 +256,14 @@ func (model *Model) runGlobalAction(
 	case ActionNewQueryTab:
 		// A new query tab opens with the caret in the editor.
 		connection.OpenQueryTab("").Focus = app.PaneEditor
+	case ActionNewNotebookTab:
+		return model.openNewNotebook(connection)
+	case ActionShowNotebooks:
+		return model.showNotebooks(connection)
+	case ActionNotebookRunPolicy:
+		return model.askNotebookPolicy(connection, tab)
+	case ActionWriteNotebookReport:
+		return model.askNotebookReport(connection, tab)
 	case ActionCloseTab:
 		return model.requestCloseTab(connection)
 	case ActionReopenTab:
@@ -325,6 +344,9 @@ func (model *Model) runGlobalAction(
 		if !tab.EditorVisible() {
 			return model, nil
 		}
+		if tab.Kind == app.TabNotebook {
+			return model.saveNotebook(connection, tab)
+		}
 		connection.Overlay = app.Overlay{
 			Kind: app.OverlayPrompt, Prompt: app.PromptSaveName, Title: "save as",
 			Draft: app.NewEditorBuffer("", 0),
@@ -390,6 +412,15 @@ func (model *Model) startNaming(
 		return model, nil
 	case app.TabObject:
 		connection.Show("this tab takes the name of the " + string(tab.Object.Kind) + " it shows")
+		return model, nil
+	}
+
+	if tab.Kind == app.TabNotebook {
+		held := tab.NotebookName()
+		connection.Overlay = app.Overlay{
+			Kind: app.OverlayPrompt, Prompt: app.PromptTabName, Title: "notebook title",
+			Draft: app.NewEditorBuffer(held, len(held)),
+		}
 		return model, nil
 	}
 
@@ -597,6 +628,14 @@ func (model *Model) runTransaction(
 // export that streams at the same time.
 func (model *Model) cancelQuery(connection *app.Connection) (tea.Model, tea.Cmd) {
 	connection.StopExport()
+	// The cancel reaches whatever the server runs now, and that statement can belong to
+	// any tab of this connection. Every notebook that is running is stopped, and a run
+	// that starts again clears the stop.
+	for _, tab := range connection.Tabs {
+		if tab.Notebook != nil && tab.Results.IsRunning() {
+			tab.Notebook.Stopped = true
+		}
+	}
 	session := connection.Session
 	id := model.ActiveID()
 	return model, func() tea.Msg {
@@ -613,7 +652,7 @@ func (model *Model) revealSQL(
 	connection *app.Connection, tab *app.Tab,
 ) (tea.Model, tea.Cmd) {
 	// A tab with no buffer of its own opens its read as a query tab.
-	if !tab.EditorVisible() {
+	if !tab.EditorVisible() || tab.Kind == app.TabNotebook {
 		opened := connection.OpenQueryTab(tab.EffectiveSQL(connection.Session))
 		opened.Focus = app.PaneEditor
 		connection.Show("the query is open in the editor")
@@ -986,6 +1025,9 @@ func (model *Model) reportEdit(connection *app.Connection, tab *app.Tab) tea.Cmd
 	// An answer about another buffer would mark a line the user already corrected.
 	if tab.Served.SQL != tab.Editor.Text {
 		tab.Served = app.ServedDiagnostics{}
+	}
+	if !tab.EditsStatements() {
+		return nil
 	}
 	commands := []tea.Cmd{model.readNamedTableDetails(connection, tab)}
 	if strings.TrimSpace(tab.Editor.Text) != "" &&

@@ -113,6 +113,31 @@ var paletteEntries = []paletteEntry{
 		detailScope: cfg.ScopeGlobal, detailAction: paneChordAction},
 	{id: "new-query-tab", label: "New query tab",
 		scope: cfg.ScopeGlobal, action: ActionNewQueryTab},
+	{id: "new-notebook-tab", label: "New notebook", detail: "cells that share one connection",
+		scope: cfg.ScopeGlobal, action: ActionNewNotebookTab},
+	{id: "show-notebooks", label: "Notebooks",
+		detail: "of the project and of the user",
+		scope:  cfg.ScopeGlobal, action: ActionShowNotebooks},
+	{id: "write-notebook-report", label: "Write a report of this notebook",
+		detail: "prose, statements and the rows of every cell",
+		scope:  cfg.ScopeGlobal, action: ActionWriteNotebookReport},
+	{id: "notebook-run-policy", label: "Notebook run policy",
+		detail: "transaction and error policy",
+		scope:  cfg.ScopeGlobal, action: ActionNotebookRunPolicy},
+	{id: "run-cell", label: "Run the focused cell", detail: "in a notebook",
+		scope: cfg.ScopeNotebook, action: ActionRunCell},
+	{id: "run-from-cell", label: "Run the focused cell and the ones below it",
+		detail: "in a notebook",
+		scope:  cfg.ScopeNotebook, action: ActionRunFromCell},
+	{id: "run-marked-cells", label: "Run the marked cells", detail: "in a notebook",
+		scope: cfg.ScopeNotebook, action: ActionRunMarkedCells},
+	{id: "add-cell-below", label: "Add a cell", detail: "in a notebook",
+		scope: cfg.ScopeNotebook, action: ActionAddCellBelow},
+	{id: "set-cell-kind", label: "Cell kind", detail: "sql, md, param, or chart",
+		scope: cfg.ScopeNotebook, action: ActionSetCellKind},
+	{id: "edit-cell-source", label: "Edit the focused cell",
+		detail: "a chart cell opens its form",
+		scope:  cfg.ScopeNotebook, action: ActionEditCellSource},
 	{id: "next-tab", label: "Next tab", scope: cfg.ScopeGlobal, action: ActionNextTab},
 	{id: "close-tab", label: "Close this tab", detail: "asks if changes are staged",
 		scope: cfg.ScopeGlobal, action: ActionCloseTab},
@@ -153,6 +178,11 @@ var paletteEntries = []paletteEntry{
 		detail: "the query in the editor"},
 	{id: "ai-optimize-query", label: "Ask AI: optimize this query",
 		detail: "the query in the editor"},
+	{id: "ai-build-notebook", label: "Ask AI: build a notebook",
+		detail: "prose and one cell per query"},
+	{id: "chat-to-notebook", label: "Turn this chat into a notebook",
+		detail: "one cell per statement the model wrote",
+		scope:  cfg.ScopeDialog, action: ActionChatToNotebook},
 	{id: "ai-fix-error", label: "Ask AI: fix the error",
 		detail: "the last failed run in the editor",
 		scope:  cfg.ScopeGlobal, action: ActionAiFixError},
@@ -277,6 +307,8 @@ func (model *Model) runPaletteAction(
 	case "ai-explain-query":
 		return model.askAi(connection, connection.Active(),
 			"Explain what the query in the editor does, in plain terms.")
+	case "ai-build-notebook":
+		return model.askAiForNotebook(connection)
 	case "ai-optimize-query":
 		return model.askAi(connection, connection.Active(),
 			"Suggest how to make the query in the editor faster or clearer, and explain why.")
@@ -294,9 +326,12 @@ func (model *Model) runPaletteAction(
 		return model, nil
 	}
 	scope := cfg.ScopeGlobal
-	if _, held := FindAction(cfg.ScopeGrid, action); held {
-		if _, isGlobal := FindAction(cfg.ScopeGlobal, action); !isGlobal {
-			scope = cfg.ScopeGrid
+	if _, isGlobal := FindAction(cfg.ScopeGlobal, action); !isGlobal {
+		for _, held := range []cfg.KeyScope{cfg.ScopeNotebook, cfg.ScopeGrid} {
+			if _, found := FindAction(held, action); found {
+				scope = held
+				break
+			}
 		}
 	}
 	if AnswersInResult(scope, action) {

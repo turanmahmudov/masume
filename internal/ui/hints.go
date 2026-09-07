@@ -8,6 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/app"
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
+	"github.com/turanmahmudov/masume/internal/notebook"
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
@@ -29,7 +30,11 @@ type HintContext struct {
 	Pane         app.Pane
 	Capabilities core.Capabilities
 	TabKind      app.TabKind
-	View         app.ResultView
+	// True while the cell list of a notebook holds the keyboard.
+	ListsCells bool
+	// The kind of the focused cell of a notebook.
+	CellKind notebook.CellKind
+	View     app.ResultView
 	// The views this tab offers.
 	Views     []app.ResultView
 	HasResult bool
@@ -380,6 +385,12 @@ func (registry *KeyRegistry) BuildHints(context HintContext) []Hint {
 			capabilities, context.TreeRow, context.SystemSchemasHidden))
 	}
 	if context.Pane == app.PaneEditor {
+		if context.ListsCells {
+			return closeBar(registry.buildNotebookHints(context))
+		}
+		if context.TabKind == app.TabNotebook {
+			return closeBar(registry.buildCellEditorHints(context))
+		}
 		return closeBar(registry.buildEditorHints(capabilities))
 	}
 

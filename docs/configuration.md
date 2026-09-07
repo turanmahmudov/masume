@@ -608,6 +608,17 @@ timeout_ms = 30000
 
 See [mcp.md](mcp.md) for tools and write confirmation.
 
+## Notebooks
+
+`[notebooks]` adds directories to the notebook list. The list always holds `<project root>/.masume/notebooks` and `$XDG_STATE_HOME/masume/notebooks`.
+
+```toml
+[notebooks]
+paths = ["~/notes/sql"]
+```
+
+See the [notebook guide](notebooks.md) for the file format and the run policy.
+
 ## Other files
 
 | Path | Contains |

@@ -72,6 +72,10 @@ func (model *Model) buildCompletionSources(
 // refreshCompletion builds the list for the caret.
 func (model *Model) refreshCompletion(connection *app.Connection, tab *app.Tab) {
 	list := &tab.Completion
+	if !tab.EditsStatements() {
+		list.Close()
+		return
+	}
 	if tab.Focus != app.PaneEditor || connection.Overlay.IsOpen() || list.Dismissed {
 		list.Close()
 		return

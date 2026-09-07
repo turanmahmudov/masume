@@ -61,6 +61,8 @@ type Model struct {
 	// The project file of the working directory, which provides profiles and statements
 	// the team commits. Empty where the walk found none.
 	project cfg.ProjectConfig
+	// The extra directories the notebook list reads.
+	notebooks cfg.NotebookSettings
 	// The secret stores the config file declares, which a profile names to read its
 	// password from one of them.
 	secrets []cfg.SecretSource
@@ -69,6 +71,8 @@ type Model struct {
 	// The profile the command line named, which is opened as the client starts instead
 	// of drawing the picker.
 	startProfile *cfg.Profile
+	// The notebook the command line named, which opens with the connection.
+	startNotebook string
 	// The connections that were opened and are in no config file, so the client offers to
 	// write them to it before it ends.
 	unsaved []cfg.Profile
@@ -88,6 +92,8 @@ type Model struct {
 	quitting  bool
 
 	terminal terminalColorState
+	// The cell each drawn row of a notebook belongs to, so a press reaches that cell.
+	cellsOfRows []int
 	// Where the caret of the editor last drew, so the completion popup stands under it.
 	caretRow    int
 	caretColumn int
@@ -151,7 +157,8 @@ func NewModel(
 		styles: styles, registry: keys, keymap: NewKeymap(keys),
 		icons:    BuildIconSet(loaded.Settings.IconSet, loaded.Settings.IconGlyphs),
 		adapters: adapters, log: log, settings: loaded.Settings,
-		ai: loaded.Ai, aiProvider: loaded.Ai.DefaultProvider,
+		notebooks: loaded.Notebooks,
+		ai:        loaded.Ai, aiProvider: loaded.Ai.DefaultProvider,
 		profiles: loaded.Profiles, project: loaded.Project,
 		secrets: loaded.Secrets, problems: found,
 		screen: ScreenPickingProfile,
@@ -175,6 +182,11 @@ func (model *Model) OpenAtStart(profile cfg.Profile) {
 			model.picker.focus(index, len(model.profiles))
 		}
 	}
+}
+
+// OpenNotebookAtStart opens this notebook file once the connection is open.
+func (model *Model) OpenNotebookAtStart(path string) {
+	model.startNotebook = path
 }
 
 // Init asks the terminal for its own colours, so a theme that follows the terminal is drawn
@@ -449,6 +461,24 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 	case savedReadMsg:
 		return model.readSavedAnswer(held)
+
+	case notebooksReadMsg:
+		return model.readNotebooksAnswer(held)
+
+	case notebookReadMsg:
+		return model.readNotebookAnswer(held)
+
+	case notebookWrittenMsg:
+		return model.readNotebookWritten(held)
+
+	case notebookReportWrittenMsg:
+		return model.readNotebookReportWritten(held)
+
+	case notebookRemovedMsg:
+		return model.readNotebookRemoved(held)
+
+	case notebookRenamedMsg:
+		return model.readNotebookRenamed(held)
 
 	case activityReadMsg:
 		return model.readActivityAnswer(held)
@@ -898,6 +928,11 @@ func (model *Model) readConnected(answered connectedMsg) (tea.Model, tea.Cmd) {
 	// A restored tab reads what it describes the first time it is shown.
 	if _, command := model.readWhenShown(connection); command != nil {
 		commands = append(commands, command)
+	}
+	// The notebook of the command line opens with the connection, and runs no cell.
+	if model.startNotebook != "" {
+		commands = append(commands, readNotebookFile(id, model.startNotebook, false))
+		model.startNotebook = ""
 	}
 	return model, tea.Batch(commands...)
 }

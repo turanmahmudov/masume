@@ -502,3 +502,29 @@ func BuildMeter(value, of float64, width int) string {
 	}
 	return strings.Repeat(meterFilled, filled) + strings.Repeat(meterEmpty, width-filled)
 }
+
+// sparkBlocks are the eight heights one cell of a line chart can draw.
+var sparkBlocks = []string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
+
+// BuildSparkline draws every value in one row of blocks, scaled to the largest value. A
+// row wider than the values repeats none of them.
+func BuildSparkline(values []float64) string {
+	if len(values) == 0 {
+		return ""
+	}
+	lowest, highest := values[0], values[0]
+	for _, value := range values {
+		lowest = min(lowest, value)
+		highest = max(highest, value)
+	}
+	span := highest - lowest
+	var written strings.Builder
+	for _, value := range values {
+		at := 0
+		if span > 0 {
+			at = int((value-lowest)/span*float64(len(sparkBlocks)-1) + 0.5)
+		}
+		written.WriteString(sparkBlocks[core.ClampWithin(at, len(sparkBlocks)-1)])
+	}
+	return written.String()
+}

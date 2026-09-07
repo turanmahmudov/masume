@@ -91,6 +91,8 @@ type frameLayout struct {
 	treeFrom, treeTo int
 	connections      rowsHit
 	treeRows         rowsHit
+	// The rows of the cell list of a notebook, so a press reaches the cell it drew.
+	cellRows rowsHit
 
 	// The screen row the body of a view of the result starts on, which is under the strips
 	// the pane draws above it.
@@ -619,6 +621,11 @@ func (model *Model) rollWheel(mouse tea.Mouse, step int) (tea.Model, tea.Cmd) {
 	}
 	if mouse.Y >= model.layout.editorTop &&
 		mouse.Y < model.layout.editorTop+model.layout.editorRows {
+		if tab.ListsCells() {
+			tab.Notebook.Offset += step
+			tab.Notebook.Rolled = true
+			return model, nil
+		}
 		tab.EditorRowOffset, tab.EditorRolled = tab.EditorRowOffset+step, true
 		return model, nil
 	}
@@ -714,6 +721,9 @@ func (model *Model) pressWorkspace(mouse tea.Mouse) (tea.Model, tea.Cmd) {
 	}
 	if row, found := model.layout.treeRows.holds(mouse.X, mouse.Y); found {
 		return model.pressTreeRow(connection, tab, mouse, row)
+	}
+	if row, found := model.layout.cellRows.holds(mouse.X, mouse.Y); found {
+		return model.pressCellRow(connection, tab, mouse, row)
 	}
 	if mouse.X <= model.layout.treeTo && mouse.X >= model.layout.treeFrom {
 		tab.Focus = app.PaneSidebar

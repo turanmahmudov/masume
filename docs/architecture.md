@@ -24,7 +24,8 @@ Front ends create and retain sessions through `internal/db`. Drivers hold the da
 | `internal/query/build` | Generated SQL for edits, filters, and object actions |
 | `internal/query/result` | Plans, exports, and copy formats |
 | `internal/query/language` | Shared language interface and SQL implementation |
-| `internal/present` | Layout, value formatting, safe text, and ER diagrams |
+| `internal/present` | Layout, value formatting, safe text, charts, and ER diagrams |
+| `internal/notebook` | Notebook files: cells, front matter, fence attributes, and parameters |
 | `internal/app` | Application state, tabs, connections, and chats |
 | `internal/ui` | Rendering, themes, keys, screens, and event handling |
 | `internal/agent` | Tools shared by chat and MCP |
@@ -33,12 +34,12 @@ Front ends create and retain sessions through `internal/db`. Drivers hold the da
 | `internal/load` | Import sampling, type detection, mapping, dry runs, and generated statements |
 | `internal/writeplan` | Write previews, affected rows, cascades, and undo statements |
 | `internal/detect` | Database discovery through Docker or Podman |
-| `internal/headless` | Statement batches, output formats, row caps, and exit codes |
+| `internal/headless` | Statement batches, notebook runs, output formats, row caps, and exit codes |
 | `internal/hist` | SQLite storage for history, saved queries, tabs, favorites, recent schemas, chats, and catalog cache |
 
 The language interface covers SQL and MongoDB syntax. The MongoDB implementation is in `internal/db/mongo`.
 
-`internal/query` and `internal/present` do not open network connections. These packages process text and typed data, including tokens, diagnostics, plans, columns, rows, and layout structures. Export writers can write to supplied streams.
+`internal/query`, `internal/present`, and `internal/notebook` do not open network connections. These packages process text and typed data, including tokens, diagnostics, plans, columns, rows, and layout structures. Export writers can write to supplied streams.
 
 ## Sessions
 

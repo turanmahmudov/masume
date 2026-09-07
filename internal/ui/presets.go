@@ -59,11 +59,18 @@ var defaultChords = map[string][]string{
 
 	// Two prefixes carry the commands that are asked for rarely, so the single keys stay
 	// free: `alt+p` moves the focus to a pane by name, and `alt+o` opens a card.
-	"global:focus-sidebar": {"alt+p s"},
-	"global:focus-editor":  {"alt+p e"},
-	"global:focus-result":  {"alt+p r"},
-	"global:show-themes":   {"alt+o t"},
-	"global:show-activity": {"alt+o a"},
+	"global:focus-sidebar":         {"alt+p s"},
+	"global:focus-editor":          {"alt+p e"},
+	"global:focus-result":          {"alt+p r"},
+	"global:show-themes":           {"alt+o t"},
+	"global:show-notebooks":        {"alt+o n"},
+	"global:notebook-run-policy":   {"alt+o p"},
+	"global:write-notebook-report": {"alt+o r"},
+
+	// A terminal that drops the Shift of Alt+Shift+N sends Alt+N, which opens a query
+	// tab, so the first chord carries no Shift.
+	"global:new-notebook-tab": {"alt+b", "alt+shift+n"},
+	"global:show-activity":    {"alt+o a"},
 
 	"global:show-help":          {"?"},
 	"global:previous-statement": {";"},
@@ -161,6 +168,32 @@ var defaultChords = map[string][]string{
 	// The row that reports a fault names this key, so it has to reach the fault it names.
 	"editor:next-problem": {"f8"},
 
+	// The cell list of a notebook. Single letters are free there, because the list takes
+	// no typed text.
+	"notebook:cursor-up":           {"up", "k"},
+	"notebook:cursor-down":         {"down", "j"},
+	"notebook:cursor-first-row":    {"home"},
+	"notebook:cursor-last-row":     {"end"},
+	"notebook:edit-cell-source":    {"return"},
+	"notebook:run-cell":            {"r"},
+	"notebook:run-from-cell":       {"R"},
+	"notebook:run-marked-cells":    {"m"},
+	"notebook:add-cell-below":      {"b"},
+	"notebook:add-cell-above":      {"a"},
+	"notebook:set-cell-kind":       {"c"},
+	"notebook:delete-cell":         {"d d"},
+	"notebook:undo-cell-change":    {"u"},
+	"notebook:redo-cell-change":    {"Z"},
+	"notebook:move-cell-up":        {"K"},
+	"notebook:move-cell-down":      {"J"},
+	"notebook:copy-cell":           {"y"},
+	"notebook:cut-cell":            {"x"},
+	"notebook:paste-cell":          {"p"},
+	"notebook:toggle-cell-output":  {"o"},
+	"notebook:toggle-every-output": {"O"},
+	"notebook:mark-cell":           {"space"},
+	"notebook:name-cell":           {"t"},
+
 	"document:clear-rewrites":   {"c"},
 	"document:copy-path":        {"shift+y"},
 	"document:copy-value":       {"y"},
@@ -241,6 +274,8 @@ var defaultChords = map[string][]string{
 	// `ctrl+l` clears the screen in a shell, and it leaves `ctrl+n` for the keys below.
 	"dialog:new-ai-chat":   {"ctrl+l"},
 	"dialog:show-ai-chats": {"ctrl+o"},
+	// The conversation becomes a notebook, with one cell per statement the model wrote.
+	"dialog:chat-to-notebook": {"ctrl+g"},
 	// The panel has a field, so these keys must work while the user types. One control byte
 	// each, which reaches the app through tmux and ssh. Not a modified arrow, because
 	// `alt+up` switches tab and depends on the terminal.

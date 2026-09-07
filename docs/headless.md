@@ -208,6 +208,16 @@ page_size    = 50000
 
 `SHOP_REPORT_PASSWORD` must be available in the process environment.
 
+## Notebooks
+
+`masume nb run FILE` runs a notebook file. The profile, the timeouts, the read-only check and the exit codes are the ones above. A write cell needs `--allow-writes`, because a run without a screen has no confirmation, no write plan and no undo.
+
+```
+masume nb run reports/revenue-review.masume.md -p shop --param day=2026-09-01 -f markdown
+```
+
+`--only CELL` runs one cell by id. `--explain` writes a JSON plan of every statement and runs none of them. `markdown` writes the whole notebook with the rows of every cell. See the [notebook guide](notebooks.md#without-a-screen).
+
 ## Config and history
 
 `masume run` reads the config and project files without writing either file. A run without a config file does not create the starter file. The terminal client and `masume --detect` can create that file.

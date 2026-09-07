@@ -18,7 +18,9 @@ Before the first tagged release, fixes target `master`. After releases begin, on
 | --- | --- |
 | Global profiles, settings, secret commands, and optional AI API keys | `$XDG_CONFIG_HOME/masume/config.toml` |
 | Project profiles and saved queries | The nearest `.masume.toml` in or above the working directory |
-| Query history, saved queries, tabs, editor buffers, marks, recent schemas, catalog cache, AI chats and their editor contexts | `$XDG_STATE_HOME/masume/history.sqlite` |
+| Project notebooks | `<project root>/.masume/notebooks/*.masume.md`, beside the project file |
+| Personal notebooks | `$XDG_STATE_HOME/masume/notebooks/*.masume.md` |
+| Query history, saved queries, tabs, editor buffers, notebook text, marks, recent schemas, catalog cache, AI chats and their editor contexts | `$XDG_STATE_HOME/masume/history.sqlite` |
 | SQLite state files | `history.sqlite-wal` and `history.sqlite-shm` beside the history file |
 | Partial MCP diagnostics | `$XDG_STATE_HOME/masume/mcp.log` and `mcp.log.1` |
 | Partial AI chat diagnostics | `$XDG_STATE_HOME/masume/ai-chat.log` and `ai-chat.log.1` |
@@ -31,9 +33,21 @@ History can contain statement literals, errors, filter values, and unsent editor
 
 AI chat storage retains up to 50 conversations per profile and 100 messages per conversation. These limits do not cap the active conversation in memory. Deletion does not guarantee secure erasure from SQLite files, backups, providers, or external clients.
 
-masume creates new state directories with mode `0700`. It applies mode `0600` to the history file and existing WAL and SHM files when opening history. New config files and logs use mode `0600`. Terminal exports also use mode `0600`.
+A notebook file holds statements, prose and parameter defaults, and no result rows. A report does hold them: `Alt+O r` in the client and `masume nb run -f markdown` both write the rows of every cell to the file they name. A masked column stays masked in a report.
+
+masume creates new state directories with mode `0700`. It applies mode `0600` to the history file and existing WAL and SHM files when opening history. New config files, notebooks and logs use mode `0600`. Terminal exports also use mode `0600`.
 
 Existing directory permissions do not automatically become restrictive. Log permission changes are best effort. These permissions are not encryption and do not protect against the same operating system user or an administrator.
+
+### Notebooks
+
+A notebook from a repository is untrusted text. It can hold any statement, a destructive one included. Opening a notebook runs no cell, and the notebooks card marks the notebooks that hold a write. A `write=confirm` attribute on a fence adds a question; no attribute of a notebook removes one, lowers the access mode, or opens a connection. The `profiles` key of the front matter is a filter the picker offers, and never an automatic connection.
+
+`masume nb run` has no confirmation, no write plan and no undo, so a write cell needs `--allow-writes`. A read-only profile refuses a write cell whatever the flags say.
+
+`list_notebooks` and `read_notebook` return the text of a notebook and run nothing. There is no MCP tool that runs a notebook.
+
+A `{{cell:id}}` reference carries the statement of the named cell, and none of its rows: that statement runs again inside the one that names it, with the access mode and the confirmation of any other statement.
 
 ### Diagnostic logs
 
@@ -108,6 +122,8 @@ The editor and MCP use `confirm_writes` for statements classified as writes. `of
 Unset defaults are `off` on `dev`, `delete` on `test`, and `write` on `prod`. Environment colors are visual labels, not access restrictions.
 
 The AI chat asks before every `run_query`, including reads, regardless of `confirm_writes`. It also asks before explain calls classified as writes. Read analyze calls and other tool operations do not all require confirmation.
+
+Notebook runs use the same confirmation as the editor, one question per write cell. A run pauses for the question and never batches consent.
 
 Headless runs do not use write confirmation, write plans or undo. A nonzero exit can follow a successful write with failed output. See [headless execution](docs/headless.md#writes-and-access).
 

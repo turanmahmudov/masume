@@ -230,7 +230,7 @@ func TestAnEmptyEditorSaysWhatThisServerTakes(t *testing.T) {
 			model, connection, tab := buildEditingModel(t, "", 0)
 			connection.Session.(*offlineSession).dialect = held.dialect
 
-			if hint := describeEditorHint(connection); hint != held.wanted {
+			if hint := describeEditorHint(connection, tab); hint != held.wanted {
 				t.Errorf("the pane says %q, wanted %q", hint, held.wanted)
 			}
 			drawn := strings.Join(model.renderEditor(connection, tab, 60, 8), "\n")

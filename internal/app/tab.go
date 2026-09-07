@@ -72,6 +72,8 @@ type Tab struct {
 	Table db.TableRef
 	// The object an object tab shows.
 	Object db.SchemaObject
+	// The cells a notebook tab holds. Only a notebook tab has one.
+	Notebook *Notebook
 
 	Editor  *EditorBuffer
 	Results *ResultStore
@@ -191,18 +193,77 @@ func (tab *Tab) IsBlank() bool {
 		tab.Results.State().Kind == QueryIdle
 }
 
-// EditorVisible is true while the editor is drawn. Only a query tab has an editor.
+// EditorVisible is true while the pane above the result is drawn. A query tab draws the
+// editor there, and a notebook tab draws its cells.
 func (tab *Tab) EditorVisible() bool {
+	return tab.Kind == TabQuery || tab.Kind == TabNotebook
+}
+
+// EditsText is true while the pane above the result takes typed characters.
+func (tab *Tab) EditsText() bool {
+	if tab.Kind == TabNotebook {
+		return tab.Notebook != nil && tab.Notebook.Editing
+	}
 	return tab.Kind == TabQuery
 }
 
-// Label returns the table name, object name, query name, or shortened editor text.
+// EditsStatements is true while the text being written is statements of the engine. The
+// prose of a notebook is checked against no schema and coloured as no SQL.
+func (tab *Tab) EditsStatements() bool {
+	if tab.Kind != TabNotebook {
+		return true
+	}
+	if tab.Notebook == nil {
+		return false
+	}
+	return tab.Notebook.GetFocusedCell().RunsStatements()
+}
+
+// ListsCells is true while the cell list of a notebook holds the keyboard.
+func (tab *Tab) ListsCells() bool {
+	return tab.Kind == TabNotebook && tab.Notebook != nil && !tab.Notebook.Editing
+}
+
+// ReadCellOutcome returns what the last run of one cell left behind.
+func (tab *Tab) ReadCellOutcome(cell *NotebookCell) CellOutcome {
+	if cell == nil {
+		return CellOutcome{Kind: CellIdle}
+	}
+	if cell.FirstResult < 0 || cell.ResultCount == 0 {
+		if cell.Stale {
+			return CellOutcome{Kind: CellStale}
+		}
+		return CellOutcome{Kind: CellIdle}
+	}
+	outcome := CellOutcome{Kind: CellDone}
+	for at := cell.FirstResult; at < cell.FirstResult+cell.ResultCount; at++ {
+		held := tab.Results.ResultAt(at)
+		if held == nil {
+			return CellOutcome{Kind: CellIdle}
+		}
+		switch held.State.Kind {
+		case QueryRunning:
+			return CellOutcome{Kind: CellRunning}
+		case QueryFailed:
+			return CellOutcome{Kind: CellFailed, Message: held.State.Message}
+		case QueryIdle:
+			return CellOutcome{Kind: CellIdle}
+		}
+		outcome.Rows += len(held.State.Result.Rows)
+	}
+	return outcome
+}
+
+// Label returns the table name, object name, notebook name, query name, or shortened
+// editor text.
 func (tab *Tab) Label() string {
 	switch tab.Kind {
 	case TabTable:
 		return tab.Table.Name
 	case TabObject:
 		return tab.Object.Name
+	case TabNotebook:
+		return present.TruncateText(tab.NotebookName(), tabLabelWidth+2)
 	}
 	if named := statement.FindQueryName(tab.Editor.Text); named != "" {
 		return present.TruncateText(named, tabLabelWidth+2)
@@ -212,6 +273,17 @@ func (tab *Tab) Label() string {
 		return "empty"
 	}
 	return present.TruncateText(written, tabLabelWidth)
+}
+
+// NotebookName returns the name of the notebook of this tab.
+func (tab *Tab) NotebookName() string {
+	if tab.Notebook == nil {
+		return "notebook"
+	}
+	if tab.Notebook.Title != "" {
+		return tab.Notebook.Title
+	}
+	return "notebook"
 }
 
 // tabLabelWidth is the maximum width of the name of a tab.

@@ -6,6 +6,7 @@ import (
 
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/detect"
+	"github.com/turanmahmudov/masume/internal/notebook"
 )
 
 // Startup arguments select a connection target or a configured profile.
@@ -37,7 +38,9 @@ func failArgument(reason string) error { return argumentError{reason: reason} }
 type invocation struct {
 	target      string
 	profileName string
-	detect      bool
+	// The notebook file the command line named, which opens with the connection.
+	notebookPath string
+	detect       bool
 }
 
 // parseArguments reads the arguments of the client.
@@ -64,6 +67,12 @@ func parseArguments(argv []string) (invocation, error) {
 				"unknown option: " + argument)
 		case strings.TrimSpace(argument) == "":
 			return invocation{}, failArgument("arguments cannot be empty")
+		case strings.HasSuffix(argument, notebook.FileSuffix):
+			if held.notebookPath != "" {
+				return invocation{}, failArgument(
+					"only one notebook is allowed; extra notebook: " + argument)
+			}
+			held.notebookPath = argument
 		default:
 			if held.target != "" {
 				return invocation{}, failArgument(

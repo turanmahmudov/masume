@@ -125,6 +125,9 @@ type Chat struct {
 	Follow bool
 	// StartedAt is the response start time.
 	StartedAt time.Time
+	// True while the reply of this run becomes a notebook, and what it is to cover.
+	BuildsNotebook  bool
+	NotebookSubject string
 	// Notice is the line under the field, in place of what the chat spent.
 	Notice string
 }

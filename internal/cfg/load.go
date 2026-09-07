@@ -17,10 +17,11 @@ import (
 // LoadedConfig is the result of one read of the config file.
 type LoadedConfig struct {
 	ParsedProfiles
-	Settings UISettings
-	Keys     KeySettings
-	Ai       AiConfig
-	Mcp      McpConfig
+	Settings  UISettings
+	Keys      KeySettings
+	Notebooks NotebookSettings
+	Ai        AiConfig
+	Mcp       McpConfig
 	// The themes of the user. They replace an included theme with the same name.
 	Themes        []ThemeDocument
 	ThemeProblems []string
@@ -102,6 +103,7 @@ func buildDefaultConfig(path, reason string, themes []ThemeDocument, themeProble
 		Problems:      []ProfileProblem{{Name: FileProblemPrefix + path, Reason: reason}},
 		Settings:      DefaultUISettings(),
 		Keys:          DefaultKeySettings(),
+		Notebooks:     NotebookSettings{},
 		Ai:            DefaultAiConfig(),
 		Mcp:           DefaultMcpConfig(),
 		Themes:        themes,
@@ -135,6 +137,7 @@ func LoadConfig(path string) LoadedConfig {
 		ParsedProfiles: ParseProfiles(document),
 		Settings:       ParseUISettings(document),
 		Keys:           ParseKeySettings(document),
+		Notebooks:      ParseNotebookSettings(document),
 		Ai:             ParseAiConfig(document),
 		Mcp:            ParseMcpConfig(document),
 		Themes:         themes,

@@ -7,6 +7,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
+	"github.com/turanmahmudov/masume/internal/notebook"
 	"github.com/turanmahmudov/masume/internal/present"
 	"github.com/turanmahmudov/masume/internal/writeplan"
 )
@@ -157,6 +158,9 @@ type Connection struct {
 
 	// Undo data or an unavailable reason for the last recorded write.
 	Undo *HeldUndo
+
+	// The cell a copy or a cut of the cell list took, which a paste inserts.
+	NotebookClip *NotebookCell
 
 	// The overlay on top, which owns the keyboard while it is open.
 	Overlay Overlay
@@ -309,6 +313,31 @@ func (connection *Connection) OpenQueryTab(sql string) *Tab {
 		return connection.appendTab(tab)
 	}
 	return connection.showTab(tab)
+}
+
+// OpenNotebook opens a notebook tab. A notebook already open in a tab comes forward.
+func (connection *Connection) OpenNotebook(
+	book notebook.Notebook, path string, origin notebook.Origin,
+) *Tab {
+	if path != "" {
+		for at, tab := range connection.Tabs {
+			if tab.Kind == TabNotebook && tab.Notebook != nil && tab.Notebook.Path == path {
+				connection.ActiveIndex = at
+				return tab
+			}
+		}
+	}
+	connection.nextTabID++
+	return connection.showTab(NewNotebookTab(connection.nextTabID, book, path, origin))
+}
+
+// OpenNotebookInNewTab opens a notebook in a tab of its own, even where another tab holds
+// the same notebook.
+func (connection *Connection) OpenNotebookInNewTab(
+	book notebook.Notebook, path string, origin notebook.Origin,
+) *Tab {
+	connection.nextTabID++
+	return connection.showTab(NewNotebookTab(connection.nextTabID, book, path, origin))
 }
 
 // OpenTable focuses an existing table tab or opens a new table tab.

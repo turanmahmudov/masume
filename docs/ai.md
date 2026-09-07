@@ -139,6 +139,12 @@ These checks are not a sandbox. Database functions, extensions, and engine featu
 
 The tools provide no general shell or file API. Database features can still reach files, networks, or other databases when database permissions allow access. Use database accounts with only the required permissions.
 
+## Notebooks
+
+**Ask AI: build a notebook** in the palette asks what the notebook is to cover, sends the request, and opens the reply as a notebook: prose as text cells, one statement cell per query, and a parameter cell for the `:name` marks the statements bind. Nothing runs.
+
+`Ctrl+J` inserts the statement of the last reply. On a notebook tab it becomes a new cell under the focused one; on any other tab it goes into a query editor. `Ctrl+G` turns the conversation into a notebook: the prose of every turn becomes a text cell, and every statement the model wrote becomes a statement cell. The notebook opens unsaved and runs nothing. See the [notebook guide](notebooks.md).
+
 ## Storage and sharing
 
 The configured provider or gateway receives instructions, tool definitions, questions, editor contexts, retained messages, and tool results. Do not enable this sharing for data that must remain local.

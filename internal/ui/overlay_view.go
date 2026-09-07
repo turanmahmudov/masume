@@ -107,6 +107,8 @@ var overlayShares = map[app.OverlayKind]int{
 	app.OverlayPalette:     70,
 	app.OverlayHistory:     92,
 	app.OverlaySaved:       86,
+	app.OverlayNotebooks:   86,
+	app.OverlayChart:       66,
 	app.OverlayActivity:    92,
 	app.OverlayDiagram:     92,
 	app.OverlayChanges:     86,
@@ -168,6 +170,7 @@ var overlayHeightShares = map[app.OverlayKind]int{
 	app.OverlayPalette:     widestOverlayHeightShare,
 	app.OverlayHistory:     widestOverlayHeightShare,
 	app.OverlaySaved:       widestOverlayHeightShare,
+	app.OverlayNotebooks:   widestOverlayHeightShare,
 	app.OverlayActivity:    widestOverlayHeightShare,
 	app.OverlayThemePicker: widestOverlayHeightShare,
 	app.OverlayObjectMenu:  60,
@@ -250,6 +253,10 @@ func (model *Model) renderOverlay(
 		return model.renderHistory(overlay, width)
 	case app.OverlaySaved:
 		return model.renderSaved(overlay, width)
+	case app.OverlayNotebooks:
+		return model.renderNotebooks(overlay, width)
+	case app.OverlayChart:
+		return model.renderChartForm(tab, overlay, width)
 	case app.OverlayObjectMenu, app.OverlayCopyMenu, app.OverlayActionMenu:
 		return model.renderMenu(overlay, width)
 	case app.OverlayConfirm:
@@ -1884,13 +1891,39 @@ var promptHints = map[app.PromptKind]string{
 	app.PromptTabName:    "written as a comment on the first line of the query",
 	app.PromptFind:       "marks every match · F3 goes to the next one",
 	app.PromptReplace:    "replaces every match, in one step",
+	app.PromptCellName:   "written as a comment on the first line of the cell",
 }
 
-// drawsPromptBar is true for a prompt that opens a field at the foot of a pane. Only the one
-// that names a saved query is a card, because it is asked from the palette and belongs to no
-// pane.
+// promptCards are the prompts that open a card of their own. A prompt that belongs to no
+// pane is one of them, and so is one that takes a path and needs a line to say where it
+// goes.
+var promptCards = map[app.PromptKind]bool{
+	app.PromptSaveName:       true,
+	app.PromptNotebookName:   true,
+	app.PromptNotebookRename: true,
+	app.PromptNotebookReport: true,
+	app.PromptAiNotebook:     true,
+}
+
+// drawsPromptBar is true for a prompt that opens a field at the foot of a pane.
 func drawsPromptBar(overlay app.Overlay) bool {
-	return overlay.Kind == app.OverlayPrompt && overlay.Prompt != app.PromptSaveName
+	return overlay.Kind == app.OverlayPrompt && !promptCards[overlay.Prompt]
+}
+
+// promptPlaceholders name what a card of a prompt takes while its field is empty.
+var promptPlaceholders = map[app.PromptKind]string{
+	app.PromptNotebookName:   "a name, or a path",
+	app.PromptNotebookRename: "a name",
+	app.PromptNotebookReport: "a path for the report",
+	app.PromptAiNotebook:     "what the notebook is to cover",
+}
+
+// describePromptPlaceholder returns what the field of a card takes while it is empty.
+func describePromptPlaceholder(prompt app.PromptKind) string {
+	if held, found := promptPlaceholders[prompt]; found {
+		return held
+	}
+	return "a name for this query"
 }
 
 // findPromptBar returns the prompt to draw at the foot of a pane, and whether there is one.
@@ -1943,7 +1976,7 @@ func (model *Model) renderPrompt(overlay app.Overlay, width int) string {
 		model.renderField(overlay.Draft, inner, FieldLook{
 			Ground: model.styles.Theme.Header, Ink: model.styles.Theme.Text,
 			Focused: true, KeepsPlaceholder: true,
-			Placeholder: "a name for this query",
+			Placeholder: describePromptPlaceholder(overlay.Prompt),
 		}),
 		model.styles.Muted().Render(present.TruncateText(overlay.Hint, inner)),
 	}

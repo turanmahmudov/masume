@@ -117,6 +117,12 @@ Tool answers use text content. Successful answers generally contain JSON text. I
 
 `validate_query` is a best-effort check. SQL adapters use preparation where available; MongoDB uses local diagnostics. `checked: true` with no problem is not proof of validity. Some unsupported checks and connection failures produce no diagnostic. An open transaction returns `checked: false`.
 
+## Notebook tools
+
+`list_notebooks` returns the notebooks of the project and of the user: the name, the title, the origin, the cell count and how many cells write. `read_notebook` returns one notebook with its run policy and every cell: id, kind, title and text.
+
+Both tools are read-only and run no cell. A notebook whose front matter names profiles is listed only where one of those profiles is served. There is no `run_notebook`: an agent runs a cell by sending its text through `run_query`, where the access level and the confirmation apply. See the [notebook guide](notebooks.md).
+
 ## Access limits
 
 ```toml

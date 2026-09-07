@@ -33,11 +33,16 @@ var dialogGroups = map[string][]ActionID{
 	},
 	"parameters": {ActionClose, ActionRunWithValues, ActionPrettifyJSON},
 	// The find field turns into the replace field, so finding and replacing is one key.
-	"prompt":   {ActionClose, ActionReplaceInStatement},
-	"export":   {ActionClose, ActionWriteExport},
-	"cell":     {ActionClose, ActionCopyValue},
-	"history":  {ActionClose, ActionOpenInNewTab},
-	"saved":    {ActionClose, ActionOpenInNewTab, ActionListSecondary},
+	"prompt":  {ActionClose, ActionReplaceInStatement},
+	"export":  {ActionClose, ActionWriteExport},
+	"chart":   {ActionClose, ActionSaveForm},
+	"cell":    {ActionClose, ActionCopyValue},
+	"history": {ActionClose, ActionOpenInNewTab},
+	"saved":   {ActionClose, ActionOpenInNewTab, ActionListSecondary},
+	"notebooks": {
+		ActionClose, ActionOpenInNewTab, ActionNewConnection, ActionEditConnection,
+		ActionDeleteConnection,
+	},
 	"ai-chats": {ActionClose, ActionListSecondary},
 	"activity": {
 		ActionClose, ActionChooseRow, ActionStopSession, ActionListSecondary,
@@ -49,6 +54,7 @@ var dialogGroups = map[string][]ActionID{
 	"ai-chat": {
 		ActionClose, ActionInsertAiSQL, ActionStopAiReply, ActionNewAiChat,
 		ActionShowAiChats, ActionScrollBack, ActionScrollForward,
+		ActionChatToNotebook,
 		ActionPreviousTurn, ActionNextTurn,
 		// The chat asks its own question before it runs a statement.
 		ActionAnswerYes, ActionAnswerNo,

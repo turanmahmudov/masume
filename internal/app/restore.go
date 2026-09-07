@@ -7,6 +7,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/hist"
+	"github.com/turanmahmudov/masume/internal/notebook"
 )
 
 // Workspace persistence restores tab state. Table and object tabs load data on first display.
@@ -22,7 +23,7 @@ func (connection *Connection) RestoreTabs(saved hist.SavedWorkspace, buildPrevie
 	for _, held := range saved.Tabs {
 		connection.nextTabID++
 		tab := buildRestoredTab(connection.nextTabID, held, buildPreview)
-		if tab.Kind != TabQuery {
+		if tab.Kind != TabQuery && tab.Kind != TabNotebook {
 			unread[tab.ID] = true
 		}
 		tabs = append(tabs, tab)
@@ -48,6 +49,14 @@ func buildRestoredTab(id int, saved hist.SavedTab, buildPreview PreviewBuilder) 
 		})
 		applySavedState(tab, saved.State)
 		return tab
+	case "notebook":
+		// The text of the notebook is stored, so a notebook that was never saved comes
+		// back as well, and no cell is run to restore it.
+		tab := NewNotebookTab(id, notebook.Parse(saved.SQL), saved.Identity,
+			notebook.Origin(saved.ObjectKind))
+		applySavedState(tab, saved.State)
+		applySavedCells(tab, saved.State)
+		return tab
 	case "table":
 		table := db.TableRef{
 			Schema: saved.Schema, Name: saved.Name,
@@ -60,6 +69,26 @@ func buildRestoredTab(id int, saved hist.SavedTab, buildPreview PreviewBuilder) 
 	tab := NewQueryTab(id, saved.SQL)
 	applySavedState(tab, saved.State)
 	return tab
+}
+
+// applySavedCells puts the list of a restored notebook back on the cell it stood on, with
+// the cells that were folded away still folded.
+func applySavedCells(tab *Tab, state hist.SavedTabState) {
+	folded := map[string]bool{}
+	for _, id := range state.Folded {
+		folded[id] = true
+	}
+	for _, cell := range tab.Notebook.Cells {
+		cell.Folded = folded[cell.ID]
+	}
+	tab.Notebook.FocusCell(state.Cell)
+	tab.SettleFocusedCell()
+	// The sort, the filter and the caret of the stored tab belong to the cell it stood on.
+	tab.Sort, tab.Filter = state.Sort, state.Filter
+	if state.Caret > 0 && state.Caret <= len(tab.Editor.Text) {
+		tab.Editor.Caret, tab.Editor.Anchor = state.Caret, state.Caret
+	}
+	tab.KeepFocusedCell()
 }
 
 // applySavedState applies the sort, the filter and the caret of a stored tab.
@@ -111,6 +140,15 @@ func buildSavedTab(tab *Tab) hist.SavedTab {
 			ObjectKind: string(tab.Object.Kind), Identity: tab.Object.Identity, State: state,
 		}
 	}
+	if tab.Kind == TabNotebook && tab.Notebook != nil {
+		state.Cell = tab.Notebook.Focused
+		state.Folded = tab.Notebook.ListFoldedCells()
+		return hist.SavedTab{
+			Kind: "notebook", SQL: notebook.Write(tab.Notebook.BuildDocument()),
+			Identity: tab.Notebook.Path, ObjectKind: string(tab.Notebook.Origin),
+			State: state,
+		}
+	}
 	return hist.SavedTab{Kind: "query", SQL: tab.Editor.Text, State: state}
 }
 
@@ -122,6 +160,15 @@ func (connection *Connection) DescribeTabs() string {
 		written.WriteString("\x00" + strconv.Itoa(tab.ID) + "\x00" + string(tab.Kind) + "\x00" +
 			tab.Table.Schema + "." + tab.Table.Name + "\x00" +
 			tab.Object.Schema + "." + tab.Object.Name + "\x00" + tab.Editor.Text)
+		if tab.Notebook == nil {
+			continue
+		}
+		written.WriteString("\x00" + tab.Notebook.Path + "\x00" +
+			strconv.Itoa(tab.Notebook.Focused))
+		for _, cell := range tab.Notebook.Cells {
+			written.WriteString("\x00" + cell.ID + "\x00" + string(cell.Kind) +
+				"\x00" + strconv.FormatBool(cell.Folded) + "\x00" + cell.Editor.Text)
+		}
 	}
 	return written.String()
 }

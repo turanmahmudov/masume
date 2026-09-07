@@ -235,6 +235,7 @@ mode     = "write"
 | Page | About |
 | --- | --- |
 | [User guide](docs/usage.md) | Workflows, navigation, editing, data transfer and troubleshooting |
+| [Notebooks](docs/notebooks.md) | Cells, charts, run policy, the file format and `masume nb run` |
 | [Configuration](docs/configuration.md) | Settings, defaults, profiles and password sources |
 | [Engines](docs/engines.md) | Support tiers and capabilities |
 | [Keys](docs/keys.md) | Default bindings, scopes and overrides |

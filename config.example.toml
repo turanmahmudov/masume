@@ -68,6 +68,15 @@ hide_system_schemas = true
 [keys]
 preset = "default"
 
+[notebooks]
+paths = []
+
+# Notebook directories. The list always holds <project root>/.masume/notebooks and
+# $XDG_STATE_HOME/masume/notebooks. See docs/notebooks.md.
+#
+# [notebooks]
+# paths = ["~/notes/sql"]
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Setting reference. Commented values include defaults and examples. Connection addresses, credentials, colours and glyph overrides are examples.
 # Duplicate table headers are invalid TOML. Settings belong under one header per table.

@@ -10,6 +10,7 @@ func TestEveryPaletteEntryRunsSomething(t *testing.T) {
 	handled := map[string]bool{
 		"copy-plan": true, "reload-themes": true,
 		"ai-explain-query": true, "ai-optimize-query": true,
+		"ai-build-notebook":  true,
 		configProblemsAction: true,
 	}
 	// The rows that move the result pane to one of its views, which the palette resolves

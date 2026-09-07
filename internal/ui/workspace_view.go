@@ -14,6 +14,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/app"
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
+	"github.com/turanmahmudov/masume/internal/notebook"
 	"github.com/turanmahmudov/masume/internal/present"
 	"github.com/turanmahmudov/masume/internal/query/editor"
 	"github.com/turanmahmudov/masume/internal/query/statement"
@@ -33,6 +34,8 @@ const (
 	minPaneHeight = 3
 	// editorRows is the height the editor keeps while the result is on screen.
 	editorRows = 8
+	// notebookHeightShare is the percentage of the pane a cell list opens with.
+	notebookHeightShare = 60
 )
 
 // renderWorkspace draws the tab row, the tree, the editor and the result.
@@ -101,7 +104,13 @@ func (model *Model) renderWorkspace(height int) []string {
 
 	right := make([]string, 0, editorHeight+resultHeight)
 	if editorHeight > 0 {
-		right = append(right, model.renderEditor(connection, tab, paneWidth, editorHeight)...)
+		if tab.ListsCells() {
+			right = append(right,
+				model.renderNotebook(connection, tab, paneWidth, editorHeight)...)
+		} else {
+			right = append(right,
+				model.renderEditor(connection, tab, paneWidth, editorHeight)...)
+		}
 	}
 	if resultHeight > 0 {
 		right = append(right,
@@ -147,8 +156,12 @@ func (model *Model) planPaneHeights(
 	}
 
 	// The border between the two panes is dragged to set this, and the client opens with
-	// the rows the editor takes by itself.
+	// the rows the editor takes by itself. A cell list is the whole document, so it opens
+	// with more of the height than one statement needs.
 	editor := editorRows
+	if tab.Kind == app.TabNotebook {
+		editor = max(height*notebookHeightShare/100, editorRows)
+	}
 	if connection.EditorHeight > 0 {
 		editor = connection.EditorHeight
 	}
@@ -352,7 +365,7 @@ func (model *Model) buildTabHints(
 		keys.bindPair(cfg.ScopeGlobal, ActionPreviousTab, ActionNextTab, "tab", " ").
 			bind(cfg.ScopeGlobal, ActionActivateTab, "go")
 	}
-	if tab.Kind == app.TabQuery {
+	if tab.Kind == app.TabQuery || tab.Kind == app.TabNotebook {
 		keys.bind(cfg.ScopeGlobal, ActionNameTab, "name")
 	}
 	if many {
@@ -854,7 +867,7 @@ func (model *Model) renderEditor(
 		text := model.renderCodeLine(drawn)
 		if placeholder && at == 0 {
 			text = paintText(theme.Muted, theme.Panel,
-				present.FitText(describeEditorHint(connection), textWidth))
+				present.FitText(describeEditorHint(connection, tab), textWidth))
 		}
 		written = append(written,
 			number+text+paintOn(gutterGround, " "))
@@ -970,6 +983,11 @@ const editorPaneName = "query"
 // describeEditorTitle names the pane, and what the list or the scan found. The list shows
 // its place and its keys in the title, to save a row.
 func (model *Model) describeEditorTitle(tab *app.Tab, faults int) string {
+	if tab.Kind == app.TabNotebook && tab.Notebook != nil {
+		return " cell " + strconv.Itoa(tab.Notebook.Focused+1) + "/" +
+			strconv.Itoa(tab.Notebook.CountCells()) + " · " +
+			string(tab.Notebook.GetFocusedCell().Kind) + " · Esc back to the cells "
+	}
 	if total := len(tab.Completion.Candidates); total > 0 {
 		return " " + editorPaneName + " · " + strconv.Itoa(tab.Completion.Selected+1) + "/" +
 			strconv.Itoa(total) + " · ↑↓ Tab accept · Esc "
@@ -1023,11 +1041,25 @@ func (model *Model) renderFaultRow(
 
 // describeEditorHint returns what an empty pane says it takes, which is the shape of one
 // statement of this server.
-func describeEditorHint(connection *app.Connection) string {
+func describeEditorHint(connection *app.Connection, tab *app.Tab) string {
+	if !tab.EditsStatements() {
+		return describeCellHint(tab.Notebook.GetFocusedCell().Kind)
+	}
 	if hint := connection.Session.Dialect().StatementHint; hint != "" {
 		return hint
 	}
 	return "select … from …"
+}
+
+// describeCellHint returns what an empty cell of this kind holds.
+func describeCellHint(kind notebook.CellKind) string {
+	switch kind {
+	case notebook.CellText:
+		return "# a heading, and prose under it"
+	case notebook.CellParam:
+		return "day = \"2026-09-01\""
+	}
+	return ""
 }
 
 // describeProblemSign returns the mark a fault carries. A set that draws no glyph for it
@@ -1083,6 +1115,9 @@ func (model *Model) describeEditorBorder(connection *app.Connection) string {
 func (model *Model) findLocalDiagnostics(
 	connection *app.Connection, tab *app.Tab,
 ) []editor.Diagnostic {
+	if !tab.EditsStatements() {
+		return nil
+	}
 	return connection.Session.Language().FindLocalDiagnostics(
 		tab.Editor.Text, model.buildSchemaKnowledge(connection, tab))
 }
@@ -1121,6 +1156,9 @@ func (model *Model) resolveLocalDiagnostics(
 func (model *Model) findDiagnostics(
 	connection *app.Connection, tab *app.Tab,
 ) []editor.Diagnostic {
+	if !tab.EditsStatements() {
+		return nil
+	}
 	if found := model.resolveLocalDiagnostics(connection, tab); len(found) > 0 {
 		return found
 	}
@@ -1224,6 +1262,19 @@ func (model *Model) buildEditorHighlights(
 	term := resolveFindTerm(connection, tab)
 	text := tab.Editor.Text
 	byLine := map[int][]lineHighlight{}
+	// Prose is no statement, so no token of it is coloured as one.
+	if !tab.EditsStatements() {
+		for _, start := range tab.Editor.FindMatches(term) {
+			span := present.ResolveLineSpan(
+				text, editor.Diagnostic{Start: start, End: start + len(term)})
+			if span.Line >= 0 && span.Line < len(lines) {
+				byLine[span.Line] = append(byLine[span.Line], lineHighlight{
+					kind: MatchStyle, start: span.Start, end: span.End,
+				})
+			}
+		}
+		return byLine
+	}
 	// A span over several lines is marked on its first line only.
 	add := func(kind HighlightKind, start, end int) {
 		span := present.ResolveLineSpan(text, editor.Diagnostic{Start: start, End: end})

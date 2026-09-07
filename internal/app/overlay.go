@@ -8,6 +8,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/hist"
 	"github.com/turanmahmudov/masume/internal/load"
+	"github.com/turanmahmudov/masume/internal/notebook"
 	"github.com/turanmahmudov/masume/internal/present"
 	"github.com/turanmahmudov/masume/internal/query/result"
 	"github.com/turanmahmudov/masume/internal/writeplan"
@@ -34,16 +35,20 @@ const (
 	OverlayActionMenu  OverlayKind = "action-menu"
 	OverlayDiagram     OverlayKind = "diagram"
 	OverlaySaved       OverlayKind = "saved"
-	OverlayActivity    OverlayKind = "activity"
-	OverlayMessage     OverlayKind = "message"
-	OverlayAiChat      OverlayKind = "ai-chat"
-	OverlayAiChats     OverlayKind = "ai-chats"
-	OverlayConfirm     OverlayKind = "confirm"
-	OverlayWritePlan   OverlayKind = "write-plan"
-	OverlayChoice      OverlayKind = "choice"
-	OverlayExport      OverlayKind = "export"
-	OverlayImport      OverlayKind = "import"
-	OverlayPrompt      OverlayKind = "prompt"
+	// OverlayNotebooks lists the notebooks of the project and of the user.
+	OverlayNotebooks OverlayKind = "notebooks"
+	// OverlayChart is the form of one chart cell.
+	OverlayChart     OverlayKind = "chart"
+	OverlayActivity  OverlayKind = "activity"
+	OverlayMessage   OverlayKind = "message"
+	OverlayAiChat    OverlayKind = "ai-chat"
+	OverlayAiChats   OverlayKind = "ai-chats"
+	OverlayConfirm   OverlayKind = "confirm"
+	OverlayWritePlan OverlayKind = "write-plan"
+	OverlayChoice    OverlayKind = "choice"
+	OverlayExport    OverlayKind = "export"
+	OverlayImport    OverlayKind = "import"
+	OverlayPrompt    OverlayKind = "prompt"
 )
 
 // WholeRow is the row index a cell editor uses when it holds a whole new row.
@@ -89,7 +94,17 @@ const (
 	PromptGoToColumn PromptKind = "go-to-column"
 	PromptSaveName   PromptKind = "save-name"
 	PromptFind       PromptKind = "find"
-	PromptReplace    PromptKind = "replace"
+	// PromptCellName names the focused cell of a notebook.
+	PromptCellName PromptKind = "cell-name"
+	// PromptNotebookName is the name a notebook is saved under.
+	PromptNotebookName PromptKind = "notebook-name"
+	// PromptAiNotebook is what a notebook the model builds is to cover.
+	PromptAiNotebook PromptKind = "ai-notebook"
+	// PromptNotebookReport is the file the report of a notebook is written to.
+	PromptNotebookReport PromptKind = "notebook-report"
+	// PromptNotebookRename is the new name of a notebook file.
+	PromptNotebookRename PromptKind = "notebook-rename"
+	PromptReplace        PromptKind = "replace"
 )
 
 // ListState is the shared selection, scroll, and filter state for overlay lists.
@@ -118,6 +133,21 @@ type CellTarget struct {
 	ColumnIndex int
 	// Allowed values for selection instead of text input.
 	Choices []string
+}
+
+// ChartRequest is the chart the form of a chart cell is building.
+type ChartRequest struct {
+	// The cell the form writes to.
+	Cell string
+	// The cell the chart reads, and the two columns it draws.
+	Source string
+	Label  string
+	Value  string
+	Shape  string
+	// True while the rows are sorted by the value, largest first.
+	SortsByValue bool
+	// Top is how many rows the chart draws. Zero draws every row.
+	Top int
 }
 
 // ExportRequest is the export the form is writing.
@@ -181,14 +211,16 @@ type Overlay struct {
 
 	List ListState
 
-	Entries  []hist.HistoryEntry
-	Saved    []SavedRow
-	Actions  []MenuAction
-	Palette  []PaletteAction
-	Choices  []Choice
-	Sessions []db.Activity
-	Changes  []db.Change
-	Lines    []string
+	Entries []hist.HistoryEntry
+	Saved   []SavedRow
+	// The notebooks the card lists.
+	Notebooks []notebook.Entry
+	Actions   []MenuAction
+	Palette   []PaletteAction
+	Choices   []Choice
+	Sessions  []db.Activity
+	Changes   []db.Change
+	Lines     []string
 
 	// The last reading of the server, and the state of the card the reader set.
 	Server ServerReading
@@ -196,6 +228,8 @@ type Overlay struct {
 
 	Window RowWindow
 	Cell   CellTarget
+	// What the form of a chart cell holds.
+	Chart ChartRequest
 	// What the write of the card would do.
 	Plan    writeplan.Plan
 	Export  ExportRequest
