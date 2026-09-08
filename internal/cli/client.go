@@ -29,7 +29,7 @@ usage:
   masume FILE.masume.md         open a notebook file
   masume DSN                    open a keyword connection string, for example "host=db dbname=shop"
   masume --profile NAME         open a user or project profile
-  masume --detect               list detected container databases
+  masume --detect               open the picker with detected container databases
   masume --mcp                  serve allowed profiles over JSON-RPC on stdio
   masume --mcp --profile=NAME   serve one allowed profile
   masume --mcp --check          check enabled MCP profiles and exit

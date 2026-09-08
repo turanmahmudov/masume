@@ -336,3 +336,37 @@ func TestResolveWriteRiskReadsATransactionThatOpensForWrites(t *testing.T) {
 		})
 	}
 }
+
+// set_config reaches the same server setting as SET and opens with a reading keyword, so a
+// statement that turns the read-only guard off would otherwise pass as a read.
+func TestResolveWriteRiskReadsASettingFunctionAsItReadsSET(t *testing.T) {
+	for _, held := range []struct {
+		name string
+		sql  string
+		want statement.WriteRisk
+	}{
+		{"the read-only guard turned off",
+			"select set_config('default_transaction_read_only','off',false)",
+			statement.RiskWrite},
+		{"the guard turned off inside a larger read",
+			"select id, set_config('default_transaction_read_only','off',true) from orders",
+			statement.RiskWrite},
+		{"a setting the allowlist does not hold",
+			"select set_config('session_replication_role','replica',false)",
+			statement.RiskWrite},
+		{"a setting name the tokens do not carry",
+			"select set_config(name, 'off', false) from settings",
+			statement.RiskWrite},
+		{"an allowed setting", "select set_config('search_path','public',false)",
+			statement.RiskNone},
+		{"an allowed planner switch", "select set_config('enable_seqscan','off',false)",
+			statement.RiskNone},
+		{"a name that only looks like the function",
+			"select set_configuration from options", statement.RiskNone},
+	} {
+		got := statement.ResolveWriteRisk(held.sql, syntax.FlavourStandard)
+		if got != held.want {
+			t.Errorf("%s reads as %q, wanted %q", held.name, got, held.want)
+		}
+	}
+}

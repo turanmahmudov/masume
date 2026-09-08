@@ -260,6 +260,7 @@ func TestExplainQueryAnswersAServerThatPlansNothingWithoutAsking(t *testing.T) {
 type askedQuestion struct {
 	asked   bool
 	weighed statement.WriteRisk
+	purpose agent.RunPurpose
 }
 
 // buildRefusingDeps builds the tools of this session with a user who refuses every statement
@@ -284,9 +285,11 @@ func buildAskingDeps(
 		Runner: agent.StatementRunner{
 			RowLimit: 100,
 			AskToRun: func(
-				_ context.Context, risk statement.WriteRisk, _ []string,
+				_ context.Context, purpose agent.RunPurpose,
+				risk statement.WriteRisk, _ []string,
 			) agent.RunPermission {
 				question.asked, question.weighed = true, risk
+				question.purpose = purpose
 				return agent.RunPermission{Refusal: refusal}
 			},
 		},

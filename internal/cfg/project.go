@@ -135,15 +135,13 @@ func parseProjectProfiles(document Table, path string) ([]Profile, []string) {
 		if refusedNames[problem.Name] {
 			continue
 		}
-		problems = append(problems, fmt.Sprintf(
-			"%s: skipped profile %q: %s", path, problem.Name, problem.Reason))
+		problems = append(problems, path+": "+problem.Describe())
 	}
 	for _, warning := range parsed.Warnings {
 		if refusedNames[warning.Name] {
 			continue
 		}
-		problems = append(problems, fmt.Sprintf(
-			"%s: profile %q: %s", path, warning.Name, warning.Reason))
+		problems = append(problems, path+": "+warning.DescribeWarning())
 	}
 
 	kept := make([]Profile, 0, len(parsed.Profiles))

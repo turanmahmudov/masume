@@ -165,7 +165,8 @@ func ReadUndo(ctx context.Context, runner db.QueryRunner, plan UndoPlan) (Undo, 
 	}
 	if answered.Truncated {
 		return Undo{}, db.NewDatabaseError(
-			"the write matches more rows than the undo_rows limit of %d", plan.Limit)
+			"the write matches more rows than the undo_rows limit of %d",
+			resolveUndoLimit(plan.Limit))
 	}
 	return buildUndoStatements(plan, answered.Rows, answered.Columns)
 }

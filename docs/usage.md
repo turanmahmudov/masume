@@ -97,6 +97,8 @@ Server operations run the read again. Screen filters only hide loaded rows. Neit
 
 `f` and `x` add filters to a stack. `w` preserves those cell filters but replaces the existing raw predicate. An empty `w` entry removes the raw predicate. `u` removes only the last server filter; sorting remains. Its rerun also clears screen filters. With no server filters, `u` does nothing. `c` does not remove clauses already written in the SQL.
 
+A server filter searches the whole statement, not the rows already fetched. A `LIMIT` written in the SQL applies to the filtered rows, so the grid can show rows the unfiltered statement does not return.
+
 In the `F` card, Space toggles a value, `o` keeps only the selected value, and `a` keeps all values. Enter applies the selection. Counts cover loaded rows before screen filtering. An empty `/` entry clears the screen search.
 
 **Sorting, server filtering, and rerunning discard staged grid edits without asking.** The status bar reports the discarded changes. These operations also clear screen filters. Apply staged changes before these operations.

@@ -108,9 +108,28 @@ func (model *Model) buildConfirmLines(held *confirmState, cardWidth int) []strin
 	for line := range strings.SplitSeq(held.Body, "\n") {
 		lines = append(lines, present.TruncateText(line, inner))
 	}
-	return append(lines, "",
+	lines = append(lines, "",
 		model.styles.Muted().Render(
 			present.TruncateText(model.describeConfirmKeys(held), inner)))
+	return model.fitCardLines(lines, inner)
+}
+
+// confirmCardChrome is the rows a question takes beside its body: the title bar, the status
+// bar, the two borders of the card and the two blank rows inside it.
+const confirmCardChrome = 6
+
+// fitCardLines cuts a question to the rows the screen holds and counts the rows it cut. The
+// blank row and the key row at the end always stay.
+func (model *Model) fitCardLines(lines []string, inner int) []string {
+	room := model.height - confirmCardChrome
+	if room < 4 || len(lines) <= room {
+		return lines
+	}
+	kept := room - 3
+	held := append([]string{}, lines[:kept]...)
+	held = append(held, model.styles.Muted().Render(present.TruncateText(
+		present.FormatCountOf(int64(len(lines)-2-kept), "more row", "more rows"), inner)))
+	return append(held, lines[len(lines)-2:]...)
 }
 
 // describeConfirmKeys names the keys a question returns to, in the words of the question.

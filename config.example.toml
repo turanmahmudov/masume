@@ -130,7 +130,7 @@ paths = []
 # Environment defaults apply to absent file settings. Changing env in the form does not change confirmation.
 # Undo covers eligible single updates, deletes and truncates. Captured target rows exclude cascades and trigger effects.
 # A later undo can overwrite newer values. Grid changes and imports retain no undo. See docs/configuration.md for eligibility and failures.
-# Unset TLS uses prefer on PostgreSQL and MySQL, require on Redshift, Neon, Supabase and PlanetScale, and none on MongoDB.
+# Unset TLS uses prefer on PostgreSQL, MySQL, MariaDB, CockroachDB, TimescaleDB, TiDB and Aurora MySQL, require on Redshift, Neon, Supabase and PlanetScale, and none on MongoDB.
 # MongoDB allow and prefer use TLS without an unencrypted fallback. SQLite ignores TLS.
 # Relative SQLite paths in a project file use the project directory. Other relative SQLite paths use the startup directory.
 
@@ -404,6 +404,31 @@ paths = []
 # select-all           = ["ctrl+a"]
 # undo-edit            = ["ctrl+z"]
 #
+# [keys.notebook]   # the cell list of a notebook tab
+# add-cell-above       = ["a"]
+# add-cell-below       = ["b"]
+# copy-cell            = ["y"]
+# cursor-down          = ["down", "j"]
+# cursor-first-row     = ["home"]
+# cursor-last-row      = ["end"]
+# cursor-up            = ["up", "k"]
+# cut-cell             = ["x"]
+# delete-cell          = ["d d"]
+# edit-cell-source     = ["return"]
+# mark-cell            = ["space"]
+# move-cell-down       = ["J"]
+# move-cell-up         = ["K"]
+# name-cell            = ["t"]
+# paste-cell           = ["p"]
+# redo-cell-change     = ["Z"]
+# run-cell             = ["r"]
+# run-from-cell        = ["R"]
+# run-marked-cells     = ["m"]
+# set-cell-kind        = ["c"]
+# toggle-cell-output   = ["o"]
+# toggle-every-output  = ["O"]
+# undo-cell-change     = ["u"]
+#
 # [keys.list]   # any list with its own cursor
 # choose-row       = ["return"]
 # cursor-down      = ["down"]
@@ -456,16 +481,16 @@ paths = []
 # default_provider     = "anthropic"   # anthropic openai
 # statement_timeout_ms = 30000         # time limit for a statement that the model runs
 #
-[ai.providers.anthropic]
-model        = "claude-opus-5"
-api_key_env  = "ANTHROPIC_API_KEY"
+# [ai.providers.anthropic]
+# model        = "claude-opus-5"
+# api_key_env  = "ANTHROPIC_API_KEY"
 # api_key      = ""                   # Default: empty.
 # base_url     = ""                   # Default: the provider address.
 # base_url_env = "ANTHROPIC_BASE_URL" # Example. Default: empty.
-
-[ai.providers.openai]
-model        = "gpt-5"
-api_key_env  = "OPENAI_API_KEY"
+#
+# [ai.providers.openai]
+# model        = "gpt-5"
+# api_key_env  = "OPENAI_API_KEY"
 # api_key      = ""                   # Default: empty.
 # base_url     = ""                   # Default: the provider address.
 # base_url_env = "OPENAI_BASE_URL"    # Example. Default: empty.

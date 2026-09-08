@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"maps"
+	"strconv"
 	"time"
 
 	"github.com/turanmahmudov/masume/internal/core"
@@ -93,8 +94,11 @@ var runQuery = ToolDefinition{
 
 		runner := deps.Runner
 		statements := deps.Session.Language().SplitStatements(sql)
-		permission := runner.AskToRun(
-			ctx, language.ResolveBatchRisk(statements, deps.Session.Language()), statements)
+		if len(statements) == 0 {
+			return refuseInput("sql: no statement to run")
+		}
+		permission := runner.AskToRun(ctx, PurposeRun,
+			language.ResolveBatchRisk(statements, deps.Session.Language()), statements)
 		if permission.Refusal != "" {
 			return map[string]any{"ran": false, "reason": permission.Refusal}
 		}
@@ -173,9 +177,19 @@ var planWrite = ToolDefinition{
 
 // describeUnmeasured returns the reason write measurement is unavailable.
 func describeUnmeasured(sql string, deps ToolDeps) string {
-	if language.ResolveBatchRisk(
-		deps.Session.Language().SplitStatements(sql), deps.Session.Language()) == statement.RiskNone {
+	statements := deps.Session.Language().SplitStatements(sql)
+	if language.ResolveBatchRisk(statements, deps.Session.Language()) == statement.RiskNone {
 		return "this statement is classified as read-only; write measurement does not apply"
+	}
+	if deps.WritePlanOff {
+		return "write_plan is off on this profile; set it to count or undo to measure a write"
+	}
+	if !deps.Session.Capabilities().PlansWrites {
+		return "this engine does not support write measurement"
+	}
+	if len(statements) > 1 {
+		return "write measurement covers one statement, and this input holds " +
+			strconv.Itoa(len(statements))
 	}
 	return "cannot measure this write as one known table and one predicate. " +
 		"Write measurement does not support joins, target aliases, or statement batches"

@@ -429,3 +429,24 @@ database = "./mine.db"
 		t.Errorf("the load took the project file %q of another tree", loaded.Project.Path)
 	}
 }
+
+// A secret store of a project file is no profile, and its report once named a profile
+// called "secret.<name>" that does not exist.
+func TestProjectReportsABrokenSecretStoreAsAStore(t *testing.T) {
+	directory := t.TempDir()
+	body := "[secret.broken]\ncommand = \"\"\n\n" +
+		"[profile.p]\nengine = \"sqlite\"\ndatabase = \"./notes.db\"\n"
+	path := filepath.Join(directory, cfg.ProjectFileName)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("the project file was not written: %v", err)
+	}
+
+	held := cfg.LoadProjectConfig(path)
+	joined := strings.Join(held.Problems, "\n")
+	if !strings.Contains(joined, "skipped secret store \"broken\"") {
+		t.Errorf("the reports read %q, wanted the store", joined)
+	}
+	if strings.Contains(joined, "secret.broken\"") {
+		t.Errorf("the reports name a profile that does not exist: %q", joined)
+	}
+}

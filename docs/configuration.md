@@ -62,7 +62,7 @@ mode     = "write"
 | `secret` | | The `[secret]` store that holds the password. Read when `auth` is `secret` |
 | `secret_ref` | | The reference inside that store, passed to its command as one quoted argument |
 | `env` | `dev` | `dev`, `test` or `prod`. The theme provides the environment colour |
-| `mode` | `write` | `write` or `read-only` |
+| `mode` | `write` | `write` or `read-only`. TiDB accepts the read-only statement without enforcing it, so masume blocks the write in the client. MongoDB has no read-only session, and masume blocks the write in the client |
 | `confirm_writes` | `off` on dev, `delete` on test, `write` on prod | `off`, `delete`, `write` or `agent`. See [MCP confirmation](mcp.md#clients-without-elicitation) for clients without dialogs |
 | `write_plan` | `off` on dev, `count` on test, `undo` on prod | `off`, `count` or `undo`. See [Measuring a write](#measuring-a-write) |
 | `undo_rows` | `1000` | Maximum captured rows for an undo. `0` uses an internal ceiling of 1048576 rows |
@@ -394,9 +394,9 @@ A password command runs through `sh -c` with no stdin. The command must exit suc
 masume ignores profile passwords in configuration files. A non-empty `password` string produces this warning:
 
 ```
-profile "shop": a password in a file is ignored; type it once and tick
-"remember in the keyring", or set password_env, password_command or a
-[secret] store
+profile "shop": passwords in files are ignored; enter the password and
+select "remember in the keyring", or set password_env, password_command
+or a [secret] store
 ```
 
 Ignoring `password` does not change `auth`. The configured environment variable, command, secret store or keyring still applies. The client prompts only when the selected source and engine require a prompt. SQLite needs no password. MongoDB without a user does not prompt unless `auth = "prompt"`.
@@ -541,7 +541,7 @@ copy-menu = "alt+y"
 | --- | --- | --- | --- |
 | `preset` | string | `default` | The initial key set. `default` is the only preset |
 
-Each table below `[keys]` is a scope. Each scope entry binds an action to one chord or a chord list. An empty list removes the binding. Unlisted actions retain the preset bindings. The eight scopes are:
+Each table below `[keys]` is a scope. Each scope entry binds an action to one chord or a chord list. An empty list removes the binding. Unlisted actions retain the preset bindings. The nine scopes are:
 
 | Scope | Where its keys apply |
 | --- | --- |
@@ -550,6 +550,7 @@ Each table below `[keys]` is a scope. Each scope entry binds an action to one ch
 | `grid` | The result grid |
 | `editor` | The query editor |
 | `plan` | The query plan tree |
+| `notebook` | The cell list of a notebook tab |
 | `document` | The tree that shows result rows as documents |
 | `list` | Any list inside a card: the history, the saved queries, the palette |
 | `dialog` | A card that asks a question, and the connection picker |
@@ -605,6 +606,8 @@ timeout_ms = 30000
 | `access` | `off`, `read-only`, `read-write` or `full` | `read-only` | The global access limit. Profile `mcp` can lower the limit. `mode = "read-only"` limits access to reads |
 | `row_limit` | integer above zero | `500` | Maximum returned rows for `run_query`. Catalog results, undo rows and changed rows are outside this limit |
 | `timeout_ms` | integer above zero | `30000` | Execution timeout for MCP `run_query`, in milliseconds. Other tools and undo capture are outside this timeout |
+
+An unknown `access` level and a `row_limit` or `timeout_ms` that is not above zero keep the default without a report.
 
 See [mcp.md](mcp.md) for tools and write confirmation.
 

@@ -147,13 +147,11 @@ func (model *Model) resolveOverlayWidth(kind app.OverlayKind) int {
 	if fixed, held := overlayWidths[kind]; held {
 		wanted = fixed
 	}
-	if wanted > model.width {
-		wanted = model.width
-	}
 	if wanted < narrowestOverlayCard {
 		wanted = narrowestOverlayCard
 	}
-	return wanted
+	// The screen is the last limit, so a terminal under the narrowest card still fits.
+	return max(min(wanted, model.width), 1)
 }
 
 // The largest share of the screen a card may take, and the height under which a card is
@@ -1885,8 +1883,9 @@ func fitFieldLabel(written string, width int) string {
 
 // promptHints name what each prompt does, which the field alone cannot show.
 var promptHints = map[app.PromptKind]string{
-	app.PromptSearch:     "filters loaded rows · no server query",
-	app.PromptWhere:      "filters query results · the editor query stays unchanged",
+	app.PromptSearch: "filters loaded rows · no server query",
+	app.PromptWhere: "the server filters, then the statement limit applies · " +
+		"the editor query stays unchanged",
 	app.PromptGoToColumn: "goes to the first column whose name matches",
 	app.PromptTabName:    "written as a comment on the first line of the query",
 	app.PromptFind:       "marks every match · F3 goes to the next one",

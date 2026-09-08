@@ -516,3 +516,15 @@ func TestBuildReportsNothingReachedByAWriteThatMatchesNoRow(t *testing.T) {
 		t.Errorf("the plan reports %+v and %+v", plan.Cascades, plan.Blockers)
 	}
 }
+
+// An undo that is unavailable without a reason once drew a trailing separator with nothing
+// after it.
+func TestDescribeUndoWithoutAReasonNamesNoSeparator(t *testing.T) {
+	if got := writeplan.DescribeUndo(writeplan.UndoPlan{}); got != "none" {
+		t.Errorf("an undo with no reason reads %q, wanted %q", got, "none")
+	}
+	held := writeplan.UndoPlan{Reason: "the table has no primary key"}
+	if got := writeplan.DescribeUndo(held); got != "none · the table has no primary key" {
+		t.Errorf("an undo with a reason reads %q", got)
+	}
+}

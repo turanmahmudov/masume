@@ -69,7 +69,8 @@ func (sink *heldSink) TakeRows(rows [][]any, _ []query.ResultColumn) error {
 }
 
 func (sink *heldSink) Finish(columns []query.ResultColumn) error {
-	_, err := fmt.Fprintln(sink.out, strings.TrimRight(sink.write(columns, sink.rows), "\n"))
+	// A last row of empty cells is a row, so the text is written as the writer built it.
+	_, err := fmt.Fprintln(sink.out, sink.write(columns, sink.rows))
 	return err
 }
 

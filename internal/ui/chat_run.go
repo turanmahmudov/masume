@@ -176,8 +176,9 @@ func (model *Model) buildChatToolDeps(
 	held := &heldChatUndo{}
 
 	return agent.ToolDeps{
-		Session: session,
-		Tables:  func() []db.TableRef { return tables },
+		Session:      session,
+		Tables:       func() []db.TableRef { return tables },
+		WritePlanOff: connection.Profile().WritePlan == cfg.PlanOff,
 		MarkTableDescribed: func(table db.TableRef, detail db.TableDetail) {
 			events <- app.ChatEvent{
 				Run: run, Kind: app.ChatTableRead, Table: table, Detail: detail,
@@ -187,8 +188,13 @@ func (model *Model) buildChatToolDeps(
 			// A chat returns with figures, not with a page of rows.
 			RowLimit: connection.Profile().PageSize,
 			AskToRun: func(
-				ctx context.Context, risk statement.WriteRisk, statements []string,
+				ctx context.Context, purpose agent.RunPurpose,
+				risk statement.WriteRisk, statements []string,
 			) agent.RunPermission {
+				// A plan runs nothing, so the panel asks no question for one.
+				if purpose == agent.PurposePlan {
+					return agent.RunPermission{}
+				}
 				return askChatToRun(ctx, chatQuestion{
 					run: run, events: events, profile: connection.Profile(),
 					session: session, tables: tables, held: held,

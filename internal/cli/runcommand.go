@@ -196,10 +196,15 @@ func finishRunInvocation(held runInvocation, positional []string) (runInvocation
 	switch len(positional) {
 	case 0:
 	case 1:
-		if held.statementFile != "" {
-			held.target = positional[0]
-		} else {
+		switch {
+		case held.statementFile == "":
 			held.statement = positional[0]
+		case held.profileName != "":
+			// The profile is the connection, so the argument can only be a statement.
+			return runInvocation{}, failArgument(
+				"-e cannot be combined with a statement argument: " + positional[0])
+		default:
+			held.target = positional[0]
 		}
 	case 2:
 		if held.statementFile != "" {
@@ -242,6 +247,18 @@ func readStatementText(held runInvocation, stdin io.Reader) (string, error) {
 	return string(written), nil
 }
 
+// findLoneTargetArgument returns the one positional argument of the run where it is a
+// connection target rather than a statement.
+func findLoneTargetArgument(held runInvocation) (string, bool) {
+	if held.statement == "" || held.target != "" || held.statementFile != "" {
+		return "", false
+	}
+	if _, err := cfg.BuildProfileFromTarget(held.statement); err != nil {
+		return "", false
+	}
+	return held.statement, true
+}
+
 // resolveRunProfile resolves a configured profile, a connection target, or $DATABASE_URL.
 func resolveRunProfile(
 	held runInvocation, profiles []cfg.Profile, environment func(string) string,
@@ -253,6 +270,10 @@ func resolveRunProfile(
 		return cfg.Profile{}, err
 	}
 	if start == nil {
+		if name, alone := findLoneTargetArgument(held); alone {
+			return cfg.Profile{}, failArgument(
+				"masume run requires a statement after the target " + name)
+		}
 		return cfg.Profile{}, failArgument(
 			"masume run requires a connection: a target, --profile, or $DATABASE_URL")
 	}

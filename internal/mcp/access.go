@@ -48,6 +48,9 @@ func ListOpenProfiles(deps AccessDeps) []cfg.Profile {
 // GetNamedProfile resolves the requested or scoped profile and checks access.
 func GetNamedProfile(deps AccessDeps, named any) (cfg.Profile, error) {
 	written, isText := named.(string)
+	if named != nil && !isText && deps.ScopedProfile == "" {
+		return cfg.Profile{}, refuse("profile: expected a string")
+	}
 	asked, given := deps.ScopedProfile, deps.ScopedProfile != ""
 	if !given {
 		asked, given = written, isText

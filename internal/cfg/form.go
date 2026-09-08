@@ -283,7 +283,7 @@ func ParseConnectionURL(text string) (ConnectionURL, bool) {
 		return ConnectionURL{}, false
 	}
 
-	engine, known := urlSchemes[parsed.Scheme]
+	engine, known := urlSchemes[strings.ToLower(parsed.Scheme)]
 	if !known {
 		return ConnectionURL{}, false
 	}

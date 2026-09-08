@@ -138,9 +138,10 @@ func buildConnectionTool(deps ToolDeps, definition agent.ToolDefinition) Tool {
 			}
 			// Bind only the requested tool.
 			return definition.Call(ctx, agent.ToolDeps{
-				Session: connection.Session,
-				Tables:  connection.Tables,
-				Runner:  buildRunner(deps, profile, connection, token),
+				Session:      connection.Session,
+				Tables:       connection.Tables,
+				Runner:       buildRunner(deps, profile, connection, token),
+				WritePlanOff: profile.WritePlan == cfg.PlanOff,
 			}, asked), nil
 		},
 	}
@@ -156,8 +157,18 @@ func buildRunner(
 	runner := agent.StatementRunner{
 		RowLimit: deps.Config.RowLimit,
 		AskToRun: func(
-			ctx context.Context, risk statement.WriteRisk, statements []string,
+			ctx context.Context, purpose agent.RunPurpose,
+			risk statement.WriteRisk, statements []string,
 		) agent.RunPermission {
+			// A plan keeps the access check of a write and asks no question, because it
+			// runs nothing.
+			if purpose == agent.PurposePlan {
+				access := ResolveProfileAccess(deps.Config, profile)
+				if refusal := FindAccessRefusal(access, risk); refusal != "" {
+					return agent.RunPermission{Refusal: refusal}
+				}
+				return agent.RunPermission{}
+			}
 			permission, undo := askAgentToRun(
 				ctx, deps, profile, connection, token, risk, statements)
 			held.undo = undo

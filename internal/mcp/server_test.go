@@ -340,3 +340,57 @@ func TestInitializeLogsAClientThatCannotBeAsked(t *testing.T) {
 		t.Errorf("the log holds %v", *written)
 	}
 }
+
+// An oversized message once ended the read loop, so every later message of that client was
+// dropped and the server closed its connections.
+func TestServeOverStdioKeepsServingAfterAMessageAboveTheLimit(t *testing.T) {
+	responder, _ := buildTestResponder(func(map[string]any) (any, error) {
+		return map[string]any{"ran": true}, nil
+	})
+	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"ping"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"ping","params":{"pad":"` +
+			strings.Repeat("x", maxMessageBytes) + `"}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"ping"}`,
+	}, "\n")
+
+	answers := []string{}
+	ServeOverStdio(context.Background(), responder, strings.NewReader(input),
+		func(line string) { answers = append(answers, line) })
+
+	if len(answers) != 3 {
+		t.Fatalf("the server wrote %v", answers)
+	}
+	if !strings.Contains(answers[1], "at most") {
+		t.Errorf("the oversized message answered %s", answers[1])
+	}
+	if answers[2] != `{"jsonrpc":"2.0","id":3,"result":{}}` {
+		t.Errorf("the message after the oversized one answered %s", answers[2])
+	}
+}
+
+// JSON-RPC 2.0 requires the version member on every request. A response of the client
+// carries no method and must still reach the asker, whatever it declares.
+func TestARequestWithoutTheProtocolVersionIsRefused(t *testing.T) {
+	responder, _ := buildTestResponder(func(map[string]any) (any, error) {
+		return map[string]any{"ran": true}, nil
+	})
+	for _, held := range []map[string]any{
+		{"id": float64(1), "method": "ping"},
+		{"jsonrpc": "1.0", "id": float64(2), "method": "ping"},
+		{"jsonrpc": float64(2), "id": float64(3), "method": "ping"},
+	} {
+		answer := responder.AnswerMessage(context.Background(), held)
+		line := buildJSONLine(answer)
+		if !strings.Contains(line, `"code":-32600`) {
+			t.Errorf("%v answered %s", held, line)
+		}
+	}
+
+	answer := responder.AnswerMessage(context.Background(), map[string]any{
+		"jsonrpc": "2.0", "id": float64(4), "method": "ping",
+	})
+	if buildJSONLine(answer) != `{"jsonrpc":"2.0","id":4,"result":{}}` {
+		t.Errorf("a proper request answered %s", buildJSONLine(answer))
+	}
+}

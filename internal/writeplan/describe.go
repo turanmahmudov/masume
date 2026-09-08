@@ -72,6 +72,9 @@ func DescribeBlocker(blocker Cascade) string {
 // DescribeUndo describes the original rows available for undo.
 func DescribeUndo(undo UndoPlan) string {
 	if !undo.Kept {
+		if undo.Reason == "" {
+			return "none"
+		}
 		return "none · " + undo.Reason
 	}
 	return present.FormatCountOf(undo.Rows, "row", "rows") + " to capture before the write"

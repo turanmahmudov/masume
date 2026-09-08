@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -170,6 +171,20 @@ func finishNotebookInvocation(
 	return held, nil
 }
 
+// findUnknownCellIDs returns the --only ids that no cell of the notebook carries.
+func findUnknownCellIDs(only []string, book notebook.Notebook) []string {
+	missing := []string{}
+	for _, id := range only {
+		held := slices.ContainsFunc(book.Cells, func(cell notebook.Cell) bool {
+			return cell.ID == id
+		})
+		if !held {
+			missing = append(missing, id)
+		}
+	}
+	return missing
+}
+
 // runNotebookCommand runs `masume nb` and returns the exit code of the process.
 func runNotebookCommand(argv []string) int {
 	if len(argv) > 0 && (argv[0] == "--help" || argv[0] == "-h") {
@@ -212,6 +227,17 @@ func runNotebookCommand(argv []string) int {
 	if len(book.Cells) == 0 {
 		fmt.Fprintln(os.Stderr, "masume: this notebook holds no cell")
 		return headless.CodeStatement
+	}
+	if book.UnreadableFrontMatter {
+		fmt.Fprintln(os.Stderr, "masume: the run policy of this notebook cannot be read; "+
+			"correct the front matter and run it again")
+		return 2
+	}
+
+	if missing := findUnknownCellIDs(held.only, book); len(missing) > 0 {
+		fmt.Fprintln(os.Stderr, "masume: this notebook holds no cell "+
+			strings.Join(missing, ", "))
+		return 2
 	}
 
 	profile, err := resolveNotebookProfile(held, book, loaded.Profiles)

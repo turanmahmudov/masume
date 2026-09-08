@@ -241,3 +241,22 @@ func TestBuildSlugHoldsOnlyWordsAndHyphens(t *testing.T) {
 		}
 	}
 }
+
+// A run policy the front matter declares is lost with the front matter, so a caller has to
+// be able to see that the policy on the notebook is a default and not the declared one.
+func TestParseMarksFrontMatterItCannotRead(t *testing.T) {
+	broken := notebook.Parse("+++\ntitle = \"bad\nname\"\n\n[run]\ntransaction = \"single\"\n+++\n\n" +
+		"```sql id=a\nselect 1\n```\n")
+	if !broken.UnreadableFrontMatter {
+		t.Error("front matter that does not decode is not marked")
+	}
+	if len(broken.Problems) == 0 {
+		t.Error("front matter that does not decode reports nothing")
+	}
+
+	good := notebook.Parse("+++\ntitle = \"good\"\n\n[run]\ntransaction = \"single\"\n+++\n\n" +
+		"```sql id=a\nselect 1\n```\n")
+	if good.UnreadableFrontMatter {
+		t.Error("front matter that decodes is marked unreadable")
+	}
+}

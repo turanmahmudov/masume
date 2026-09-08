@@ -206,6 +206,8 @@ type incoming struct {
 	method      string
 	params      map[string]any
 	named       map[string]any
+	// version is the `jsonrpc` member of the message.
+	version string
 }
 
 func readIncomingMessage(message any) incoming {
@@ -230,8 +232,20 @@ func readIncomingMessage(message any) incoming {
 	}
 	return incoming{
 		kind: messageCall, id: id, wantsAnswer: wantsAnswer, method: method,
-		params: castToObject(named["params"]),
+		params: castToObject(named["params"]), version: castToText(named["jsonrpc"]),
 	}
+}
+
+// protocolVersion is the value the `jsonrpc` member of every request carries.
+const protocolVersion = "2.0"
+
+// castToText returns a string value, and an empty string for every other kind.
+func castToText(value any) string {
+	written, isText := value.(string)
+	if !isText {
+		return ""
+	}
+	return written
 }
 
 // AnswerMessage handles one message and returns nil when no response is required.
@@ -242,6 +256,15 @@ func (responder *Responder) AnswerMessage(ctx context.Context, message any) any 
 		return buildError(nil, invalidRequest, "a message must be a JSON object")
 	case messageMethodless:
 		return responder.answerMethodless(held)
+	}
+	// A response of the client carries no method and is checked above, so only a request
+	// and a notification reach the version check.
+	if held.version != protocolVersion {
+		if !held.wantsAnswer {
+			return nil
+		}
+		return buildError(held.id, invalidRequest,
+			"a request requires \"jsonrpc\": \""+protocolVersion+"\"")
 	}
 	return responder.answerSafely(ctx, held)
 }

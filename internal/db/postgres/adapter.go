@@ -56,6 +56,52 @@ func (session *postgresSession) markTransactionFailed() {
 	session.transaction.MarkFailed()
 }
 
+// reopenClosedConnection opens the user connection again after the server closed it. A
+// cancelled statement can close it. A transaction is lost with the connection, so one that
+// was open is reported instead.
+func (session *postgresSession) reopenClosedConnection(ctx context.Context) error {
+	if !session.connection.IsClosed() {
+		return nil
+	}
+	if session.transaction.ReadState() != db.TransactionNone {
+		return db.NewDatabaseError("the connection closed and the transaction was lost")
+	}
+
+	profile := session.Descriptor.Profile
+	opened, err := openPostgresConnection(ctx, profile, session.password)
+	if err != nil {
+		return db.WrapDatabaseMessage(db.BuildConnectMessage(profile, err), err)
+	}
+	if profile.AccessMode == cfg.AccessReadOnly {
+		if _, readOnlyErr := opened.Exec(ctx, session.flavour.ReadOnlyStatement); readOnlyErr != nil {
+			_ = opened.Close(ctx)
+			return db.WrapDatabaseError(readOnlyErr)
+		}
+	}
+	keepJSONFieldOrder(opened)
+
+	session.connection = opened
+	session.backendPID = readBackendPID(ctx, opened)
+	return nil
+}
+
+// readBackendPID returns the process id of the connection, or zero.
+func readBackendPID(ctx context.Context, connection *pgx.Conn) int64 {
+	rows, err := connection.Query(ctx, "select pg_backend_pid() as pid")
+	if err != nil {
+		return 0
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return 0
+	}
+	values, valueErr := rows.Values()
+	if valueErr != nil || len(values) == 0 {
+		return 0
+	}
+	return db.ReadNonNegativeCount(values[0])
+}
+
 // resolveCatalogConnection uses the user connection during transactions and the side connection otherwise.
 func (session *postgresSession) resolveCatalogConnection() (*pgx.Conn, error) {
 	if session.transaction.ReadState() != db.TransactionNone {
@@ -254,6 +300,9 @@ func (session *postgresSession) RunQuery(
 	}
 	defer giveBack()
 
+	if err := session.reopenClosedConnection(ctx); err != nil {
+		return db.QueryResult{}, err
+	}
 	result, err := session.runOn(ctx, session.connection, sql, rowLimit, params)
 	if err != nil {
 		session.markTransactionFailed()
@@ -333,6 +382,9 @@ func (session *postgresSession) StreamQuery(
 	}
 	defer giveBack()
 
+	if err := session.reopenClosedConnection(ctx); err != nil {
+		return 0, err
+	}
 	rows, err := session.connection.Query(ctx, sql, params...)
 	if err != nil {
 		session.markTransactionFailed()
@@ -573,9 +625,37 @@ func (session *postgresSession) ListConstraints(
 	return constraints, nil
 }
 
+// buildViewDDL reads the select of a view from the server.
+func (session *postgresSession) buildViewDDL(
+	ctx context.Context, table db.TableRef,
+) ([]string, error) {
+	qualified := session.Support.Dialect.BuildQualifiedName(table.Qualified())
+	rows, err := session.readRows(ctx, readViewDefinitionSQL, qualified)
+	if err != nil {
+		return nil, db.WrapDatabaseOperation("reading the view definition", err)
+	}
+	definition := ""
+	if len(rows) > 0 {
+		definition = strings.TrimSpace(db.ReadAnyText(rows[0]["definition"]))
+	}
+	if definition == "" {
+		return db.BuildMissingDefinition(table.Name), nil
+	}
+
+	word := "view"
+	if table.Kind == db.RelationMaterializedView {
+		word = "materialized view"
+	}
+	lines := []string{"create " + word + " " + qualified + " as"}
+	return append(lines, strings.Split(definition, "\n")...), nil
+}
+
 func (session *postgresSession) BuildTableDDL(
 	ctx context.Context, table db.TableRef,
 ) ([]string, error) {
+	if table.Kind == db.RelationView || table.Kind == db.RelationMaterializedView {
+		return session.buildViewDDL(ctx, table)
+	}
 	detail, err := session.DescribeTable(ctx, table)
 	if err != nil {
 		return nil, db.WrapDatabaseOperation("reading the columns", err)
@@ -612,6 +692,9 @@ func (session *postgresSession) ExplainQuery(
 	}
 	defer giveBack()
 
+	if err := session.reopenClosedConnection(ctx); err != nil {
+		return db.QueryPlan{}, err
+	}
 	prefix := session.flavour.BuildExplainPrefix(analyze)
 	rows, err := session.connection.Query(ctx, prefix+" "+sql)
 	if err != nil {

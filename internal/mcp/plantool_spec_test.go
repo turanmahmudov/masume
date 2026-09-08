@@ -304,3 +304,38 @@ func TestAClientThatShowsADialogRunsWhatTheUserAllows(t *testing.T) {
 		t.Errorf("the answer carries %v", answered["undo"])
 	}
 }
+
+// A profile with write_plan off measures nothing, and the reason once blamed the form of
+// the statement, which sent the reader after a fault that was not there.
+func TestPlanWriteNamesTheSettingThatTurnedMeasurementOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "shop.db")
+	profile := cfg.Profile{
+		Name: "shop", Engine: core.EngineSqlite, Database: path,
+		Environment: cfg.EnvironmentDev, AccessMode: cfg.AccessWrite,
+		ConfirmWrites: cfg.ConfirmAgent, WritePlan: cfg.PlanOff,
+		UndoRows: cfg.DefaultUndoRows, PageSize: cfg.DefaultPageSize,
+	}
+	buildPlanFile(t, profile)
+
+	tools := mcp.BuildTools(mcp.ToolDeps{
+		AccessDeps: mcp.AccessDeps{
+			Profiles: []cfg.Profile{profile},
+			Config: cfg.McpConfig{
+				Profiles: []string{"shop"}, Access: cfg.McpFull, RowLimit: 100,
+				Timeout: cfg.DefaultMcpTimeout,
+			},
+			Sessions: mcp.CreateSessions(engines.CreateAdapters()),
+		},
+		Asker: mcp.CreateAsker(func(string) {}),
+		Plans: mcp.CreatePlanTokens(),
+	})
+
+	held := runTool(t, tools, "plan_write",
+		map[string]any{"profile": "shop", "sql": "delete from orders where id = 1"})
+	if held["measured"] != false {
+		t.Fatalf("the write measured on a profile with write_plan off: %v", held)
+	}
+	if !strings.Contains(held["reason"].(string), "write_plan is off") {
+		t.Errorf("the reason reads %q, wanted the setting", held["reason"])
+	}
+}

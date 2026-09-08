@@ -107,6 +107,9 @@ type Notebook struct {
 	Cells       []Cell
 	// What could not be read, one line each.
 	Problems []string
+	// True where the front matter did not decode, so the title, the profiles, the engine
+	// and the run policy are all missing.
+	UnreadableFrontMatter bool
 }
 
 // CountWriteCells returns how many cells the fence marks as a write.

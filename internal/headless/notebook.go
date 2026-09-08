@@ -54,7 +54,13 @@ func RunNotebook(
 			options.Profile.Name)
 		return CodeConnection
 	}
-	if code := refuseNotebookWrites(options); code != CodeOK {
+	// A plan runs no cell, so a write cell needs no confirmation.
+	if !options.Explain {
+		if code := refuseNotebookWrites(options); code != CodeOK {
+			return code
+		}
+	}
+	if code := refuseSeveralJSONResults(options); code != CodeOK {
 		return code
 	}
 
@@ -119,6 +125,9 @@ func expandNotebookReferences(options *NotebookOptions) int {
 		}
 	}
 	for at, cell := range options.Notebook.Cells {
+		if !runsThisCell(*options, cell) {
+			continue
+		}
 		if !cell.RunsStatements() || !notebook.HoldsReference(cell.Source) {
 			continue
 		}
@@ -130,6 +139,26 @@ func expandNotebookReferences(options *NotebookOptions) int {
 		options.Notebook.Cells[at].Source = written
 	}
 	return CodeOK
+}
+
+// refuseSeveralJSONResults refuses a run that would write more than one JSON document,
+// because the documents back to back are no JSON a reader can parse.
+func refuseSeveralJSONResults(options NotebookOptions) int {
+	if options.Format != FormatJSON || options.Explain {
+		return CodeOK
+	}
+	cells := 0
+	for _, cell := range options.Notebook.Cells {
+		if cell.RunsStatements() && runsThisCell(options, cell) {
+			cells++
+		}
+	}
+	if cells <= 1 {
+		return CodeOK
+	}
+	options.report("json output supports one statement cell per run; this run covers %d. "+
+		"Use markdown or csv, or name one cell with --only", cells)
+	return CodeStatement
 }
 
 // refuseNotebookWrites refuses a write cell where nothing can confirm it.
@@ -219,6 +248,11 @@ func runNotebookCell(
 	if len(statements) == 0 {
 		return CodeOK
 	}
+	if options.Format == FormatJSON && !options.Explain && len(statements) > 1 {
+		options.report("json output supports one statement per cell; cell %d holds %d. "+
+			"Use markdown or csv, or split the cell", at+1, len(statements))
+		return CodeStatement
+	}
 	// A plan of every statement runs no write and returns no row, so it is written in
 	// place of the run.
 	if options.Explain {
@@ -270,6 +304,11 @@ func readOneCellStatement(
 		options.report("%s", err)
 		return cellAnswer{}, CodeStatement
 	}
+	// A read with its own limit streams every row within that limit, as `masume run` does.
+	if !writes && options.RowLimit == 0 && session.Language().HoldsRowLimit(sql) {
+		return streamCellRead(ctx, session, options, bound)
+	}
+
 	answered, err := session.RunQuery(
 		ctx, bound.Text, resolveRowLimit(options.Options), bound.Params)
 	if err != nil {
@@ -279,7 +318,47 @@ func readOneCellStatement(
 	if len(answered.Columns) == 0 && !answered.HoldsResultSet {
 		return cellAnswer{Change: describeChange(answered)}, CodeOK
 	}
-	return cellAnswer{Columns: answered.Columns, Rows: answered.Rows}, CodeOK
+	held := cellAnswer{Columns: answered.Columns, Rows: answered.Rows}
+	if !answered.Truncated {
+		return held, CodeOK
+	}
+	return held, reportCellTruncation(options, len(answered.Rows), writes)
+}
+
+// reportCellTruncation names the rows a cell did not return.
+func reportCellTruncation(options NotebookOptions, written int, writes bool) int {
+	if options.RowLimit > 0 {
+		options.report("returned the first %d rows; the result exceeds the requested limit",
+			written)
+		return CodeOK
+	}
+	if writes {
+		options.report("returned only the first %d rows; write results are incomplete. "+
+			"The write was not repeated. Do not automatically retry the write", written)
+		return CodeStatement
+	}
+	options.report("returned the first %d rows; the result exceeds the page size. "+
+		"Add a statement limit or --limit to read more", written)
+	return CodeOK
+}
+
+// streamCellRead reads every row of a cell, a batch at a time.
+func streamCellRead(
+	ctx context.Context, session db.Session, options NotebookOptions, bound db.BoundText,
+) (cellAnswer, int) {
+	held := cellAnswer{}
+	_, err := session.StreamQuery(ctx, bound.Text, bound.Params,
+		resolveBatchSize(options.Options),
+		func(rows [][]any, columns []query.ResultColumn) error {
+			held.Columns = columns
+			held.Rows = append(held.Rows, rows...)
+			return nil
+		})
+	if err != nil {
+		options.report("%s", db.DescribeError(err))
+		return cellAnswer{}, CodeStatement
+	}
+	return held, CodeOK
 }
 
 // notebookReport writes the answers of a run: a Markdown report, or one result per cell in

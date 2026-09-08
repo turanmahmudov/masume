@@ -27,23 +27,17 @@ func readValueType(value any) string {
 
 // readColumns returns result columns with unique names. Repeated names receive numeric suffixes.
 func readColumns(names []string, types []*sql.ColumnType, first []any) []db.ResultColumn {
-	seen := map[string]int{}
-	for _, name := range names {
-		seen[name]++
-	}
-	named := true
-	for _, count := range seen {
-		if count > 1 {
-			named = false
-		}
-	}
-
+	used := map[string]bool{}
 	columns := make([]db.ResultColumn, 0, len(names))
 	for at, name := range names {
 		written := name
-		if !named {
+		if written == "" {
 			written = fmt.Sprintf("column_%d", at+1)
 		}
+		for suffix := 2; used[written]; suffix++ {
+			written = fmt.Sprintf("%s_%d", name, suffix)
+		}
+		used[written] = true
 		dataType := ""
 		if at < len(types) && types[at] != nil {
 			dataType = strings.ToLower(types[at].DatabaseTypeName())

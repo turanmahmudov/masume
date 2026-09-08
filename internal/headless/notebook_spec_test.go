@@ -182,3 +182,90 @@ func TestRunNotebookContinuesAfterAFailedCell(t *testing.T) {
 		t.Errorf("the report is %q, wanted the failed cell", reported)
 	}
 }
+
+// A cell follows the rules of `masume run`: a read with its own limit returns every row
+// within that limit, and a read without one says how many rows it left behind.
+func TestRunNotebookFollowsTheRowRulesOfARun(t *testing.T) {
+	profile := buildDatabase(t, cfg.AccessWrite)
+	profile.PageSize = 2
+
+	code, written, reported := runNotebookText(t, headless.NotebookOptions{
+		Options: headless.Options{Profile: profile, Format: headless.FormatCSV},
+	}, "```sql id=all\nselect id from orders order by id limit 3\n```\n")
+	if code != headless.CodeOK {
+		t.Fatalf("the run answered %d and said %q", code, reported)
+	}
+	if rows := strings.Count(strings.TrimRight(written, "\n"), "\n"); rows != 3 {
+		t.Errorf("the cell wrote %d rows under its own limit of 3: %q", rows, written)
+	}
+
+	code, written, reported = runNotebookText(t, headless.NotebookOptions{
+		Options: headless.Options{Profile: profile, Format: headless.FormatCSV},
+	}, "```sql id=all\nselect id from orders order by id\n```\n")
+	if code != headless.CodeOK {
+		t.Fatalf("the run answered %d and said %q", code, reported)
+	}
+	if rows := strings.Count(strings.TrimRight(written, "\n"), "\n"); rows != 2 {
+		t.Errorf("the cell wrote %d rows under the page size of 2: %q", rows, written)
+	}
+	if !strings.Contains(reported, "exceeds the page size") {
+		t.Errorf("the run said %q, wanted the rows it left behind", reported)
+	}
+}
+
+// Several JSON documents back to back are no JSON a reader can parse, so a run that would
+// write more than one is refused, as a run of several statements is.
+func TestRunNotebookRefusesSeveralJSONResults(t *testing.T) {
+	profile := buildDatabase(t, cfg.AccessWrite)
+	book := "```sql id=a\nselect 1 as x\n```\n\n```sql id=b\nselect 2 as y\n```\n"
+
+	code, _, reported := runNotebookText(t, headless.NotebookOptions{
+		Options: headless.Options{Profile: profile, Format: headless.FormatJSON},
+	}, book)
+	if code != headless.CodeStatement {
+		t.Errorf("two cells answered %d, wanted a refusal; it said %q", code, reported)
+	}
+
+	code, written, reported := runNotebookText(t, headless.NotebookOptions{
+		Options: headless.Options{Profile: profile, Format: headless.FormatJSON},
+		Only:    []string{"a"},
+	}, book)
+	if code != headless.CodeOK {
+		t.Fatalf("one cell answered %d and said %q", code, reported)
+	}
+	if strings.Count(written, "[") != 1 {
+		t.Errorf("one cell wrote %q, wanted one document", written)
+	}
+}
+
+// A plan runs no cell, so a write cell needs no confirmation for it.
+func TestRunNotebookPlansAWriteCellWithoutTheWriteFlag(t *testing.T) {
+	profile := buildDatabase(t, cfg.AccessWrite)
+
+	code, written, reported := runNotebookText(t, headless.NotebookOptions{
+		Options: headless.Options{Profile: profile, Explain: true},
+	}, "```sql id=w write=confirm\nupdate orders set status = status\n```\n")
+	if code != headless.CodeOK {
+		t.Fatalf("the plan answered %d and said %q", code, reported)
+	}
+	if !strings.Contains(written, "\"nodes\"") {
+		t.Errorf("the plan wrote %q, wanted the nodes of the plan", written)
+	}
+}
+
+// A cell outside the selection is never run, so a reference it cannot resolve stops nothing.
+func TestRunNotebookIgnoresAReferenceInACellItDoesNotRun(t *testing.T) {
+	profile := buildDatabase(t, cfg.AccessWrite)
+	book := "```sql id=agg\nselect count(*) as n from orders\n```\n\n" +
+		"```sql id=broken\n{{cell:nope}}\n```\n"
+
+	code, written, reported := runNotebookText(t, headless.NotebookOptions{
+		Options: headless.Options{Profile: profile}, Only: []string{"agg"},
+	}, book)
+	if code != headless.CodeOK {
+		t.Fatalf("the run answered %d and said %q", code, reported)
+	}
+	if !strings.Contains(written, "n") {
+		t.Errorf("the run wrote %q, wanted the rows of the cell", written)
+	}
+}

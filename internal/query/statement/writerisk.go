@@ -103,6 +103,34 @@ var sessionSettings = map[string]bool{
 // plannerSettingPrefix is the prefix accepted for planner switches.
 const plannerSettingPrefix = "enable_"
 
+// settingFunctions change a server setting from inside a reading statement.
+var settingFunctions = map[string]bool{"set_config": true}
+
+// isAllowedSetting is true for a setting a read-only statement may change.
+func isAllowedSetting(setting string) bool {
+	return sessionSettings[setting] || strings.HasPrefix(setting, plannerSettingPrefix)
+}
+
+// changesGuardedSetting is true where a setting function changes a setting outside the allowlist.
+func changesGuardedSetting(tokens []syntax.CodeToken) bool {
+	for at, token := range tokens {
+		if !syntax.IsWordKind(token.Kind) || !settingFunctions[token.Text] {
+			continue
+		}
+		if !syntax.IsOperator(tokens, at+1, "(") {
+			continue
+		}
+		named, present := syntax.TokenAt(tokens, at+2)
+		if !present || named.Kind != syntax.TokenString {
+			return true
+		}
+		if !isAllowedSetting(strings.Trim(named.Text, "'\"")) {
+			return true
+		}
+	}
+	return false
+}
+
 // holdsReadWritePhrase detects a READ WRITE transaction mode.
 func holdsReadWritePhrase(tokens []syntax.CodeToken) bool {
 	for at, token := range tokens {
@@ -164,7 +192,7 @@ func isSettingStatement(tokens []syntax.CodeToken, opening string) bool {
 			setting = "timezone"
 		}
 	}
-	return sessionSettings[setting] || strings.HasPrefix(setting, plannerSettingPrefix)
+	return isAllowedSetting(setting)
 }
 
 // definesRoutine detects stored routine definitions. MySQL bodies contain code tokens; PostgreSQL bodies commonly use dollar-quoted strings.
@@ -295,6 +323,9 @@ func ResolveWriteRisk(sql string, flavour syntax.SyntaxFlavour) WriteRisk {
 		return RiskWrite
 	}
 	if !isSettingStatement(tokens, acting) {
+		return RiskWrite
+	}
+	if changesGuardedSetting(tokens) {
 		return RiskWrite
 	}
 	// READ WRITE transaction modes are classified as writes.

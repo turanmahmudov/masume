@@ -26,6 +26,8 @@ masume run [TARGET] -e FILE
 
 The target precedes the statement when both are positional arguments. A target and `--profile` cannot appear together.
 
+`-h` takes priority over the positional arguments and prints the help. An unknown option takes priority over `-h` and exits with code 2.
+
 Only one `-e` file is used. Repeated `-e` options use the last file. SQL that starts with `--` must come from a file or stdin. The argument parser has no `--` separator.
 
 ### Connection targets
@@ -79,7 +81,7 @@ JSON output is an array of records. A result without rows produces an empty arra
 
 | JSON value | Form |
 | --- | --- |
-| Top-level record keys | Alphabetical order; repeated column names receive suffixes such as `_2` |
+| Top-level record keys | Sorted by byte value, so uppercase names come first; repeated column names receive suffixes such as `_2` |
 | Native numbers and booleans | JSON numbers and booleans |
 | Driver-specific decimals | Text, with the driver's decimal precision |
 | Null | `null` |

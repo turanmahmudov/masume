@@ -51,6 +51,7 @@ func readFrontMatter(book *Notebook, front string) {
 	document, err := cfg.DecodeDocument(front)
 	if err != nil {
 		book.Problems = append(book.Problems, "the front matter cannot be read: "+err.Error())
+		book.UnreadableFrontMatter = true
 		return
 	}
 	if title, held := cfg.FindString(document, "title"); held {

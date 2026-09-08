@@ -182,3 +182,29 @@ func TestEveryDialogActionTheConfirmCardReadsIsInItsGroup(t *testing.T) {
 		t.Error("the confirm card would swallow the save chord of the form")
 	}
 }
+
+// An unknown action is reported and never dispatched, so its chords once entered the
+// bindings and were reported a second time as a conflict with a real action.
+func TestAnUnknownActionIsReportedOnceAndNotAsAConflict(t *testing.T) {
+	registry := NewKeyRegistry()
+	sort, read := cfg.ParseChordSequence("s")
+	if !read {
+		t.Fatal("the chord does not read")
+	}
+	choices := cfg.ChordChoices{
+		cfg.BuildActionKey(cfg.ScopeGrid, "no-such-action"): {sort},
+	}
+
+	problems := registry.ApplyKeySettings(FindKeyPreset(""), choices, true)
+	if len(problems) != 1 {
+		t.Fatalf("the settings report %d problems:\n  %s",
+			len(problems), strings.Join(problems, "\n  "))
+	}
+	if !strings.Contains(problems[0], "is not an action in this scope") {
+		t.Errorf("the report reads %q, wanted the unknown action", problems[0])
+	}
+	// The real action of that chord keeps it, because the unknown one never took it.
+	if len(registry.FindActionChords(cfg.ScopeGrid, ActionSortColumn)) == 0 {
+		t.Error("the real action of the chord lost its binding")
+	}
+}

@@ -238,8 +238,12 @@ func truncateStyled(line string, width int) string {
 func (styles *Styles) RenderStrip(ground color.Color, width int, left, right string) string {
 	room := max(width-2, 1)
 
-	leftWidth := measureStyledWidth(left)
 	rightWidth := measureStyledWidth(right)
+	if rightWidth > room {
+		right = truncateStyled(right, room)
+		rightWidth = measureStyledWidth(right)
+	}
+	leftWidth := measureStyledWidth(left)
 	if leftWidth+rightWidth+1 > room {
 		// The item on the left gives way first, because the one on the right is the count.
 		left = truncateStyled(left, max(0, room-rightWidth-1))

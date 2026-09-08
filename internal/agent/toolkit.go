@@ -54,13 +54,24 @@ type MeasuredWrite struct {
 	Token string
 }
 
+// RunPurpose is what the caller does with the statement. A plan needs the access check of
+// a write and no confirmation, because it runs nothing.
+type RunPurpose string
+
+// The two things a tool does with a statement.
+const (
+	PurposeRun  RunPurpose = "run"
+	PurposePlan RunPurpose = "plan"
+)
+
 // StatementRunner is the caller interface for statement authorization, measurement, execution, and reporting.
 type StatementRunner struct {
 	// RowLimit is the maximum rows per run.
 	RowLimit int
 	// AskToRun returns whether the statement can run, and the reason if it cannot.
 	AskToRun func(
-		ctx context.Context, risk statement.WriteRisk, statements []string,
+		ctx context.Context, purpose RunPurpose,
+		risk statement.WriteRisk, statements []string,
 	) RunPermission
 	// MeasureWrite measures a write without execution. Nil or false means measurement is unavailable.
 	MeasureWrite func(ctx context.Context, sql string) (MeasuredWrite, bool)
@@ -84,6 +95,8 @@ type ToolDeps struct {
 	Runner StatementRunner
 	// MarkTableDescribed marks a table the model described as read in the tree as well.
 	MarkTableDescribed func(table db.TableRef, detail db.TableDetail)
+	// WritePlanOff is true where the profile turned write measurement off.
+	WritePlanOff bool
 }
 
 // ToolDefinition is a database tool with an input schema and execution function.

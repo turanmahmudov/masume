@@ -2,7 +2,7 @@
 
 This page lists the default bindings and their configuration names. The [user guide](usage.md) describes the workflows.
 
-Press `?` outside text entry for help. Press `Ctrl+K` for the command palette. Help shows the current bindings, including overrides. The palette searches commands by name.
+Press `?` outside text entry for help. Press `Ctrl+K` for the command palette. Help shows the current bindings of every configurable action, including overrides. Keys a pane or a field handles itself, such as `Tab`, `Esc` and the Shift selection keys, are fixed and appear in help with their fixed names. The palette searches commands by name.
 
 ## Focus and notation
 
@@ -55,6 +55,8 @@ Every registered action has a default binding. Some palette operations have no r
 ## Cards
 
 `[keys.dialog]`
+
+One card returns only its own actions, so two rows of this table can carry the same key without a conflict.
 
 | Action | Key |
 | --- | --- |

@@ -310,3 +310,7 @@ var postgresObjectDDL = map[db.SchemaObjectKind]string{
 		"left join pg_enum e on e.enumtypid = t.oid where t.oid = $1::oid " +
 		"group by n.nspname, t.typname",
 }
+
+const readViewDefinitionSQL = `
+  select pg_get_viewdef($1::regclass, true) as definition
+`

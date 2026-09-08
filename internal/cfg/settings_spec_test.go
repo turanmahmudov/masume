@@ -276,3 +276,20 @@ func TestEveryKindTheConfigMayNameIsAKindThereIs(t *testing.T) {
 		}
 	}
 }
+
+// A glyph of the wrong type was once dropped in silence, and an unknown kind with a value
+// of the wrong type was dropped without the report the documentation promises.
+func TestParseUiSettingsReportsAGlyphOfTheWrongType(t *testing.T) {
+	held := readSettings(t, "[ui.icon_glyphs]\ntable = 42\nnosuchkind = 7\n")
+
+	joined := strings.Join(held.Problems, "\n")
+	if !strings.Contains(joined, "\"table\" must be a string") {
+		t.Errorf("the reports read %q, wanted the type of the glyph", joined)
+	}
+	if !strings.Contains(joined, "unsupported icon kind \"nosuchkind\"") {
+		t.Errorf("the reports read %q, wanted the unknown kind", joined)
+	}
+	if _, held := held.IconGlyphs[cfg.IconKind("table")]; held {
+		t.Error("the glyph of the wrong type was kept")
+	}
+}

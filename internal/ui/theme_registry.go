@@ -181,6 +181,13 @@ func (registry *ThemeRegistry) collectChain(name string) ([]cfg.ThemeDocument, [
 			next = FallbackThemeName
 		}
 	}
+	// A chain that stopped early ends at the fallback theme, so a colour no document of the
+	// chain names still has a value.
+	if !seen[FallbackThemeName] {
+		if document, known := registry.documents[FallbackThemeName]; known {
+			chain = append(chain, document)
+		}
+	}
 	return chain, problems
 }
 

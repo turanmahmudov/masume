@@ -225,3 +225,46 @@ func TestResolveRunProfileReportsARunWithoutAConnection(t *testing.T) {
 func writeFileForTest(path, written string) error {
 	return os.WriteFile(path, []byte(written), 0o600)
 }
+
+// One positional argument is the statement, so a lone connection target reaches the run
+// without a statement. The report names the missing statement rather than the connection.
+func TestResolveRunProfileNamesAMissingStatementAfterALoneTarget(t *testing.T) {
+	path := t.TempDir() + "/notes.db"
+	if err := writeFileForTest(path, ""); err != nil {
+		t.Fatalf("the file does not write: %v", err)
+	}
+
+	_, err := resolveRunProfile(runInvocation{statement: path}, nil, noEnvironment)
+	if err == nil {
+		t.Fatal("a run with a target and no statement was accepted")
+	}
+	if !strings.Contains(err.Error(), "requires a statement") {
+		t.Errorf("the report reads %q, wanted the missing statement", err)
+	}
+
+	_, err = resolveRunProfile(runInvocation{statement: "select 1"}, nil, noEnvironment)
+	if err == nil || !strings.Contains(err.Error(), "requires a connection") {
+		t.Errorf("a statement without a connection reports %v", err)
+	}
+}
+
+// With -e set, one positional argument is the connection target. A named profile is already
+// the connection, so the argument can only be a stray statement.
+func TestParseRunArgumentsNamesAStatementBesideTheStatementFile(t *testing.T) {
+	_, err := parseRunArguments([]string{"-p", "shop", "-e", "daily.sql", "select 1"})
+	if err == nil {
+		t.Fatal("a statement beside -e and a profile was accepted")
+	}
+	if !strings.Contains(err.Error(), "-e cannot be combined with a statement argument") {
+		t.Errorf("the report reads %q", err)
+	}
+
+	// Without a profile the argument is still a target, which -e allows.
+	held, err := parseRunArguments([]string{"-e", "daily.sql", "./notes.db"})
+	if err != nil {
+		t.Fatalf("a target beside -e was refused: %v", err)
+	}
+	if held.target != "./notes.db" {
+		t.Errorf("the target reads %q", held.target)
+	}
+}

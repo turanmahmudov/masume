@@ -625,3 +625,30 @@ func TestAdapterOpensTheMemoryDatabase(t *testing.T) {
 		t.Fatalf("the read gave %d rows, wanted 1", len(answered.Rows))
 	}
 }
+
+// A join repeats a column name, and the whole result once lost every name to column_1.
+// Names carry the meaning of the rows, so a suffix goes on the repeat alone.
+func TestRepeatedColumnNamesKeepTheNamesOfTheOtherColumns(t *testing.T) {
+	session := openFile(t, `
+		create table authors (id integer primary key, name text);
+		create table books (id integer primary key, author_id integer, title text);
+		insert into authors values (1, 'Ada');
+		insert into books values (7, 1, 'Notes');
+	`)
+	defer func() { _ = session.Close() }()
+
+	answered, err := session.RunQuery(context.Background(),
+		"select * from books b join authors a on a.id = b.author_id", 10, nil)
+	if err != nil {
+		t.Fatalf("the join does not read: %v", err)
+	}
+
+	names := make([]string, 0, len(answered.Columns))
+	for _, column := range answered.Columns {
+		names = append(names, column.Name)
+	}
+	wanted := []string{"id", "author_id", "title", "id_2", "name"}
+	if strings.Join(names, ",") != strings.Join(wanted, ",") {
+		t.Errorf("the join names %v, wanted %v", names, wanted)
+	}
+}

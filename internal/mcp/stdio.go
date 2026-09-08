@@ -47,7 +47,7 @@ func ServeOverStdio(
 		if errors.Is(err, errMessageTooLong) {
 			write(buildJSONLine(buildError(nil, invalidRequest, fmt.Sprintf(
 				"a message may be at most %d bytes", maxMessageBytes))))
-			return
+			continue
 		}
 		if strings.TrimSpace(line) != "" {
 			answerOneLine(ctx, responder, &answering, room, line, write)
@@ -64,14 +64,21 @@ var errMessageTooLong = errors.New("the message exceeds the server size limit")
 // readMessageLine reads a line in bounded fragments and checks the message limit before appending.
 func readMessageLine(reader *bufio.Reader) (string, error) {
 	var held strings.Builder
+	tooLong := false
 	for {
 		part, err := reader.ReadSlice('\n')
 		if held.Len()+len(part) > maxMessageBytes {
-			return "", errMessageTooLong
+			// The message is dropped rather than held, so the client cannot fill memory.
+			tooLong = true
 		}
-		held.Write(part)
+		if !tooLong {
+			held.Write(part)
+		}
 		if errors.Is(err, bufio.ErrBufferFull) {
 			continue
+		}
+		if tooLong {
+			return "", errMessageTooLong
 		}
 		return strings.TrimSuffix(held.String(), "\n"), err
 	}

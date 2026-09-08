@@ -579,3 +579,22 @@ func TestRunRefusesSeveralStatementsAsJSON(t *testing.T) {
 		t.Errorf("the run said %q, wanted why JSON takes one statement", reported)
 	}
 }
+
+// A last row whose cells are all empty is a row, and the table format once trimmed it away
+// with the trailing newline.
+func TestRunKeepsALastRowOfEmptyCells(t *testing.T) {
+	profile := buildDatabase(t, cfg.AccessWrite)
+
+	code, written, reported := runOptions(t, headless.Options{
+		Profile: profile, Statement: "select 'x' as v union all select ''",
+	})
+	if code != headless.CodeOK {
+		t.Fatalf("the run answered %d and said %q", code, reported)
+	}
+	// Only the newline the writer adds at the end is taken off, so an empty last row stays.
+	lines := strings.Split(strings.TrimSuffix(written, "\n"), "\n")
+	if len(lines) != 4 || lines[3] != "" {
+		t.Errorf("the run wrote %d lines, wanted a head, a rule and two rows: %q",
+			len(lines), written)
+	}
+}

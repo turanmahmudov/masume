@@ -140,6 +140,20 @@ func ListActionKeys() []string {
 }
 
 // findUnknownActions returns every choice that names an action this app does not have.
+func keepKnownActions(choices cfg.ChordChoices) cfg.ChordChoices {
+	known := map[string]bool{}
+	for _, actionKey := range ListActionKeys() {
+		known[actionKey] = true
+	}
+	kept := make(cfg.ChordChoices, len(choices))
+	for actionKey, chords := range choices {
+		if known[actionKey] {
+			kept[actionKey] = chords
+		}
+	}
+	return kept
+}
+
 func findUnknownActions(choices cfg.ChordChoices) []string {
 	known := map[string]bool{}
 	for _, actionKey := range ListActionKeys() {
@@ -165,7 +179,9 @@ func (registry *KeyRegistry) ApplyKeySettings(
 	preset KeyPreset, choices cfg.ChordChoices, offersAi bool,
 ) []string {
 	base, problems := readChordChoices(preset.Chords)
-	maps.Copy(base, choices)
+	// An unknown action is reported below and never dispatched, so its chords stay out of
+	// the bindings and out of the conflict check.
+	maps.Copy(base, keepKnownActions(choices))
 	registry.preset = preset.ID
 	registry.bindings = buildChosenBindings(base)
 	if !offersAi {

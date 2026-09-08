@@ -474,7 +474,7 @@ var explainQuery = ToolDefinition{
 		risk := language.ResolveBatchRisk(statements, deps.Session.Language())
 		canAnalyze := risk == statement.RiskNone
 		if !canAnalyze {
-			permission := deps.Runner.AskToRun(ctx, risk, statements)
+			permission := deps.Runner.AskToRun(ctx, PurposePlan, risk, statements)
 			if permission.Refusal != "" {
 				return map[string]any{"error": permission.Refusal}
 			}

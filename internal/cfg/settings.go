@@ -142,13 +142,15 @@ func ParseUISettings(document Table) UISettings {
 
 	if glyphs, isTable := FindTable(ui["icon_glyphs"]); isTable {
 		for _, kind := range sortedKeys(glyphs) {
-			written, isText := glyphs[kind].(string)
-			if !isText {
-				continue
-			}
 			if !IsIconKind(kind) {
 				settings.Problems = append(settings.Problems,
 					"icon_glyphs: unsupported icon kind \""+kind+"\"")
+				continue
+			}
+			written, isText := glyphs[kind].(string)
+			if !isText {
+				settings.Problems = append(settings.Problems,
+					"icon_glyphs: \""+kind+"\" must be a string")
 				continue
 			}
 			settings.IconGlyphs[IconKind(kind)] = written

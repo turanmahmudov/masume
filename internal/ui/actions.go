@@ -128,8 +128,6 @@ const (
 
 	ActionNewNotebookTab      ActionID = "new-notebook-tab"
 	ActionShowNotebooks       ActionID = "show-notebooks"
-	ActionSaveNotebook        ActionID = "save-notebook"
-	ActionSaveNotebookAs      ActionID = "save-notebook-as"
 	ActionNotebookRunPolicy   ActionID = "notebook-run-policy"
 	ActionWriteNotebookReport ActionID = "write-notebook-report"
 
