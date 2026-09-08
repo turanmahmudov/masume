@@ -9,7 +9,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/turanmahmudov/masume/internal/app"
-	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/notebook"
@@ -240,13 +239,7 @@ func (model *Model) renderNotebooks(overlay app.Overlay, width int) string {
 			Selected: at == overlay.List.Cursor, Width: width,
 		}))
 	}
-	keys := model.sayKeys().
-		bind(cfg.ScopeList, ActionChooseRow, "open").
-		bind(cfg.ScopeDialog, ActionOpenInNewTab, "open in a new tab").
-		bind(cfg.ScopeDialog, ActionNewConnection, "new").
-		bind(cfg.ScopeDialog, ActionEditConnection, "rename").
-		bind(cfg.ScopeDialog, ActionDeleteConnection, "delete").
-		bind(cfg.ScopeDialog, ActionClose, "close")
+	keys := model.buildCardKeys(app.OverlayNotebooks, keyScene{overlay: overlay})
 	return model.renderListCard(ListCard{
 		Kind:   app.OverlayNotebooks,
 		Title:  " notebooks · " + present.FormatCount(int64(len(overlay.Notebooks))) + " ",

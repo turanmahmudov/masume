@@ -1004,7 +1004,7 @@ func (model *Model) buildGridMenu(
 		}
 		actions = append(actions, app.MenuAction{
 			ID: string(entry.id), Label: entry.label, Detail: entry.detail,
-			Chord:       model.registry.FormatActionChords(cfg.ScopeGrid, entry.id),
+			Chord:       model.registry.FormatFirstActionChordName(cfg.ScopeGrid, entry.id),
 			Destructive: entry.harmful,
 		})
 	}

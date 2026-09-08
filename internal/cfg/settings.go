@@ -96,12 +96,44 @@ func FindIconSetName(written string) (IconSetName, bool) {
 	return core.FindAllowed(IconSetNames, written)
 }
 
+// KeyHintsMode is how many key hints the interface shows. The config file uses these words.
+type KeyHintsMode string
+
+// The modes a config file can set.
+const (
+	// KeyHintsFull shows every key hint.
+	KeyHintsFull KeyHintsMode = "full"
+	// KeyHintsMain shows the primary key hints only.
+	KeyHintsMain KeyHintsMode = "main"
+	// KeyHintsOff hides every key hint. The readouts stay.
+	KeyHintsOff KeyHintsMode = "off"
+)
+
+// KeyHintsModes lists the modes a config file can use.
+var KeyHintsModes = []KeyHintsMode{KeyHintsFull, KeyHintsMain, KeyHintsOff}
+
+// DescribeKeyHintsModes returns the supported modes.
+func DescribeKeyHintsModes() string {
+	written := make([]string, 0, len(KeyHintsModes))
+	for _, mode := range KeyHintsModes {
+		written = append(written, string(mode))
+	}
+	return "The modes are " + strings.Join(written, ", ") + "."
+}
+
+// FindKeyHintsMode parses the text as a mode name.
+func FindKeyHintsMode(written string) (KeyHintsMode, bool) {
+	return core.FindAllowed(KeyHintsModes, written)
+}
+
 // UISettings is the app configuration under `[ui]`.
 type UISettings struct {
 	IconSet IconSetName
 	// A glyph the user selected for one kind, for example a Nerd Font glyph.
 	IconGlyphs        map[IconKind]string
 	HideSystemSchemas bool
+	// The key hints mode of the bars, the strips, the borders and the cards.
+	KeyHints KeyHintsMode
 	// The name of the colour theme, or empty for the default theme.
 	Theme string
 	// Colours set here and not in a theme file. They are applied over the selected theme.
@@ -118,6 +150,7 @@ func DefaultUISettings() UISettings {
 		IconSet:           IconsPlain,
 		IconGlyphs:        map[IconKind]string{},
 		HideSystemSchemas: true,
+		KeyHints:          KeyHintsFull,
 		Colors:            NewThemeTables(),
 	}
 }
@@ -159,6 +192,15 @@ func ParseUISettings(document Table) UISettings {
 
 	if hidden, isFlag := FindBool(ui, "hide_system_schemas"); isFlag {
 		settings.HideSystemSchemas = hidden
+	}
+	if written, named := FindString(ui, "key_hints"); named {
+		if mode, known := FindKeyHintsMode(written); known {
+			settings.KeyHints = mode
+		} else {
+			settings.Problems = append(settings.Problems,
+				"key_hints: unsupported mode \""+written+"\". Using "+
+					string(settings.KeyHints)+". "+DescribeKeyHintsModes())
+		}
 	}
 	settings.Theme, _ = FindString(ui, "theme")
 

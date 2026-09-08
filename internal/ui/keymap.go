@@ -228,6 +228,22 @@ func (keymap *Keymap) matchTaken(
 	return Match{}, false
 }
 
+// BindsKey is true where one press alone runs this action. It reads the bindings and changes
+// nothing. A caller that owns the keyboard reads a key with it and keeps a sequence half
+// read.
+func (keymap *Keymap) BindsKey(key tea.Key, scope cfg.KeyScope, id ActionID) bool {
+	pressed := ReadChord(key)
+	for _, binding := range keymap.registry.bindings {
+		if binding.Scope != scope || binding.ID != string(id) || len(binding.Chords) != 1 {
+			continue
+		}
+		if matchesChord(binding.Chords[0], pressed) {
+			return true
+		}
+	}
+	return false
+}
+
 func matchesSequence(bound, pressed []cfg.Chord) bool {
 	for at, chord := range pressed {
 		if !matchesChord(bound[at], chord) {

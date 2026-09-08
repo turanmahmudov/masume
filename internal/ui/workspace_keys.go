@@ -44,6 +44,15 @@ func (model *Model) readWorkspaceKey(key tea.Key) (next tea.Model, command tea.C
 	}
 
 	tab := connection.Active()
+	// The caret leaves a cell of a notebook on its own key, which is read off the bindings
+	// so a sequence half read stays half read.
+	if tab.Kind == app.TabNotebook && tab.EditsText() &&
+		!tab.Completion.IsListing() &&
+		model.keymap.BindsKey(key, cfg.ScopeEditor, ActionLeaveCell) {
+		model.leaveCellSource(tab)
+		return model, nil
+	}
+
 	// Escape belongs to no action. It closes the list over the statement first, and with
 	// nothing open it lets a selection go.
 	if key.Code == tea.KeyEscape {
@@ -52,8 +61,6 @@ func (model *Model) readWorkspaceKey(key tea.Key) (next tea.Model, command tea.C
 			tab.Completion.Dismiss()
 			return model, nil
 		}
-		// The caret leaves a cell of a notebook before a selection is let go, so one key
-		// steps back out of the cell it stands in.
 		if tab.Kind == app.TabNotebook && tab.EditsText() {
 			model.leaveCellSource(tab)
 			return model, nil
@@ -436,7 +443,7 @@ func (model *Model) startNaming(
 // buildLastTabNotice writes what stays and what closes the connection instead, because the
 // last tab of a connection is never closed.
 func (model *Model) buildLastTabNotice() string {
-	closing := model.registry.FormatActionChordCompact(
+	closing := model.registry.FormatFirstActionChord(
 		cfg.ScopeGlobal, ActionCloseConnection)
 	if closing == "" {
 		return "the last tab stays open"
@@ -693,12 +700,15 @@ func (model *Model) runEditorKey(
 	// caret left. Enter never takes a candidate: the editor is for writing, and Tab is
 	// the only key that takes one.
 	if list.IsListing() {
+		// The list owns the keyboard while it is open. The key is read off the bindings
+		// alone, and a sequence half read stays half read.
+		if model.keymap.BindsKey(key, cfg.ScopeDialog, ActionAcceptCompletion) {
+			model.acceptCompletion(connection, tab)
+			return model, nil
+		}
 		switch key.Code {
 		case tea.KeyEscape:
 			list.Dismiss()
-			return model, nil
-		case tea.KeyTab:
-			model.acceptCompletion(connection, tab)
 			return model, nil
 		case tea.KeyUp, tea.KeyDown:
 			step := -1
@@ -1049,7 +1059,7 @@ func (model *Model) readCheckDue(due checkDueMsg) (tea.Model, tea.Cmd) {
 	return model, checkStatements(due.ConnectionID, due.TabID, connection.Session, due.SQL)
 }
 
-// readChecked keeps what the server said about the buffer it was asked about.
+// readChecked keeps the faults the server found in the buffer it was given.
 func (model *Model) readChecked(answered checkedMsg) (tea.Model, tea.Cmd) {
 	_, tab, found := model.findConnectionTab(answered.ConnectionID, answered.TabID)
 	if !found || tab.Editor.Text != answered.SQL {

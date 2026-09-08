@@ -499,7 +499,7 @@ func TestTheTreeNamesTheFilterOverIt(t *testing.T) {
 	if resolveRewriteScope(app.ViewTree) != cfg.ScopeDocument {
 		t.Error("the strip over the tree names the keys of another view")
 	}
-	if model.registry.FormatActionChordCompact(
+	if model.registry.FormatFirstActionChord(
 		cfg.ScopeDocument, ActionClearRewrites) == "" {
 		t.Error("the tree binds no key to clear the filter, and the strip offers one")
 	}

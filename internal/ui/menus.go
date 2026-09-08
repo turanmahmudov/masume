@@ -26,9 +26,10 @@ func (model *Model) buildActionMenu(
 		if !entry.offer || !AnswersFor(capabilities, FindActionCapability(scope, entry.action)) {
 			continue
 		}
-		chord := model.registry.FormatActionChords(scope, entry.action)
+		// A row of a menu spells the chord, as a row of the help and of the palette does.
+		chord := model.registry.FormatFirstActionChordName(scope, entry.action)
 		if chord == "" {
-			chord = model.registry.FormatActionChords(cfg.ScopeGlobal, entry.action)
+			chord = model.registry.FormatFirstActionChordName(cfg.ScopeGlobal, entry.action)
 		}
 		actions = append(actions, app.MenuAction{
 			ID: string(entry.action), Label: entry.label, Detail: entry.detail,

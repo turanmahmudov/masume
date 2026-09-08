@@ -21,6 +21,8 @@ type keyPart struct {
 	// second is what the other half of a key of a pair runs, such as the step on beside
 	// the step back.
 	second ActionID
+	// True for a primary key, which the main mode of the key hints shows as well.
+	main bool
 }
 
 // buildText writes the part as the reader sees it: the key, the glyph of what it acts on, then
@@ -44,46 +46,88 @@ func (part keyPart) buildText(icons IconSet) string {
 type KeyLine struct {
 	registry *KeyRegistry
 	icons    IconSet
+	mode     cfg.KeyHintsMode
 	parts    []keyPart
 }
 
-// sayKeys starts a line of keys for a card of this model.
-func (model *Model) sayKeys() *KeyLine {
-	return &KeyLine{registry: model.registry, icons: model.icons}
+// buildKeyLine starts a line of keys in the key hints mode of this model.
+func (model *Model) buildKeyLine() *KeyLine {
+	return &KeyLine{
+		registry: model.registry, icons: model.icons, mode: model.resolveKeyHints(),
+	}
 }
 
-// bind adds the key an action is bound to now, with its label after it. An action with no
-// chord is left out, as the status bar leaves it out.
+// listParts returns the parts this mode draws. A part with no chord is a readout. Every mode
+// draws it.
+func (line *KeyLine) listParts() []keyPart {
+	if line == nil {
+		return nil
+	}
+	if line.mode == cfg.KeyHintsFull || line.mode == "" {
+		return line.parts
+	}
+	drawn := make([]keyPart, 0, len(line.parts))
+	for _, part := range line.parts {
+		switch {
+		case part.chord == "":
+			drawn = append(drawn, part)
+		case line.mode == cfg.KeyHintsOff:
+		case !part.main:
+		default:
+			drawn = append(drawn, part)
+		}
+	}
+	return drawn
+}
+
+// bind adds every chord of an action, with its label after them. An action with no chord is
+// left out, as the status bar leaves it out.
 func (line *KeyLine) bind(scope cfg.KeyScope, action ActionID, label string) *KeyLine {
 	chord := line.registry.FormatActionChords(scope, action)
 	if chord == "" {
 		return line
 	}
-	return line.run(chord, label, scope, action)
+	return line.addKey(chord, label, scope, action)
 }
 
-// bindIcon adds the key an action is bound to now, with the glyph of what it acts on before
-// it. A key that names what a model is asked carries the mark of the model.
+// addKey adds a key drawn as this chord and this label, which runs this action. The catalog
+// has the rank of the key.
+func (line *KeyLine) addKey(chord, label string, scope cfg.KeyScope, action ActionID) *KeyLine {
+	if chord == "" && label == "" {
+		return line
+	}
+	line.parts = append(line.parts, keyPart{
+		chord: chord, label: label, scope: scope, action: action,
+		main: IsMainHint(scope, action),
+	})
+	return line
+}
+
+// bindIcon adds the first chord of an action, with the glyph of what it acts on before it.
+// A key that reaches the model carries the mark of the model.
 func (line *KeyLine) bindIcon(
 	scope cfg.KeyScope, action ActionID, icon cfg.IconKind, label string,
 ) *KeyLine {
-	chord := line.registry.FormatActionChordCompact(scope, action)
+	chord := line.registry.FormatFirstActionChord(scope, action)
 	if chord == "" {
 		return line
 	}
 	line.parts = append(line.parts, keyPart{
 		icon: icon, chord: chord, label: label, scope: scope, action: action,
+		main: IsMainHint(scope, action),
 	})
 	return line
 }
 
-// bindCompact adds a key drawn in the short form the strips of a pane use.
-func (line *KeyLine) bindCompact(scope cfg.KeyScope, action ActionID, label string) *KeyLine {
-	chord := line.registry.FormatActionChordCompact(scope, action)
+// bindFirstChord adds the first chord of an action, for a strip with room for one.
+func (line *KeyLine) bindFirstChord(
+	scope cfg.KeyScope, action ActionID, label string,
+) *KeyLine {
+	chord := line.registry.FormatFirstActionChord(scope, action)
 	if chord == "" {
 		return line
 	}
-	return line.run(chord, label, scope, action)
+	return line.addKey(chord, label, scope, action)
 }
 
 // bindPair adds one key for a pair of actions, such as the step back and the step on. A press
@@ -97,30 +141,28 @@ func (line *KeyLine) bindPair(
 	}
 	line.parts = append(line.parts, keyPart{
 		chord: chord, label: label, scope: scope, action: previous, second: next,
+		main: IsMainHint(scope, previous),
 	})
 	return line
 }
 
-// run adds a key drawn as this chord and this label, which runs this action.
-func (line *KeyLine) run(chord, label string, scope cfg.KeyScope, action ActionID) *KeyLine {
-	if chord == "" && label == "" {
-		return line
-	}
-	line.parts = append(line.parts, keyPart{
-		chord: chord, label: label, scope: scope, action: action,
-	})
+// addAnswerKey adds the primary key of a field or a list: the key it is answered or left
+// with. The registry has no such key, and no press runs it. It is drawn as every key is: the
+// chord in the ink of a key, and what it does in the quiet ink.
+func (line *KeyLine) addAnswerKey(chord, label string) *KeyLine {
+	line.parts = append(line.parts, keyPart{chord: chord, label: label, main: true})
 	return line
 }
 
-// name adds a key the field or the list returns itself, drawn as every other key is: the
-// chord in the ink of a key and what it does in the quiet ink. The registry cannot move such
-// a key, so no action stands behind it and no press runs it.
-func (line *KeyLine) name(chord, label string) *KeyLine {
-	return line.run(chord, label, "", "")
+// addAsideKey adds a secondary key of a field or a list, such as a move or a scroll. Only
+// the full mode shows it.
+func (line *KeyLine) addAsideKey(chord, label string) *KeyLine {
+	line.parts = append(line.parts, keyPart{chord: chord, label: label})
+	return line
 }
 
-// say adds a word the card says, which no press runs.
-func (line *KeyLine) say(text string) *KeyLine {
+// addText adds a word of the card. It has no key, and no press runs it.
+func (line *KeyLine) addText(text string) *KeyLine {
 	if text == "" {
 		return line
 	}
@@ -133,8 +175,9 @@ func (line *KeyLine) buildText() string {
 	if line == nil {
 		return ""
 	}
-	written := make([]string, 0, len(line.parts))
-	for _, part := range line.parts {
+	drawn := line.listParts()
+	written := make([]string, 0, len(drawn))
+	for _, part := range drawn {
 		written = append(written, part.buildText(line.icons))
 	}
 	return strings.Join(written, hintSeparator)
@@ -142,22 +185,25 @@ func (line *KeyLine) buildText() string {
 
 // isEmpty is true for a line that names nothing.
 func (line *KeyLine) isEmpty() bool {
-	return line == nil || len(line.parts) == 0
+	return line == nil || len(line.listParts()) == 0
 }
 
-// buildHints returns the line as the keys of the status bar, so the bar under an open card
-// names what the card returns rather than what the pane behind it returns.
+// buildHints returns the line as the keys of the status bar. The bar under an open card then
+// shows the keys of the card and not the keys of the pane behind it. The line already dropped
+// the keys its mode hides. Every key it kept is a key the bar shows.
 func (line *KeyLine) buildHints() []Hint {
 	if line == nil {
 		return nil
 	}
-	hints := make([]Hint, 0, len(line.parts))
-	for _, part := range line.parts {
+	drawn := line.listParts()
+	hints := make([]Hint, 0, len(drawn))
+	for _, part := range drawn {
 		if part.chord == "" {
 			continue
 		}
 		hints = append(hints, Hint{
 			Key: part.chord, Label: part.label, Scope: part.scope, Action: part.action,
+			Main: true,
 		})
 	}
 	return hints
@@ -167,10 +213,13 @@ func (line *KeyLine) buildHints() []Hint {
 // off the content. The row is appended before it is drawn, because the key line records where
 // each key landed and that needs the row it was drawn on.
 func (model *Model) appendCardKeyRow(
-	lines []string, keys *KeyLine, said string, top, left int,
+	lines []string, keys *KeyLine, text string, top, left int,
 ) []string {
+	if text == "" {
+		return lines
+	}
 	lines = append(lines, "", "")
-	lines[len(lines)-1] = model.renderKeyLine(keys, []string{said},
+	lines[len(lines)-1] = model.renderKeyLine(keys, []string{text},
 		top+len(lines)-1, left, model.styles.Theme.Panel)[0]
 	return lines
 }
@@ -194,7 +243,7 @@ func (model *Model) renderKeyLine(
 	written := make([]strings.Builder, len(wrapped))
 	row, at := 0, 0
 
-	for _, part := range line.parts {
+	for _, part := range line.listParts() {
 		text := part.buildText(line.icons)
 		found := -1
 		for row < len(wrapped) {
@@ -271,7 +320,7 @@ func (model *Model) writeKeyLine(
 	}
 	var written strings.Builder
 	at := left
-	for index, part := range line.parts {
+	for index, part := range line.listParts() {
 		if index > 0 {
 			writeTextOn(&written, model.styles.Theme.Faint, ground, hintSeparator)
 			at += present.MeasureText(hintSeparator)

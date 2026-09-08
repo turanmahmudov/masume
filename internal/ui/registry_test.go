@@ -114,11 +114,11 @@ func TestFormatActionChordWritesSomethingForABoundAction(t *testing.T) {
 	registry.ApplyKeySettings(FindKeyPreset(""), nil, true)
 
 	action := firstActionOfScope(t, cfg.ScopeGlobal)
-	if written := registry.FormatActionChord(cfg.ScopeGlobal, action); written == "" {
+	if written := registry.FormatFirstActionChord(cfg.ScopeGlobal, action); written == "" {
 		t.Errorf("%q is bound and its chord writes as nothing", action)
 	}
 	// An action nothing binds writes as nothing, and never as a stray separator.
-	if written := registry.FormatActionChord(cfg.ScopeGlobal, ActionID("not-an-action")); written != "" {
+	if written := registry.FormatFirstActionChord(cfg.ScopeGlobal, ActionID("not-an-action")); written != "" {
 		t.Errorf("an action nothing binds writes as %q", written)
 	}
 }

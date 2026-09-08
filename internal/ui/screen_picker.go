@@ -261,22 +261,21 @@ func (model *Model) renderPicker() string {
 			present.TruncateText(problem, cardWidth-4)))
 	}
 
-	keys := model.sayKeys().
-		name("Enter", "or double click connects").
-		bind(cfg.ScopeDialog, ActionNewConnection, "new").
-		bind(cfg.ScopeDialog, ActionEditConnection, "edit").
-		bind(cfg.ScopeDialog, ActionDeleteConnection, "delete")
+	keys := model.buildKeyLineOf(pickerKeySpecs, keyScene{})
 	// The keys are cut rather than wrapped, because the card keeps one row for them.
-	said := present.TruncateText(keys.buildText(), cardWidth-4)
+	text := present.TruncateText(keys.buildText(), cardWidth-4)
 	lines = model.appendCardKeyRow(
-		lines, keys, said, cardTop+cardBodyRow, left+cardBodyColumn)
+		lines, keys, text, cardTop+cardBodyRow, left+cardBodyColumn)
 	if model.project.Path != "" {
 		lines = append(lines, model.styles.Muted().Render(
 			present.TruncateText("project file "+model.project.Path, cardWidth-4)))
 	}
 	if model.connections.count() > 0 {
-		lines = append(lines, model.styles.Muted().Render(
-			model.icons.Icon(cfg.IconDot)+" already open · Esc returns to the workspace"))
+		text := model.icons.Icon(cfg.IconDot) + " already open"
+		if model.showsKeyHints() {
+			text += " · Esc returns to the workspace"
+		}
+		lines = append(lines, model.styles.Muted().Render(text))
 	}
 
 	return model.renderCard(" connections ", cardWidth, lines, plainCard)
@@ -304,7 +303,7 @@ func (model *Model) renderPassword() string {
 	cardWidth := present.ResolveCardWidth(
 		widestPasswordCard, narrowestPasswordCard, model.width)
 	profile := model.picker.pending
-	keys := model.sayKeys().name("Enter", "connect").name("Esc", "cancel")
+	keys := model.buildKeyLineOf(passwordKeySpecs, keyScene{})
 
 	lines := []string{
 		model.styles.Muted().Render("connecting to ") +
@@ -320,7 +319,6 @@ func (model *Model) renderPassword() string {
 		}),
 	}
 	if model.picker.offersKeyring() {
-		keys = keys.name("Tab", "keyring")
 		lines = append(lines, "", model.renderKeyringBox(cardWidth))
 	}
 	lines = append(lines, "", model.styles.Muted().Render(
@@ -462,19 +460,28 @@ func (model *Model) renderField(
 
 // readPasswordKey returns what one press does in the password prompt.
 func (model *Model) readPasswordKey(key tea.Key) (tea.Model, tea.Cmd) {
+	if match, matched := model.keymap.MatchOnly(key, FindDialogActions("password"),
+		cfg.ScopeDialog, cfg.ScopeList); matched {
+		switch match.Action {
+		case ActionClose:
+			model.screen = ScreenPickingProfile
+			return model, nil
+		case ActionUseKeyring:
+			if model.picker.offersKeyring() {
+				model.picker.keepInKeyring = !model.picker.keepInKeyring
+			}
+			return model, nil
+		case ActionChooseRow:
+			profile := model.picker.pending
+			model.screen = ScreenConnecting
+			return model, connect(model.adapters, profile, model.picker.password.Text)
+		}
+	}
+
 	switch key.Code {
 	case tea.KeyEscape:
 		model.screen = ScreenPickingProfile
 		return model, nil
-	case tea.KeyTab:
-		if model.picker.offersKeyring() {
-			model.picker.keepInKeyring = !model.picker.keepInKeyring
-		}
-		return model, nil
-	case tea.KeyEnter:
-		profile := model.picker.pending
-		model.screen = ScreenConnecting
-		return model, connect(model.adapters, profile, model.picker.password.Text)
 	case tea.KeyBackspace:
 		model.picker.password.DeleteBackward()
 		return model, nil

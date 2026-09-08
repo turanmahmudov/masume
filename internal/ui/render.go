@@ -92,12 +92,12 @@ func describeElapsed(since time.Time) string {
 // renderThinkingLine draws a spinner, activity label, and elapsed time.
 func (model *Model) renderThinkingLine(label string, since time.Time, ground color.Color) string {
 	theme := model.styles.Theme
-	said := label
-	if !strings.HasSuffix(said, "…") {
-		said += "…"
+	text := label
+	if !strings.HasSuffix(text, "…") {
+		text += "…"
 	}
 	return paintText(theme.Accent, ground, spinnerFrame(model.spinnerAt)+" ") +
-		paintText(theme.Muted, ground, said+describeElapsed(since))
+		paintText(theme.Muted, ground, text+describeElapsed(since))
 }
 
 // buildConfirmLines returns the rows of a question. A card holds one string per row, so a
@@ -205,34 +205,34 @@ func (model *Model) renderTitleBar() string {
 		return held
 	}
 
-	var said strings.Builder
-	said.WriteString(name)
-	writeTextOn(&said, follow, ground, logoGap)
-	writeTextOn(&said, resolveMarkInk(model.styles.EnvironmentColor(profile.Environment)),
+	var text strings.Builder
+	text.WriteString(name)
+	writeTextOn(&text, follow, ground, logoGap)
+	writeTextOn(&text, resolveMarkInk(model.styles.EnvironmentColor(profile.Environment)),
 		ground, string(profile.Environment))
 	if profile.AccessMode == cfg.AccessReadOnly {
-		writeTextOn(&said, follow, ground, hintSeparator)
-		writeTextOn(&said, resolveMarkInk(theme.Warning), ground, "RO")
+		writeTextOn(&text, follow, ground, hintSeparator)
+		writeTextOn(&text, resolveMarkInk(theme.Warning), ground, "RO")
 	}
-	writeTextOn(&said, follow, ground, hintSeparator+string(profile.Engine)+" "+
+	writeTextOn(&text, follow, ground, hintSeparator+string(profile.Engine)+" "+
 		present.SafeText(connection.Session.Describe().ServerVersion))
 
 	if !connection.Autocommit {
-		writeTextOn(&said, resolveMarkInk(theme.Warning), ground, hintSeparator+"manual")
+		writeTextOn(&text, resolveMarkInk(theme.Warning), ground, hintSeparator+"manual")
 	}
 	switch connection.Health {
 	case app.HealthDown:
-		writeTextOn(&said, resolveMarkInk(theme.Danger), ground,
+		writeTextOn(&text, resolveMarkInk(theme.Danger), ground,
 			hintSeparator+"not answering")
 	case app.HealthReconnecting:
-		writeTextOn(&said, resolveMarkInk(theme.Warning), ground,
+		writeTextOn(&text, resolveMarkInk(theme.Warning), ground,
 			hintSeparator+"reconnecting")
 	}
 	switch connection.Session.ReadTransactionState() {
 	case db.TransactionOpen:
-		writeTextOn(&said, resolveMarkInk(theme.Warning), ground, hintSeparator+"tx open")
+		writeTextOn(&text, resolveMarkInk(theme.Warning), ground, hintSeparator+"tx open")
 	case db.TransactionFailed:
-		writeTextOn(&said, resolveMarkInk(theme.Error), ground, hintSeparator+"tx failed")
+		writeTextOn(&text, resolveMarkInk(theme.Error), ground, hintSeparator+"tx failed")
 	}
 
 	// The keys on the right are buttons as well, while no card is open. A card returns the
@@ -255,7 +255,10 @@ func (model *Model) renderTitleBar() string {
 		covered += present.MeasureText(text)
 	}
 	for _, shortcut := range titleBarShortcuts {
-		chord := model.registry.FormatActionChordCompact(cfg.ScopeGlobal, shortcut.id)
+		if !model.showsKeyHints() {
+			break
+		}
+		chord := model.registry.FormatFirstActionChord(cfg.ScopeGlobal, shortcut.id)
 		if chord == "" {
 			continue
 		}
@@ -293,7 +296,7 @@ func (model *Model) renderTitleBar() string {
 		}
 	}
 
-	return model.styles.RenderStrip(ground, model.width, said.String(), keys.String())
+	return model.styles.RenderStrip(ground, model.width, text.String(), keys.String())
 }
 
 // renderScreenStatusBar draws the bar under a screen that has no connection.
@@ -305,11 +308,11 @@ func (model *Model) renderScreenStatusBar() string {
 	var hints []Hint
 	switch model.screen {
 	case ScreenConnecting:
-		hints = model.registry.BuildConnectingHints(model.holdsSelection())
+		hints = model.BuildConnectingHints(model.holdsSelection())
 	case ScreenEditingConnection, ScreenPromptingPassword:
-		hints = model.registry.BuildCardScreenHints(model.holdsSelection())
+		hints = model.BuildCardScreenHints(model.holdsSelection())
 	default:
-		hints = model.registry.BuildPickerHints(model.holdsSelection())
+		hints = model.BuildPickerHints(model.holdsSelection())
 	}
 
 	// A copy the reader just made is reported first, because it returns what they did.
@@ -335,6 +338,12 @@ func (model *Model) describeConfigProblems() string {
 // renderStatusBar draws the bottom bar: the keys on the left, the report on the right.
 func (model *Model) renderStatusBar(hints []Hint, message string, tone app.NoticeTone) string {
 	theme := model.styles.Theme
+	if !model.showsEveryKeyHint() {
+		hints = keepMainHints(hints)
+	}
+	if !model.showsKeyHints() {
+		hints = nil
+	}
 	// A report longer than the bar is cut. The strip gives way on its left, so a report
 	// that kept its whole length would reach past the end of the row.
 	message = present.TruncateText(message, max(model.width-4, 0))
@@ -423,7 +432,7 @@ func (model *Model) renderWorkspaceStatusBar() string {
 	running := active != nil && active.State.Kind == app.QueryRunning
 	failed := active != nil && active.State.Kind == app.QueryFailed
 
-	hints := model.registry.BuildHints(HintContext{
+	hints := model.BuildHints(HintContext{
 		Pane: tab.Focus, Capabilities: connection.Session.Capabilities(),
 		TabKind: tab.Kind, ListsCells: tab.ListsCells(),
 		CellKind: readFocusedCellKind(tab),
@@ -449,8 +458,8 @@ func (model *Model) renderWorkspaceStatusBar() string {
 func (model *Model) describeStatus(
 	connection *app.Connection, tab *app.Tab,
 ) (string, app.NoticeTone) {
-	// A new report is more important than the staged work. A report carries what the
-	// server said, so it is made safe to draw.
+	// A new report is more important than the staged work. The report is the message of the
+	// server, made safe to draw.
 	// A report that has to be acted on carries its mark, so what the bar says is read by
 	// its shape before it is read as words.
 	warning := model.icons.Prefix(cfg.IconNote)

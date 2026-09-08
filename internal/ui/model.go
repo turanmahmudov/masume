@@ -686,8 +686,10 @@ func (model *Model) readKey(key tea.Key) (tea.Model, tea.Cmd) {
 	case ScreenPromptingPassword:
 		return model.readPasswordKey(key)
 	case ScreenConnecting:
-		// Escape belongs to no action. It closes what is open, here the wait for a server.
-		if key.Code == tea.KeyEscape {
+		// Escape closes what is open, here the wait for a server, whatever the key that
+		// closes a card is bound to.
+		if key.Code == tea.KeyEscape ||
+			model.keymap.BindsKey(key, cfg.ScopeDialog, ActionClose) {
 			model.screen = ScreenPickingProfile
 			return model, nil
 		}

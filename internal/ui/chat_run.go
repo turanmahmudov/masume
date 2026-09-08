@@ -122,8 +122,8 @@ func findLastRunError(tab *app.Tab) string {
 	return ""
 }
 
-// buildChatRequest writes what the model is told: the prompt of this connection, and the turns
-// said so far.
+// buildChatRequest writes the request for the model: the prompt of this connection, and the
+// turns of the conversation so far.
 func (model *Model) buildChatRequest(
 	connection *app.Connection, history []app.ChatMessage,
 ) ai.Request {
@@ -277,7 +277,7 @@ type chatQuestion struct {
 	held    *heldChatUndo
 }
 
-// refusedByUser is what the model is told where the user said no.
+// refusedByUser is the refusal the model reads after the user answers no.
 const refusedByUser = "the user did not approve execution; the requested statements did not run"
 
 // askChatToRun measures the write, asks the user whether it may run, and waits for the

@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/turanmahmudov/masume/internal/cfg"
 )
@@ -18,52 +19,6 @@ type ActionBinding struct {
 	ID     string
 	Scope  cfg.KeyScope
 	Chords cfg.ChordSequence
-}
-
-// dialogGroups contains each dialog's actions for key matching and conflict checks.
-var dialogGroups = map[string][]ActionID{
-	"confirm": {ActionClose, ActionAnswerYes, ActionAnswerNo, ActionChooseRow},
-	"picker": {
-		ActionClose, ActionNewConnection, ActionEditConnection, ActionDeleteConnection,
-	},
-	"form": {ActionClose, ActionSaveForm, ActionTestConnection},
-	"cell-edit": {
-		ActionClose, ActionSaveCell, ActionPrettifyJSON,
-		ActionSetNull, ActionSetEmpty, ActionSetDefault,
-	},
-	"parameters": {ActionClose, ActionRunWithValues, ActionPrettifyJSON},
-	// The find field turns into the replace field, so finding and replacing is one key.
-	"prompt":  {ActionClose, ActionReplaceInStatement},
-	"export":  {ActionClose, ActionWriteExport},
-	"chart":   {ActionClose, ActionSaveForm},
-	"cell":    {ActionClose, ActionCopyValue},
-	"history": {ActionClose, ActionOpenInNewTab},
-	"saved":   {ActionClose, ActionOpenInNewTab, ActionListSecondary},
-	"notebooks": {
-		ActionClose, ActionOpenInNewTab, ActionNewConnection, ActionEditConnection,
-		ActionDeleteConnection,
-	},
-	"ai-chats": {ActionClose, ActionListSecondary},
-	"activity": {
-		ActionClose, ActionChooseRow, ActionStopSession, ActionListSecondary,
-		ActionFoldRow, ActionUnfoldRow,
-	},
-	"changes":      {ActionClose, ActionApplyChanges, ActionDiscardChanges},
-	"write-plan":   {ActionClose, ActionAnswerYes, ActionAnswerNo},
-	"value-filter": {ActionClose, ActionToggleValue, ActionKeepAllValues, ActionKeepOnlyValue},
-	"ai-chat": {
-		ActionClose, ActionInsertAiSQL, ActionStopAiReply, ActionNewAiChat,
-		ActionShowAiChats, ActionScrollBack, ActionScrollForward,
-		ActionChatToNotebook,
-		ActionPreviousTurn, ActionNextTurn,
-		// The chat asks its own question before it runs a statement.
-		ActionAnswerYes, ActionAnswerNo,
-	},
-}
-
-// FindDialogActions returns the actions the card or the screen of this name returns.
-func FindDialogActions(name string) []ActionID {
-	return dialogGroups[name]
 }
 
 // KeyRegistry holds the bindings now applied.
@@ -224,13 +179,8 @@ func listRooms(binding ActionBinding) []string {
 		return []string{string(binding.Scope)}
 	}
 	rooms := []string{}
-	names := make([]string, 0, len(dialogGroups))
-	for dialog := range dialogGroups {
-		names = append(names, dialog)
-	}
-	slices.Sort(names)
-	for _, dialog := range names {
-		for _, id := range dialogGroups[dialog] {
+	for _, dialog := range ListDialogNames() {
+		for _, id := range FindDialogActions(dialog) {
 			if string(id) == binding.ID {
 				rooms = append(rooms, "dialog:"+dialog)
 				break
@@ -319,19 +269,21 @@ func (registry *KeyRegistry) findWaitingChords() []string {
 	return waiting
 }
 
-// keyLabels say how a key is written on screen, where its event name differs.
-var keyLabels = map[string]string{
+// keyGlyphs is how a key is drawn on screen, where its event name differs. One key is drawn
+// one way everywhere: a glyph where a common one exists, and a short word where none does.
+var keyGlyphs = map[string]string{
 	"up": "↑", "down": "↓", "left": "←", "right": "→",
 	"pageup": "PgUp", "pagedown": "PgDn", "home": "Home", "end": "End",
-	"return": "Enter", "escape": "Esc", "space": "Space", "tab": "Tab",
-	"insert": "Ins", "delete": "Del", "backspace": "Backspace",
+	"return": "↵", "escape": "Esc", "space": "␣", "tab": "⇥",
+	"insert": "Ins", "delete": "Del", "backspace": "⌫",
 }
 
-func buildKeyLabel(key string) string {
+// buildKeyGlyph returns the key of a chord as the screen draws it.
+func buildKeyGlyph(key string) string {
 	if key == cfg.DigitKey {
 		return "1 … 9"
 	}
-	if named, known := keyLabels[key]; known {
+	if named, known := keyGlyphs[key]; known {
 		return named
 	}
 	if functionKey.MatchString(key) {
@@ -340,9 +292,54 @@ func buildKeyLabel(key string) string {
 	return key
 }
 
-// formatOneChord writes a chord as the help writes it. A letter without a modifier stays
-// lower case.
+// formatOneChord writes one chord: ^ for Ctrl, ⇧ for Shift, Alt+ for Alt, and the glyph of
+// the key. One chord carries one glyph, so a chord with a modifier spells its key: ↵ alone,
+// ⇧ Enter with Shift. A letter is written as a capital where a modifier stands before it.
 func formatOneChord(chord cfg.Chord) string {
+	modified := chord.Ctrl || chord.Meta || chord.Shift
+	if !modified {
+		return buildKeyGlyph(chord.Key)
+	}
+
+	key := buildKeyGlyph(chord.Key)
+	if spelled, known := spelledKeys[chord.Key]; known {
+		key = spelled
+	}
+	runes := []rune(key)
+	if len(runes) == 1 && unicode.IsLetter(runes[0]) {
+		key = strings.ToUpper(key)
+	}
+
+	written := ""
+	if chord.Ctrl {
+		written += "^"
+	}
+	if chord.Shift {
+		written += "⇧"
+	}
+	if chord.Meta {
+		written += "Alt+"
+	}
+	// A key spelled as a word stands a blank apart from the marks before it, so ⇧ Tab reads
+	// as one key and not as two.
+	if len([]rune(key)) > 1 && !strings.HasSuffix(written, "+") {
+		written += " "
+	}
+	return written + key
+}
+
+// spelledKeys is how a key is written out in full, for the help. The interface draws a glyph
+// where one exists; the help spells the key.
+var spelledKeys = map[string]string{
+	"up": "Up", "down": "Down", "left": "Left", "right": "Right",
+	"pageup": "PgUp", "pagedown": "PgDn", "home": "Home", "end": "End",
+	"return": "Enter", "escape": "Esc", "space": "Space", "tab": "Tab",
+	"insert": "Ins", "delete": "Del", "backspace": "Backspace",
+}
+
+// formatOneChordName writes one chord in full: Ctrl+Shift+F3, Alt+Enter, Tab. A letter is
+// written as a capital where a modifier stands before it.
+func formatOneChordName(chord cfg.Chord) string {
 	parts := []string{}
 	if chord.Ctrl {
 		parts = append(parts, "Ctrl")
@@ -353,82 +350,48 @@ func formatOneChord(chord cfg.Chord) string {
 	if chord.Shift {
 		parts = append(parts, "Shift")
 	}
-	key := buildKeyLabel(chord.Key)
-	if len(parts) > 0 && len([]rune(key)) == 1 {
+	key := chord.Key
+	switch {
+	case key == cfg.DigitKey:
+		key = "1 … 9"
+	case spelledKeys[key] != "":
+		key = spelledKeys[key]
+	case functionKey.MatchString(key):
+		key = strings.ToUpper(key)
+	case len(parts) > 0 && len([]rune(key)) == 1:
 		key = strings.ToUpper(key)
 	}
 	return strings.Join(append(parts, key), "+")
 }
 
-// compactKeys say how a key is drawn where the width is short.
-var compactKeys = map[string]string{
-	"up": "↑", "down": "↓", "left": "←", "right": "→",
-	"return": "↵", "escape": "Esc", "pageup": "PgUp", "pagedown": "PgDn",
-	"space": "␣", "tab": "Tab",
-}
-
-// formatOneChordCompact writes the shortest readable form, for the one line of the bottom
-// bar.
-func formatOneChordCompact(chord cfg.Chord) string {
-	// Two modifiers are harder to read short: `^Alt+H` is worse than `Ctrl+Alt+H`.
-	if chord.Ctrl && chord.Meta {
-		return formatOneChord(chord)
-	}
-	if chord.Key == cfg.DigitKey {
-		return formatOneChord(chord)
-	}
-
-	base := chord.Key
-	if named, known := compactKeys[chord.Key]; known {
-		base = named
-	} else if functionKey.MatchString(chord.Key) {
-		base = strings.ToUpper(chord.Key)
-	}
-
-	// A letter with a modifier is written as a capital. Shift alone is that capital. With
-	// another modifier it needs a mark, or Alt+Shift+W reads as Alt+W.
-	modified := chord.Ctrl || chord.Meta || chord.Shift
-	key := base
-	if len([]rune(base)) == 1 && modified {
-		key = strings.ToUpper(base)
-	}
-	shift := ""
-	if chord.Shift && (chord.Ctrl || chord.Meta) {
-		shift = "⇧"
-	}
-	marked := shift + key
-	if chord.Shift && len([]rune(key)) > 1 {
-		marked = "⇧" + key
-	}
-
-	written := ""
-	if chord.Ctrl {
-		written += "^"
-	}
-	if chord.Meta {
-		written += "Alt+"
-	}
-	return written + marked
-}
-
-// FormatChord writes a binding as the help writes it: every press in order, separated by a
-// space.
-func FormatChord(sequence cfg.ChordSequence) string {
+// FormatChordName writes a sequence in full, for the help: every press in order, a space
+// apart.
+func FormatChordName(sequence cfg.ChordSequence) string {
 	written := make([]string, 0, len(sequence))
 	for _, chord := range sequence {
-		written = append(written, formatOneChord(chord))
+		written = append(written, formatOneChordName(chord))
 	}
 	return strings.Join(written, " ")
 }
 
-// FormatChordCompact writes the shortest form of a sequence, for the one line of the bar.
-//
-// One key must not be written two ways on one screen, so the form depends on what draws it.
-// A one-row strip uses the compact form. A card, a list or a sentence uses the full form.
-func FormatChordCompact(sequence cfg.ChordSequence) string {
+// FormatFirstActionChordName writes the first chord of an action in full, for a row of the
+// help, the palette or a menu. A row has room for one chord.
+func (registry *KeyRegistry) FormatFirstActionChordName(
+	scope cfg.KeyScope, id ActionID,
+) string {
+	chords := registry.FindActionChords(scope, id)
+	if len(chords) == 0 {
+		return ""
+	}
+	return FormatChordName(chords[0])
+}
+
+// FormatChord writes a binding as the interface draws it: every press in order, separated by
+// a space.
+func FormatChord(sequence cfg.ChordSequence) string {
 	written := make([]string, 0, len(sequence))
 	for _, chord := range sequence {
-		written = append(written, formatOneChordCompact(chord))
+		written = append(written, formatOneChord(chord))
 	}
 	return strings.Join(written, " ")
 }
@@ -449,26 +412,16 @@ func (registry *KeyRegistry) FormatActionChords(scope cfg.KeyScope, id ActionID)
 	return strings.Join(written, " / ")
 }
 
-// FormatActionChord writes the first chord of an action, in full, for a column of a list.
-// Only the help names both chords of an action, because a row has room for one.
-func (registry *KeyRegistry) FormatActionChord(scope cfg.KeyScope, id ActionID) string {
-	chords := registry.FindActionChords(scope, id)
-	if len(chords) == 0 {
-		return ""
-	}
-	return FormatChord(chords[0])
-}
-
-// FormatActionChordCompact writes the compact form of the first chord of an action, for a
-// strip.
-func (registry *KeyRegistry) FormatActionChordCompact(
+// FormatFirstActionChord writes the first chord of an action. A row of a list and a strip
+// have room for one chord; only a card and the help write every chord of an action.
+func (registry *KeyRegistry) FormatFirstActionChord(
 	scope cfg.KeyScope, id ActionID,
 ) string {
 	chords := registry.FindActionChords(scope, id)
 	if len(chords) == 0 {
 		return ""
 	}
-	return FormatChordCompact(chords[0])
+	return FormatChord(chords[0])
 }
 
 // FormatChordPair joins the first chord of each action of a previous and next pair, for a
@@ -483,7 +436,7 @@ func (registry *KeyRegistry) FormatChordPair(
 		if len(chords) == 0 {
 			continue
 		}
-		written = append(written, FormatChordCompact(chords[0]))
+		written = append(written, FormatChord(chords[0]))
 	}
 	return strings.Join(written, separator)
 }

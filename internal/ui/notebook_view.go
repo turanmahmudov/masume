@@ -324,8 +324,12 @@ func (model *Model) buildCellLines(
 
 	text := cell.Editor.Text
 	if strings.TrimSpace(text) == "" {
-		return []string{paintText(theme.Faint, theme.Panel,
-			present.FitText("empty; press Enter to edit", width))}
+		empty := "empty"
+		if chord := model.registry.FormatFirstActionChord(
+			cfg.ScopeNotebook, ActionEditCellSource); chord != "" {
+			empty += "; press " + chord + " to edit"
+		}
+		return []string{paintText(theme.Faint, theme.Panel, present.FitText(empty, width))}
 	}
 	source := strings.Split(text, "\n")
 	spans := collectLineHighlights(text, connection.Session.Language().Tokenize(text))
@@ -384,54 +388,6 @@ func describeNotebookPlace(book *app.Notebook) string {
 		return present.FormatCount(int64(marked)) + " marked"
 	}
 	return string(book.GetFocusedCell().Kind)
-}
-
-// buildCellEditorHints returns the keys of a cell that holds the caret. A cell is run and
-// left, and only a statement cell is checked or completed.
-func (registry *KeyRegistry) buildCellEditorHints(context HintContext) []Hint {
-	capabilities := context.Capabilities
-	keys := hintList{}
-	keys.addAll([]Hint{{Key: "Esc", Label: "back to the cells"}})
-	if context.CellKind == notebook.CellSQL {
-		keys.add(registry.buildHint(
-			capabilities, cfg.ScopeGlobal, ActionRunAtCursor, "run this cell"))
-	}
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionRunBatch, "run all cells"))
-	if context.CellKind == notebook.CellSQL {
-		keys.add(registry.buildHint(
-			capabilities, cfg.ScopeEditor, ActionFindInStatement, "find or replace"))
-		keys.addAll([]Hint{{Key: "Tab", Label: "complete"}})
-	}
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionSaveQuery, "save"))
-	keys.add(registry.buildHint(
-		capabilities, cfg.ScopeGlobal, ActionToggleResult, "full height"))
-	return keys.build()
-}
-
-// buildNotebookHints returns the keys of the cell list.
-func (registry *KeyRegistry) buildNotebookHints(context HintContext) []Hint {
-	capabilities := context.Capabilities
-	keys := hintList{}
-	keys.add(registry.buildPairHint(
-		cfg.ScopeNotebook, ActionCursorUp, ActionCursorDown, "move", ""))
-	edit := "edit"
-	if context.CellKind == notebook.CellChart {
-		edit = "chart form"
-	}
-	keys.add(registry.buildHint(
-		capabilities, cfg.ScopeNotebook, ActionEditCellSource, edit))
-	keys.add(registry.buildHint(capabilities, cfg.ScopeNotebook, ActionRunCell, "run"))
-	keys.add(registry.buildHint(
-		capabilities, cfg.ScopeNotebook, ActionRunFromCell, "run below"))
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionRunBatch, "run all"))
-	keys.add(registry.buildHint(
-		capabilities, cfg.ScopeNotebook, ActionAddCellBelow, "add a cell"))
-	keys.add(registry.buildHint(
-		capabilities, cfg.ScopeNotebook, ActionSetCellKind, "kind"))
-	keys.add(registry.buildHint(
-		capabilities, cfg.ScopeNotebook, ActionToggleCellOutput, "fold"))
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionSaveQuery, "save"))
-	return keys.build()
 }
 
 // describeTransactionPolicy returns the transaction policy as a reader reads it.

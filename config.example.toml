@@ -64,6 +64,7 @@ wait_for_port   = 15432
 icons               = "plain"
 theme               = "ayu-dark"
 hide_system_schemas = true
+key_hints           = "full"
 
 [keys]
 preset = "default"
@@ -138,6 +139,7 @@ paths = []
 # icons               = "plain"   # plain ascii
 # theme               = "ayu-dark" # system, a built-in theme, or a custom theme from the themes directory.
 # hide_system_schemas = true      # false lists pg_catalog and other system schemas in the tree
+# key_hints           = "full"    # full main off. main names the primary keys only, off names none
 
 # Example glyph overrides by row kind. An empty string hides that glyph.
 #

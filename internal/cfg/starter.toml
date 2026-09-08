@@ -54,6 +54,7 @@
 theme               = "ayu-dark"   # a built-in theme, a theme in the adjacent themes directory, or "system" for terminal colours
 icons               = "plain"      # plain ascii
 hide_system_schemas = true         # false lists pg_catalog and the rest in the tree
+key_hints           = "full"       # full main off. main names the primary keys only, off names none
 
 # Each tree row kind accepts a custom glyph, including Nerd Font glyphs.
 # An empty glyph hides that icon. `config.example.toml` lists all kinds.

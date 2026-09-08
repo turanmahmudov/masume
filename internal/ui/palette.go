@@ -195,10 +195,12 @@ var providerLabels = map[cfg.AiProviderID]string{
 	cfg.ProviderOpenai:    "OpenAI",
 }
 
-// readEntryDetail returns the detail of a row, which can be the chord of another action.
+// readEntryDetail returns the detail of a row, which can be the chord of another action. A
+// row of the palette spells the chord, as a row of the help does.
 func (model *Model) readEntryDetail(entry paletteEntry) string {
 	if entry.detailAction != "" {
-		return model.registry.FormatActionChord(entry.detailScope, entry.detailAction)
+		return model.registry.FormatFirstActionChordName(
+			entry.detailScope, entry.detailAction)
 	}
 	return entry.detail
 }
@@ -229,7 +231,7 @@ func (model *Model) buildPaletteActions(connection *app.Connection) []app.Palett
 		}
 		chord := ""
 		if entry.action != "" {
-			chord = model.registry.FormatActionChord(entry.scope, entry.action)
+			chord = model.registry.FormatFirstActionChordName(entry.scope, entry.action)
 		}
 		actions = append(actions, app.PaletteAction{
 			ID: entry.id, Label: entry.label,

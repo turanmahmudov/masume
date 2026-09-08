@@ -72,6 +72,10 @@ type ActionDefinition struct {
 	// True for an action whose result goes into the result pane. A hidden result is shown
 	// again before one of these runs.
 	AnswersInResult bool
+	// True for a primary action: the action a pane or a card is there for, the action that
+	// answers it, or the action no other key runs. The main mode of the key hints shows
+	// these. The full mode shows every key hint.
+	MainHint bool
 }
 
 // The ids of every action, so a typo is a build error rather than a key that silently does
@@ -163,6 +167,8 @@ const (
 	ActionNextMatch          ActionID = "next-match"
 	ActionPreviousMatch      ActionID = "previous-match"
 	ActionNextProblem        ActionID = "next-problem"
+	ActionAcceptCompletion   ActionID = "accept-completion"
+	ActionLeaveCell          ActionID = "leave-cell"
 
 	ActionCursorUp         ActionID = "cursor-up"
 	ActionCursorDown       ActionID = "cursor-down"
@@ -273,15 +279,33 @@ const (
 	ActionPreviousTurn     ActionID = "previous-turn"
 	ActionNextTurn         ActionID = "next-turn"
 	ActionChatToNotebook   ActionID = "chat-to-notebook"
+
+	// The keys of a form, a field and a file picker. Every one of these was a chord
+	// written into the interface before it was an action.
+	ActionPreviousField  ActionID = "previous-field"
+	ActionNextField      ActionID = "next-field"
+	ActionPreviousValue  ActionID = "previous-value"
+	ActionNextValue      ActionID = "next-value"
+	ActionApplyStep      ActionID = "apply-step"
+	ActionStepBack       ActionID = "step-back"
+	ActionSendQuestion   ActionID = "send-question"
+	ActionWriteNewline   ActionID = "write-newline"
+	ActionPreviousRow    ActionID = "previous-row"
+	ActionNextRow        ActionID = "next-row"
+	ActionScrollLeft     ActionID = "scroll-left"
+	ActionScrollRight    ActionID = "scroll-right"
+	ActionOpenDirectory  ActionID = "open-directory"
+	ActionLeaveDirectory ActionID = "leave-directory"
+	ActionUseKeyring     ActionID = "use-keyring"
 )
 
 // globalActions are the ones the workspace handles wherever the focus is.
 var globalActions = []ActionDefinition{
-	{ID: ActionRunBatch, WhileRunning: true, AnswersInResult: true},
+	{ID: ActionRunBatch, WhileRunning: true, AnswersInResult: true, MainHint: true},
 	{ID: ActionNewQueryTab, WhileRunning: true},
-	{ID: ActionToggleSidebar, WhileRunning: true},
+	{ID: ActionToggleSidebar, WhileRunning: true, MainHint: true},
 	{ID: ActionToggleResult, WhileRunning: true},
-	{ID: ActionRevealSQL, WhileRunning: true},
+	{ID: ActionRevealSQL, WhileRunning: true, MainHint: true},
 	{ID: ActionNameTab, WhileRunning: true},
 	{ID: ActionCloseTab, WhileRunning: true},
 	{ID: ActionReopenTab, WhileRunning: true},
@@ -291,12 +315,12 @@ var globalActions = []ActionDefinition{
 	{ID: ActionNextConnection, WhileRunning: true},
 	{ID: ActionActivateTab, WhileRunning: true},
 
-	{ID: ActionRunAtCursor, WhileRunning: true, AnswersInResult: true},
+	{ID: ActionRunAtCursor, WhileRunning: true, AnswersInResult: true, MainHint: true},
 	{ID: ActionExplain, Needs: NeedsPlansStatement, WhileRunning: true, AnswersInResult: true},
 	{ID: ActionExplainAnalyze, Needs: NeedsMeasuresPlan, WhileRunning: true, AnswersInResult: true},
 	{ID: ActionShowHistory, WhileRunning: true},
 	{ID: ActionShowSaved, WhileRunning: true},
-	{ID: ActionSaveQuery, WhileRunning: true, EditorOnly: true},
+	{ID: ActionSaveQuery, WhileRunning: true, EditorOnly: true, MainHint: true},
 	{ID: ActionShowActivity, Needs: NeedsServerSessions, WhileRunning: true},
 	{ID: ActionUndoWrite, Needs: NeedsPlansWrites, WhileRunning: true},
 	{ID: ActionShowThemes, WhileRunning: true},
@@ -307,12 +331,12 @@ var globalActions = []ActionDefinition{
 	{ID: ActionFocusSidebar, WhileRunning: true},
 	{ID: ActionFocusEditor, WhileRunning: true},
 	{ID: ActionFocusResult, WhileRunning: true},
-	{ID: ActionCancelQuery, Needs: NeedsCancelsRunning, WhileRunning: true},
-	{ID: ActionShowPalette, WhileRunning: true},
-	{ID: ActionShowAiChat, WhileRunning: true},
-	{ID: ActionAiFixError, WhileRunning: true},
-	{ID: ActionSendToAi, WhileRunning: true, EditorOnly: true},
-	{ID: ActionNextPage, WhileRunning: true, AnswersInResult: true},
+	{ID: ActionCancelQuery, Needs: NeedsCancelsRunning, WhileRunning: true, MainHint: true},
+	{ID: ActionShowPalette, WhileRunning: true, MainHint: true},
+	{ID: ActionShowAiChat, WhileRunning: true, MainHint: true},
+	{ID: ActionAiFixError, WhileRunning: true, MainHint: true},
+	{ID: ActionSendToAi, WhileRunning: true, EditorOnly: true, MainHint: true},
+	{ID: ActionNextPage, WhileRunning: true, AnswersInResult: true, MainHint: true},
 	{ID: ActionExportCSV, WhileRunning: true},
 	{ID: ActionExportJSON, WhileRunning: true},
 	{ID: ActionBeginTransaction, Needs: NeedsTransactions, WhileRunning: true},
@@ -323,7 +347,7 @@ var globalActions = []ActionDefinition{
 	{ID: ActionCloseConnection, WhileRunning: true},
 
 	// The help is most useful while the user waits for the server.
-	{ID: ActionShowHelp, WhileRunning: true},
+	{ID: ActionShowHelp, WhileRunning: true, MainHint: true},
 
 	// These leave whatever holds the caret, so both work from inside it.
 	{ID: ActionFocusNextPane, WhileRunning: true, WhileTyping: true},
@@ -346,11 +370,11 @@ var gridActions = []ActionDefinition{
 	{ID: ActionSortColumn, Needs: NeedsSortsRead},
 	{ID: ActionAddSortColumn, Needs: NeedsSortsRead},
 	{ID: ActionOpenRow}, {ID: ActionViewCell}, {ID: ActionEditCell},
-	{ID: ActionToggleDelete}, {ID: ActionDuplicateRow}, {ID: ActionReviewChanges},
+	{ID: ActionToggleDelete}, {ID: ActionDuplicateRow}, {ID: ActionReviewChanges, MainHint: true},
 	{ID: ActionUndoChange}, {ID: ActionRedoChange},
-	{ID: ActionCountRows, AnswersInResult: true},
+	{ID: ActionCountRows, AnswersInResult: true, MainHint: true},
 	{ID: ActionFollowForeignKey}, {ID: ActionInsertRow},
-	{ID: ActionCopyMenu}, {ID: ActionOpenMenu},
+	{ID: ActionCopyMenu}, {ID: ActionOpenMenu, MainHint: true},
 	{ID: ActionCopyCSV}, {ID: ActionCopyJSON},
 	{ID: ActionCopyMarkdown}, {ID: ActionCopyInserts},
 	{ID: ActionDiscardChanges},
@@ -363,7 +387,7 @@ var gridActions = []ActionDefinition{
 // planActions answer while the plan view is drawn in place of the grid.
 var planActions = []ActionDefinition{
 	{ID: ActionToggleRawPlan}, {ID: ActionCopyPlan},
-	{ID: ActionAiCheckPlan, Needs: NeedsPlansStatement},
+	{ID: ActionAiCheckPlan, Needs: NeedsPlansStatement, MainHint: true},
 }
 
 // documentActions answer while the tree that opens the rows as documents is drawn. It holds
@@ -373,7 +397,7 @@ var documentActions = []ActionDefinition{
 	{ID: ActionCursorUp}, {ID: ActionCursorDown},
 	{ID: ActionCursorPageUp}, {ID: ActionCursorPageDown},
 	{ID: ActionCursorFirstRow}, {ID: ActionCursorLastRow},
-	{ID: ActionFoldRow}, {ID: ActionUnfoldRow}, {ID: ActionOpenNode},
+	{ID: ActionFoldRow}, {ID: ActionUnfoldRow}, {ID: ActionOpenNode, MainHint: true},
 	{ID: ActionCopyValue}, {ID: ActionCopyPath},
 	{ID: ActionSearchColumns}, {ID: ActionCountRows},
 	{ID: ActionClearRewrites}, {ID: ActionPopFilter},
@@ -385,8 +409,8 @@ var treeActions = []ActionDefinition{
 	{ID: ActionCursorPageUp}, {ID: ActionCursorPageDown},
 	{ID: ActionCursorFirstRow}, {ID: ActionCursorLastRow},
 	{ID: ActionFoldRow}, {ID: ActionUnfoldRow},
-	{ID: ActionOpenNode}, {ID: ActionOpenInNewTab}, {ID: ActionDescribeTable},
-	{ID: ActionObjectMenu}, {ID: ActionFilterTree},
+	{ID: ActionOpenNode, MainHint: true}, {ID: ActionOpenInNewTab}, {ID: ActionDescribeTable},
+	{ID: ActionObjectMenu, MainHint: true}, {ID: ActionFilterTree},
 	{ID: ActionToggleFavourite}, {ID: ActionToggleSystemSchemas},
 }
 
@@ -409,6 +433,7 @@ var editorActions = []ActionDefinition{
 	{ID: ActionFindInStatement},
 	{ID: ActionNextMatch}, {ID: ActionPreviousMatch},
 	{ID: ActionNextProblem},
+	{ID: ActionLeaveCell, MainHint: true},
 }
 
 // notebookActions answer while the cell list of a notebook holds the keyboard.
@@ -416,8 +441,8 @@ var notebookActions = []ActionDefinition{
 	{ID: ActionCursorUp}, {ID: ActionCursorDown},
 	{ID: ActionCursorFirstRow}, {ID: ActionCursorLastRow},
 	{ID: ActionEditCellSource},
-	{ID: ActionRunCell, AnswersInResult: true},
-	{ID: ActionRunFromCell, AnswersInResult: true},
+	{ID: ActionRunCell, AnswersInResult: true, MainHint: true},
+	{ID: ActionRunFromCell, AnswersInResult: true, MainHint: true},
 	{ID: ActionRunMarkedCells, AnswersInResult: true},
 	{ID: ActionAddCellBelow}, {ID: ActionAddCellAbove},
 	{ID: ActionSetCellKind}, {ID: ActionDeleteCell},
@@ -434,7 +459,7 @@ var listActions = []ActionDefinition{
 	{ID: ActionCursorUp}, {ID: ActionCursorDown},
 	{ID: ActionCursorPageUp}, {ID: ActionCursorPageDown},
 	{ID: ActionCursorFirstRow}, {ID: ActionCursorLastRow},
-	{ID: ActionChooseRow},
+	{ID: ActionChooseRow, MainHint: true},
 }
 
 // dialogActions answer while an overlay, the picker or a form is open, which owns the
@@ -443,22 +468,32 @@ var dialogActions = []ActionDefinition{
 	// The find field turns into the replace field, so replacing is bound where that
 	// field stands rather than in the editor.
 	{ID: ActionReplaceInStatement},
-	{ID: ActionClose}, {ID: ActionAnswerYes}, {ID: ActionAnswerNo},
+	{ID: ActionClose, MainHint: true}, {ID: ActionAnswerYes, MainHint: true}, {ID: ActionAnswerNo, MainHint: true},
 	{ID: ActionNewConnection}, {ID: ActionEditConnection}, {ID: ActionDeleteConnection},
-	{ID: ActionSaveForm}, {ID: ActionTestConnection},
-	{ID: ActionSaveCell}, {ID: ActionPrettifyJSON},
+	{ID: ActionSaveForm, MainHint: true}, {ID: ActionTestConnection},
+	{ID: ActionSaveCell, MainHint: true}, {ID: ActionPrettifyJSON},
 	{ID: ActionSetNull}, {ID: ActionSetEmpty}, {ID: ActionSetDefault},
-	{ID: ActionRunWithValues}, {ID: ActionWriteExport}, {ID: ActionCopyValue},
-	{ID: ActionOpenInNewTab}, {ID: ActionListSecondary}, {ID: ActionStopSession},
+	{ID: ActionRunWithValues, MainHint: true}, {ID: ActionWriteExport, MainHint: true}, {ID: ActionCopyValue, MainHint: true},
+	{ID: ActionOpenInNewTab}, {ID: ActionListSecondary}, {ID: ActionStopSession, MainHint: true},
 	// A card with panels of its own folds them, with the keys that fold a schema.
 	{ID: ActionFoldRow}, {ID: ActionUnfoldRow},
-	{ID: ActionToggleValue}, {ID: ActionKeepAllValues}, {ID: ActionKeepOnlyValue},
-	{ID: ActionApplyChanges}, {ID: ActionDiscardChanges},
-	{ID: ActionInsertAiSQL}, {ID: ActionStopAiReply},
+	{ID: ActionToggleValue, MainHint: true}, {ID: ActionKeepAllValues}, {ID: ActionKeepOnlyValue},
+	{ID: ActionApplyChanges, MainHint: true}, {ID: ActionDiscardChanges, MainHint: true},
+	{ID: ActionInsertAiSQL, MainHint: true}, {ID: ActionStopAiReply, MainHint: true},
 	{ID: ActionNewAiChat}, {ID: ActionShowAiChats},
 	{ID: ActionScrollBack}, {ID: ActionScrollForward},
 	{ID: ActionPreviousTurn}, {ID: ActionNextTurn},
 	{ID: ActionChatToNotebook},
+	{ID: ActionPreviousField}, {ID: ActionNextField},
+	{ID: ActionPreviousValue}, {ID: ActionNextValue},
+	{ID: ActionApplyStep, MainHint: true}, {ID: ActionStepBack, MainHint: true},
+	{ID: ActionSendQuestion, MainHint: true}, {ID: ActionWriteNewline},
+	{ID: ActionPreviousRow, MainHint: true}, {ID: ActionNextRow, MainHint: true},
+	{ID: ActionScrollLeft}, {ID: ActionScrollRight},
+	{ID: ActionOpenDirectory}, {ID: ActionLeaveDirectory},
+	{ID: ActionUseKeyring},
+	// The list of completions owns the keyboard while it is open, as a card does.
+	{ID: ActionAcceptCompletion},
 }
 
 // ActionCatalog holds every action of every scope.
@@ -522,6 +557,13 @@ func FindActionID(written string) (ActionID, bool) {
 func AnswersInResult(scope cfg.KeyScope, id ActionID) bool {
 	action, known := FindAction(scope, id)
 	return known && action.AnswersInResult
+}
+
+// IsMainHint is true for an action the main mode of the key hints shows. The same id is in
+// more than one scope, and the scope picks the definition.
+func IsMainHint(scope cfg.KeyScope, id ActionID) bool {
+	action, known := FindAction(scope, id)
+	return known && action.MainHint
 }
 
 // FindActionCapability returns the capability this action needs in this scope, or nothing if

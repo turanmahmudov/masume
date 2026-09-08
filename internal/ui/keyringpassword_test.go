@@ -51,8 +51,8 @@ func TestThePasswordCardOffersTheKeyring(t *testing.T) {
 	if !strings.Contains(drawn, "[ ] remember in the keyring") {
 		t.Fatalf("the card does not offer the keyring:\n%s", drawn)
 	}
-	if !strings.Contains(drawn, "Tab") {
-		t.Error("the card does not name the key that ticks the box")
+	if !strings.Contains(drawn, "⇥ keyring") {
+		t.Error("the card draws no key for the box")
 	}
 
 	model.readPasswordKey(tea.Key{Code: tea.KeyTab})

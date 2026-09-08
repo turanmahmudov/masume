@@ -103,6 +103,18 @@ func (model *Model) runChatAction(
 		}
 		chat.AnswerPending(match.Action == ActionAnswerYes)
 		return true, model, nil
+	case ActionSendQuestion:
+		if chat.Pending != nil {
+			return false, model, nil
+		}
+		held, command := model.submitChatQuestion(connection, tab)
+		return true, held, command
+	case ActionWriteNewline:
+		if connection.Overlay.Draft == nil {
+			return false, model, nil
+		}
+		connection.Overlay.Draft.Insert("\n")
+		return true, model, nil
 	case ActionStopAiReply:
 		if !chat.IsStreaming() {
 			return false, model, nil

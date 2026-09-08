@@ -70,8 +70,8 @@ func (model *Model) askWithWritePlan(
 		})
 }
 
-// readWritePlanAnswer draws the plan over the line that said it was being measured. A write
-// this client could not read as one relation falls back to the plain question.
+// readWritePlanAnswer draws the plan over the line that reports the measuring. A write this
+// client could not read as one relation falls back to the plain question.
 func (model *Model) readWritePlanAnswer(answered writePlanBuiltMsg) (tea.Model, tea.Cmd) {
 	connection, tab, found := model.findConnectionTab(answered.ConnectionID, answered.TabID)
 	// A user who closed the card while the reads ran is not shown it again.

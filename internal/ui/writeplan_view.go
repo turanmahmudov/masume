@@ -38,9 +38,7 @@ func (model *Model) renderWritePlan(overlay app.Overlay, width int) string {
 
 	// The two answers are drawn as chips over this line, so the line names the key that
 	// closes the card and leaves the answers to the chips.
-	keys := model.sayKeys().
-		bind(cfg.ScopeDialog, ActionAnswerYes, "run").
-		bind(cfg.ScopeDialog, ActionClose, "cancel")
+	keys := model.buildCardKeys(app.OverlayWritePlan, keyScene{overlay: overlay})
 	model.recordCardBody()
 	model.recordAnswerChips(
 		len(lines)-1, measureStyledWidth(yes), measureStyledWidth(no))

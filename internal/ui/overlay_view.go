@@ -229,6 +229,14 @@ func countHintRows(keys string, width int) int {
 	return 1 + present.CountWrappedRows(keys, width-present.CardChrome)
 }
 
+// countHintLines returns the rows the keys of a card take. A card with no key takes none.
+func countHintLines(keys string, width int) int {
+	if keys == "" {
+		return 0
+	}
+	return len(present.WrapWords(keys, width))
+}
+
 // renderOverlay draws the overlay on top, whichever one is open.
 func (model *Model) renderOverlay(
 	connection *app.Connection, tab *app.Tab, height int,
@@ -332,13 +340,13 @@ type ListCard struct {
 func (model *Model) renderListCard(card ListCard) string {
 	content := max(card.Width-4, 1)
 
-	said := card.Keys.buildText()
+	text := card.Keys.buildText()
 	hint := []string{}
-	if said != "" {
-		hint = present.WrapWords(said, content)
+	if text != "" {
+		hint = present.WrapWords(text, content)
 	}
 	height := model.resolveOverlayHeight(
-		card.Kind, card.ContentRows, countHintRows(said, card.Width))
+		card.Kind, card.ContentRows, countHintRows(text, card.Width))
 
 	body := countCardBodyRows(height, len(hint))
 	// The line the list is filtered with stands over the rows, so it takes one of them.
@@ -430,12 +438,12 @@ func (model *Model) renderTextCard(
 	keys *KeyLine, contentRows int, destructive bool,
 ) string {
 	content := max(width-present.CardChrome, 1)
-	said := keys.buildText()
+	text := keys.buildText()
 	hint := []string{}
-	if said != "" {
-		hint = present.WrapWords(said, content)
+	if text != "" {
+		hint = present.WrapWords(text, content)
 	}
-	height := model.resolveOverlayHeight(kind, contentRows, countHintRows(said, width))
+	height := model.resolveOverlayHeight(kind, contentRows, countHintRows(text, width))
 	body := countCardBodyRows(height, len(hint))
 
 	written := make([]string, 0, height)
@@ -712,15 +720,17 @@ func (model *Model) findHelpRows(term string) []helpRow {
 	return kept
 }
 
-// describeHelpKeys writes the keys of one help row. A row of actions names the chord
-// each is bound to now, so a rebound key moves the help with it.
+// describeHelpKeys writes the keys of one help row. The help is the reference for the keys,
+// so it writes a chord in full where the rest of the interface draws a glyph. A row of
+// actions carries the chord each one is bound to now, so a rebound key moves the help with it.
 func (model *Model) describeHelpKeys(entry HelpEntry) string {
 	if len(entry.Actions) == 0 {
 		return entry.Keys
 	}
 	written := []string{}
 	for _, action := range entry.Actions {
-		if chord := model.registry.FormatActionChord(entry.Scope, action); chord != "" {
+		if chord := model.registry.FormatFirstActionChordName(
+			entry.Scope, action); chord != "" {
 			written = append(written, chord)
 		}
 	}
@@ -753,9 +763,7 @@ func (model *Model) renderHelp(overlay app.Overlay, width int) string {
 			Kind: app.OverlayHelp, Title: " help ", Filter: filter, Rows: written,
 			Cursor: overlay.List.Cursor, Offset: overlay.List.Cursor, Width: width,
 			Scrolls: scrollHelpByCursor,
-			Keys: model.sayKeys().
-				say(present.FormatCount(int64(len(found)))+" matching entries").
-				bind(cfg.ScopeDialog, ActionClose, "close"),
+			Keys:    model.buildCardKeys(app.OverlayHelp, keyScene{overlay: overlay}),
 		})
 	}
 
@@ -778,8 +786,7 @@ func (model *Model) renderHelp(overlay app.Overlay, width int) string {
 		Kind: app.OverlayHelp, Title: " help ", Filter: filter, Rows: written,
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Cursor, Width: width,
 		Scrolls: scrollHelpByCursor,
-		Keys: model.sayKeys().say("type to search").
-			bind(cfg.ScopeDialog, ActionClose, "close"),
+		Keys:    model.buildCardKeys(app.OverlayHelp, keyScene{overlay: overlay}),
 	})
 }
 
@@ -820,9 +827,7 @@ func (model *Model) renderPalette(overlay app.Overlay, width int) string {
 		Filter: model.renderFilterFieldOf(overlay, width, "action", -1), Rows: rows,
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
 		ReportsNoMatch: true, ContentRows: len(overlay.Palette) + 1,
-		Keys: model.sayKeys().say("type to filter").
-			bind(cfg.ScopeList, ActionChooseRow, "run").
-			bind(cfg.ScopeDialog, ActionClose, "close"),
+		Keys: model.buildCardKeys(app.OverlayPalette, keyScene{overlay: overlay}),
 	})
 }
 
@@ -851,10 +856,7 @@ func (model *Model) renderHistory(overlay app.Overlay, width int) string {
 		}))
 	}
 
-	keys := model.sayKeys().
-		bind(cfg.ScopeList, ActionChooseRow, "load in this tab").
-		bind(cfg.ScopeDialog, ActionOpenInNewTab, "load in a new tab").
-		bind(cfg.ScopeDialog, ActionClose, "close")
+	keys := model.buildCardKeys(app.OverlayHistory, keyScene{overlay: overlay})
 	return model.renderListCard(ListCard{
 		Kind: app.OverlayHistory, Title: " query history ",
 		Filter: model.renderFilterFieldOf(
@@ -903,10 +905,7 @@ func (model *Model) renderSaved(overlay app.Overlay, width int) string {
 			Selected: at == overlay.List.Cursor, Width: width,
 		}))
 	}
-	keys := model.sayKeys().
-		bind(cfg.ScopeList, ActionChooseRow, "load").
-		bind(cfg.ScopeDialog, ActionListSecondary, "delete").
-		bind(cfg.ScopeDialog, ActionClose, "close")
+	keys := model.buildCardKeys(app.OverlaySaved, keyScene{overlay: overlay})
 	return model.renderListCard(ListCard{
 		Kind:   app.OverlaySaved,
 		Title:  " saved queries · " + present.FormatCount(int64(len(overlay.Saved))) + " ",
@@ -964,21 +963,16 @@ func (model *Model) renderMenu(overlay app.Overlay, width int) string {
 	} else if !strings.HasPrefix(title, " ") {
 		title = " " + title + " "
 	}
-	taken, placeholder := "run", "filter the actions"
-	switch overlay.Kind {
-	case app.OverlayCopyMenu:
-		taken, placeholder = "copy", "filter what to copy"
-	case app.OverlayObjectMenu:
-		taken = "run the action"
+	placeholder := "filter the actions"
+	if overlay.Kind == app.OverlayCopyMenu {
+		placeholder = "filter what to copy"
 	}
-	said := model.sayKeys().
-		bind(cfg.ScopeList, ActionChooseRow, taken).
-		bind(cfg.ScopeDialog, ActionClose, "close")
+	text := model.buildCardKeys(overlay.Kind, keyScene{overlay: overlay})
 	return model.renderListCard(ListCard{
 		Kind: overlay.Kind, Title: title,
 		Filter: model.renderFilterFieldOf(overlay, width, placeholder, -1), Rows: rows,
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
-		ReportsNoMatch: true, Keys: said,
+		ReportsNoMatch: true, Keys: text,
 		// The filter line stands over the rows and takes one of them.
 		ContentRows: len(overlay.Actions) + 1,
 	})
@@ -990,8 +984,7 @@ const (
 	choiceLabelWidth = 22
 )
 
-// renderConfirm draws a question with two answers. The answers are drawn as well as said,
-// so the question can be answered with a pointer and not only with a letter.
+// renderConfirm draws a question with two answers. Each answer is a chip a press hits.
 func (model *Model) renderConfirm(overlay app.Overlay, width int) string {
 	theme := model.styles.Theme
 	lines := model.wrapErrorText(overlay.Body, width-present.CardChrome)
@@ -1002,10 +995,7 @@ func (model *Model) renderConfirm(overlay app.Overlay, width int) string {
 		model.registry.FormatActionChords(cfg.ScopeDialog, ActionAnswerNo)+" cancel  ")
 	lines = append(lines, "", yes+"  "+no)
 
-	keys := model.sayKeys().
-		bind(cfg.ScopeDialog, ActionAnswerYes, "run").
-		bind(cfg.ScopeDialog, ActionAnswerNo, "cancel").
-		bind(cfg.ScopeDialog, ActionClose, "cancel")
+	keys := model.buildCardKeys(app.OverlayConfirm, keyScene{overlay: overlay})
 	model.recordCardBody()
 	model.recordAnswerChips(len(lines)-1, measureStyledWidth(yes), measureStyledWidth(no))
 	return model.renderTextCard(overlay.Kind, overlay.Title, width, lines, keys, 0, destructiveCard)
@@ -1039,7 +1029,7 @@ func (model *Model) renderChoice(overlay app.Overlay, width int) string {
 				paintText(ink, theme.Panel, present.FitText(choice.Label, choiceLabelWidth))+
 				model.styles.Muted().Render(choice.Detail))
 	}
-	keys := model.sayKeys().bind(cfg.ScopeDialog, ActionClose, "stay here")
+	keys := model.buildCardKeys(app.OverlayChoice, keyScene{overlay: overlay})
 	model.recordCardBody()
 	model.layout.formRows = rowsHit{
 		top: model.layout.cardBodyTop + firstChoice, count: len(overlay.Choices),
@@ -1060,7 +1050,8 @@ func (model *Model) renderMessage(overlay app.Overlay, width int) string {
 		lines = append(lines, model.wrapText(line, width-present.CardChrome)...)
 	}
 	return model.renderTextCard(overlay.Kind, overlay.Title, width, lines,
-		model.sayKeys().bind(cfg.ScopeDialog, ActionClose, "close"), len(lines), plainCard)
+		model.buildCardKeys(app.OverlayMessage, keyScene{overlay: overlay}),
+		len(lines), plainCard)
 }
 
 // renderDiagram draws the lines of an ER diagram. A line keeps its own shape and is never
@@ -1078,7 +1069,7 @@ func (model *Model) renderDiagram(overlay app.Overlay, width int) string {
 		lines = append(lines, model.styles.Ink().Render(present.TruncateText(line, room)))
 	}
 	return model.renderTextCard(overlay.Kind, overlay.Title, width, lines,
-		model.sayKeys().name("↑↓ ←→", "scroll").bind(cfg.ScopeDialog, ActionClose, "close"),
+		model.buildCardKeys(app.OverlayDiagram, keyScene{overlay: overlay}),
 		len(overlay.Lines), plainCard)
 }
 
@@ -1093,21 +1084,11 @@ func (model *Model) renderCellViewer(overlay app.Overlay, width int) string {
 		held = append(held, model.wrapText(line, room)...)
 	}
 
-	// The type and the size of the value stand in the footer, so the title names the
-	// column and nothing else.
-	counted := present.FormatCountOf(int64(len(strings.Split(written, "\n"))), "line", "lines")
-	named := overlay.Cell.Column.DataType
-	// A JSON value is drawn indented, so the footer says so.
-	if present.IsJSONType(overlay.Cell.Column.DataType) {
-		named += " · formatted"
-	}
-	keys := model.sayKeys().say(overlay.Notice).say(named).say(counted).
-		bind(cfg.ScopeDialog, ActionCopyValue, "copy").
-		bind(cfg.ScopeDialog, ActionClose, "close")
+	keys := model.buildCardKeys(app.OverlayCell, keyScene{overlay: overlay})
 
-	said := keys.buildText()
-	height := model.resolveOverlayHeight(overlay.Kind, len(held), countHintRows(said, width))
-	body := countCardBodyRows(height, len(present.WrapWords(said, room)))
+	text := keys.buildText()
+	height := model.resolveOverlayHeight(overlay.Kind, len(held), countHintRows(text, width))
+	body := countCardBodyRows(height, countHintLines(text, room))
 	ink := theme.Text
 	if written == core.NullText {
 		ink = theme.Muted
@@ -1124,12 +1105,12 @@ func (model *Model) renderCellViewer(overlay app.Overlay, width int) string {
 // so a null stays a null and a number stays a number.
 func (model *Model) renderParameters(overlay app.Overlay, width int) string {
 	theme := model.styles.Theme
-	keys := model.buildParameterKeys(overlay)
-	said := keys.buildText()
+	keys := model.buildCardKeys(app.OverlayParameters, keyScene{overlay: overlay})
+	text := keys.buildText()
 	height := model.resolveOverlayHeight(
-		overlay.Kind, overlay.ContentRows, countHintRows(said, width))
+		overlay.Kind, overlay.ContentRows, countHintRows(text, width))
 	lines := model.renderDraftRows(overlay.Draft, width-present.CardChrome,
-		countCardBodyRows(height, len(present.WrapWords(said, width-present.CardChrome))),
+		countCardBodyRows(height, countHintLines(text, width-present.CardChrome)),
 		FieldLook{Ground: theme.Panel, Ink: theme.Text, Focused: true})
 
 	title := " " + present.FormatCountOf(
@@ -1138,27 +1119,19 @@ func (model *Model) renderParameters(overlay app.Overlay, width int) string {
 		keys, overlay.ContentRows, plainCard)
 }
 
-// buildParameterKeys names every key of the values card, with the chord each one is bound to.
-func (model *Model) buildParameterKeys(overlay app.Overlay) *KeyLine {
-	return model.sayKeys().say(overlay.Notice).
-		bind(cfg.ScopeDialog, ActionRunWithValues, "run").
-		bind(cfg.ScopeDialog, ActionPrettifyJSON, "format JSON").
-		bind(cfg.ScopeDialog, ActionClose, "cancel")
-}
-
 // renderCellEditor draws the list a cell is picked from, or the field one cell or a whole new
 // row is written in.
 func (model *Model) renderCellEditor(overlay app.Overlay, width int) string {
 	theme := model.styles.Theme
-	keys := model.buildCellEditorKeys(overlay)
-	said := keys.buildText()
+	keys := model.buildCardKeys(app.OverlayCellEdit, keyScene{overlay: overlay})
+	text := keys.buildText()
 
 	lines := model.renderCellChoices(overlay)
 	if len(overlay.Cell.Choices) == 0 {
 		height := model.resolveOverlayHeight(
-			overlay.Kind, overlay.ContentRows, countHintRows(said, width))
+			overlay.Kind, overlay.ContentRows, countHintRows(text, width))
 		lines = model.renderDraftRows(overlay.Draft, width-present.CardChrome,
-			countCardBodyRows(height, len(present.WrapWords(said, width-present.CardChrome))),
+			countCardBodyRows(height, countHintLines(text, width-present.CardChrome)),
 			FieldLook{Ground: theme.Panel, Ink: theme.Text, Focused: true})
 	}
 	return model.renderTextCard(overlay.Kind, model.buildCellEditorTitle(overlay), width,
@@ -1173,27 +1146,6 @@ func (model *Model) buildCellEditorTitle(overlay app.Overlay) string {
 		title += " · json"
 	}
 	return " " + title + " "
-}
-
-// buildCellEditorKeys names every key of the card, with the chord each one is bound to. A
-// cell that is picked has no field, so it offers neither a save chord nor the JSON key.
-func (model *Model) buildCellEditorKeys(overlay app.Overlay) *KeyLine {
-	picking := len(overlay.Cell.Choices) > 0
-	keys := model.sayKeys().say(overlay.Notice)
-	switch {
-	case picking:
-		keys.name("↑↓", "pick").bind(cfg.ScopeList, ActionChooseRow, "stage")
-	default:
-		keys.bind(cfg.ScopeDialog, ActionSaveCell, "stage")
-		if present.IsJSONType(overlay.Cell.Column.DataType) {
-			keys.bind(cfg.ScopeDialog, ActionPrettifyJSON, "format JSON")
-		}
-	}
-	return keys.
-		bind(cfg.ScopeDialog, ActionSetNull, "NULL").
-		bind(cfg.ScopeDialog, ActionSetEmpty, "empty").
-		bind(cfg.ScopeDialog, ActionSetDefault, "default").
-		bind(cfg.ScopeDialog, ActionClose, "cancel")
 }
 
 // renderCellChoices draws the values the column takes, one to a row, with the one the cursor
@@ -1250,12 +1202,11 @@ func (model *Model) renderRowDetail(overlay app.Overlay, width int) string {
 		}
 	}
 
-	keys := model.sayKeys().name("←→", "another row").name("↑↓", "scroll").
-		bind(cfg.ScopeDialog, ActionClose, "close")
-	said := keys.buildText()
+	keys := model.buildCardKeys(app.OverlayRowDetail, keyScene{overlay: overlay})
+	text := keys.buildText()
 	height := model.resolveOverlayHeight(
-		overlay.Kind, len(overlay.Window.Columns), countHintRows(said, width))
-	body := countCardBodyRows(height, len(present.WrapWords(said, inner)))
+		overlay.Kind, len(overlay.Window.Columns), countHintRows(text, width))
+	body := countCardBodyRows(height, countHintLines(text, inner))
 	lines := model.scrollCardRows(len(held), overlay.List.Offset, body, inner, theme.Panel,
 		func(at int) string { return held[at] })
 
@@ -1358,10 +1309,7 @@ func (model *Model) renderChanges(overlay app.Overlay, width int) string {
 		}
 	}
 
-	keys := model.sayKeys().
-		bind(cfg.ScopeDialog, ActionApplyChanges, "apply").
-		bind(cfg.ScopeDialog, ActionDiscardChanges, "discard").
-		bind(cfg.ScopeDialog, ActionClose, "close")
+	keys := model.buildCardKeys(app.OverlayChanges, keyScene{overlay: overlay})
 	return model.renderTextCard(overlay.Kind,
 		" staged changes · "+present.FormatCount(int64(len(overlay.Changes)))+" ",
 		width, lines, keys, max(len(overlay.Changes)*rowsPerChange, 1), destructiveCard)
@@ -1387,12 +1335,7 @@ func (model *Model) renderValueFilter(overlay app.Overlay, width int) string {
 		}))
 	}
 
-	keys := model.sayKeys().
-		bind(cfg.ScopeDialog, ActionToggleValue, "pick").
-		bind(cfg.ScopeDialog, ActionKeepOnlyValue, "only this").
-		bind(cfg.ScopeDialog, ActionKeepAllValues, "all").
-		bind(cfg.ScopeList, ActionChooseRow, "apply").
-		bind(cfg.ScopeDialog, ActionClose, "cancel")
+	keys := model.buildCardKeys(app.OverlayValueFilter, keyScene{overlay: overlay})
 	return model.renderListCard(ListCard{
 		Kind: app.OverlayValueFilter, Title: overlay.Title, Rows: rows,
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
@@ -1423,9 +1366,7 @@ func (model *Model) renderThemePicker(overlay app.Overlay, width int) string {
 		Cursor: overlay.List.Cursor, Offset: overlay.List.Offset, Rolled: overlay.List.Rolled, Width: width,
 		ReportsNoMatch: true,
 		ContentRows:    len(model.styles.registry.ListThemeChoices()) + 1,
-		Keys: model.sayKeys().say("preview the selected theme").
-			bind(cfg.ScopeList, ActionChooseRow, "select").
-			bind(cfg.ScopeDialog, ActionClose, "cancel"),
+		Keys:           model.buildCardKeys(app.OverlayThemePicker, keyScene{overlay: overlay}),
 	})
 }
 
@@ -1464,15 +1405,7 @@ func (model *Model) renderActivity(
 	}
 
 	profile := connection.Profile()
-	keys := model.sayKeys().
-		bind(cfg.ScopeList, ActionChooseRow, "open statement").
-		bind(cfg.ScopeDialog, ActionStopSession, "stop statement").
-		bind(cfg.ScopeDialog, ActionListSecondary, "end session")
-	if len(overlay.Server.Locks) > 0 {
-		keys = keys.bind(cfg.ScopeDialog, ActionFoldRow, "fold").
-			bind(cfg.ScopeDialog, ActionUnfoldRow, "open")
-	}
-	keys = keys.bind(cfg.ScopeDialog, ActionClose, "close")
+	keys := model.buildCardKeys(app.OverlayActivity, keyScene{overlay: overlay})
 
 	return model.renderListCard(ListCard{
 		Kind:   app.OverlayActivity,
@@ -1494,11 +1427,11 @@ func (model *Model) renderActivity(
 // buildDashboardTitle names the connection the card is watching, its environment, and how
 // often it refreshes.
 func buildDashboardTitle(profile cfg.Profile) string {
-	said := present.SafeText(profile.Name)
+	text := present.SafeText(profile.Name)
 	if profile.Environment != "" {
-		said += " · " + string(profile.Environment)
+		text += " · " + string(profile.Environment)
 	}
-	return said + " · refresh every " + core.FormatLargestUnit(dashboardRefreshWait)
+	return text + " · refresh every " + core.FormatLargestUnit(dashboardRefreshWait)
 }
 
 // renderServerUptime returns how long the server has been up, for the right of the title.
@@ -1531,23 +1464,23 @@ func (model *Model) buildDashboardHeader(overlay app.Overlay, width int) []strin
 // buildDashboardSummary returns the one line of what the server is carrying now.
 func (model *Model) buildDashboardSummary(overlay app.Overlay, width int) string {
 	theme := model.styles.Theme
-	said := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
+	text := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
 
 	reading := overlay.Server
 	if reading.HasLoad {
 		load := reading.Load
-		said += paintText(theme.Muted, theme.Panel, "connections ")
-		said += paintText(model.resolveLoadInk(load), theme.Panel,
+		text += paintText(theme.Muted, theme.Panel, "connections ")
+		text += paintText(model.resolveLoadInk(load), theme.Panel,
 			strconv.FormatInt(load.Connections, 10)+"/"+
 				strconv.FormatInt(load.MaxConnections, 10))
-		said += paintOn(theme.Panel, " ")
-		said += paintText(model.resolveLoadInk(load), theme.Panel, present.BuildMeter(
+		text += paintOn(theme.Panel, " ")
+		text += paintText(model.resolveLoadInk(load), theme.Panel, present.BuildMeter(
 			float64(load.Connections), float64(load.MaxConnections), dashboardMeterWidth))
-		said += paintOn(theme.Panel, dashboardGap)
+		text += paintOn(theme.Panel, dashboardGap)
 	}
 
-	said += paintText(theme.Muted, theme.Panel, "sessions ")
-	said += paintText(theme.Text, theme.Panel, strconv.Itoa(len(overlay.Sessions)))
+	text += paintText(theme.Muted, theme.Panel, "sessions ")
+	text += paintText(theme.Text, theme.Panel, strconv.Itoa(len(overlay.Sessions)))
 
 	if reading.HasLocks {
 		waiting := app.CountBlockedSessions(reading.Locks)
@@ -1555,16 +1488,16 @@ func (model *Model) buildDashboardSummary(overlay app.Overlay, width int) string
 		if waiting > 0 {
 			ink = theme.Error
 		}
-		said += paintOn(theme.Panel, dashboardGap)
-		said += paintText(theme.Muted, theme.Panel, "locks ")
-		said += paintText(ink, theme.Panel, strconv.Itoa(waiting)+" waiting")
+		text += paintOn(theme.Panel, dashboardGap)
+		text += paintText(theme.Muted, theme.Panel, "locks ")
+		text += paintText(ink, theme.Panel, strconv.Itoa(waiting)+" waiting")
 	}
 	for _, measure := range model.buildDashboardMeasures(overlay) {
-		said += paintOn(theme.Panel, dashboardGap)
-		said += paintText(theme.Muted, theme.Panel, measure.label+" ")
-		said += paintText(measure.ink, theme.Panel, measure.value)
+		text += paintOn(theme.Panel, dashboardGap)
+		text += paintText(theme.Muted, theme.Panel, measure.label+" ")
+		text += paintText(measure.ink, theme.Panel, measure.value)
 	}
-	return model.renderPanelLine(said, width)
+	return model.renderPanelLine(text, width)
 }
 
 // dashboardMeasure is one number of the summary: what it is called, what it reads, and how
@@ -1753,17 +1686,17 @@ func (model *Model) renderSlowRow(
 	mean := core.FormatDuration(held.MeanTime)
 	calls := "×" + present.FormatCount(held.Calls)
 
-	said := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
-	said += paintText(theme.Text, theme.Panel,
+	text := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
+	text += paintText(theme.Text, theme.Panel,
 		strings.Repeat(" ", max(meanWidth-present.MeasureText(mean), 0))+mean)
-	said += paintText(theme.Muted, theme.Panel, " "+calls+" ")
+	text += paintText(theme.Muted, theme.Panel, " "+calls+" ")
 
 	room := max(width-present.CardChrome-rowPaddingLeft-meanWidth-
 		present.MeasureText(calls)-2-rowScrollbarWidth, 0)
-	said += paintText(theme.Muted, theme.Panel, present.FitText(
+	text += paintText(theme.Muted, theme.Panel, present.FitText(
 		present.TruncateText(present.SafeText(
 			core.CollapseWhitespace(held.Query)), room), room))
-	return model.renderPanelLine(said, width)
+	return model.renderPanelLine(text, width)
 }
 
 // renderBlockingRow draws one session of the blocking tree: which session it is, what it is
@@ -1772,9 +1705,9 @@ func (model *Model) renderBlockingRow(
 	node app.BlockingNode, guide string, width int,
 ) string {
 	theme := model.styles.Theme
-	said := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
-	said += paintText(theme.Muted, theme.Panel, guide)
-	said += paintText(theme.Text, theme.Panel, strconv.FormatInt(node.PID, 10)+" ")
+	text := paintOn(theme.Panel, strings.Repeat(" ", rowPaddingLeft))
+	text += paintText(theme.Muted, theme.Panel, guide)
+	text += paintText(theme.Text, theme.Panel, strconv.FormatInt(node.PID, 10)+" ")
 
 	trail := core.FormatClock(node.Elapsed)
 	if node.Waiting {
@@ -1787,7 +1720,7 @@ func (model *Model) renderBlockingRow(
 	room := max(width-present.CardChrome-rowPaddingLeft-present.MeasureText(guide)-
 		present.MeasureText(strconv.FormatInt(node.PID, 10))-1-
 		present.MeasureText(trail)-rowScrollbarWidth, 0)
-	said += paintText(theme.Muted, theme.Panel, present.FitText(
+	text += paintText(theme.Muted, theme.Panel, present.FitText(
 		present.TruncateText(present.SafeText(
 			core.CollapseWhitespace(node.Query)), room), room))
 
@@ -1795,8 +1728,8 @@ func (model *Model) renderBlockingRow(
 	if node.Waiting {
 		ink = theme.Error
 	}
-	said += paintText(ink, theme.Panel, trail)
-	return model.renderPanelLine(said, width)
+	text += paintText(ink, theme.Panel, trail)
+	return model.renderPanelLine(text, width)
 }
 
 // readFoldMark returns the glyph of a panel that is folded away, or of one that is open.
@@ -1851,13 +1784,11 @@ func (model *Model) renderExport(overlay app.Overlay, width int) string {
 	lines = append(lines, model.styles.Error().Render(
 		present.TruncateText(FindExportProblem(overlay), width-4)))
 
-	keys := model.sayKeys().name("↑↓", "field").name("←→", "change").
-		bind(cfg.ScopeDialog, ActionWriteExport, "export").
-		bind(cfg.ScopeDialog, ActionClose, "cancel")
+	keys := model.buildCardKeys(app.OverlayExport, keyScene{overlay: overlay})
 	// The keys are cut rather than wrapped here, because the card keeps one row for them.
-	said := present.TruncateText(keys.buildText(), width-4)
+	text := present.TruncateText(keys.buildText(), width-4)
 	model.recordCardBody()
-	lines = model.appendCardKeyRow(lines, keys, said, cardBodyRow, cardBodyColumn)
+	lines = model.appendCardKeyRow(lines, keys, text, cardBodyRow, cardBodyColumn)
 	model.rememberCardKeys(keys)
 	model.layout.formRows = rowsHit{
 		top: model.layout.cardBodyTop, count: len(fields),
@@ -1888,7 +1819,7 @@ var promptHints = map[app.PromptKind]string{
 		"the editor query stays unchanged",
 	app.PromptGoToColumn: "goes to the first column whose name matches",
 	app.PromptTabName:    "written as a comment on the first line of the query",
-	app.PromptFind:       "marks every match · F3 goes to the next one",
+	app.PromptFind:       "marks every match",
 	app.PromptReplace:    "replaces every match, in one step",
 	app.PromptCellName:   "written as a comment on the first line of the cell",
 }
@@ -1949,14 +1880,30 @@ func (model *Model) renderPromptBar(overlay app.Overlay, width int) []string {
 
 	// The hint is cut where the pane ends, with nothing to mark the cut, because the keys it
 	// names are on the bar below as well.
-	hint := promptHints[overlay.Prompt] + " · ↵ apply · Esc cancel"
-	// Finding and replacing is one key, so the find field is where the second half is offered.
-	if overlay.Prompt == app.PromptFind {
-		if chord := model.registry.FormatActionChordCompact(
-			cfg.ScopeDialog, ActionReplaceInStatement); chord != "" {
-			hint = promptHints[overlay.Prompt] + " · " + chord +
-				" replace · ↵ apply · Esc cancel"
+	hint := promptHints[overlay.Prompt]
+	if model.showsKeyHints() {
+		text := []string{hint}
+		// Finding and replacing is one key. The find field shows the second half and the
+		// step to the next match.
+		if overlay.Prompt == app.PromptFind {
+			if chord := model.registry.FormatFirstActionChord(
+				cfg.ScopeDialog, ActionReplaceInStatement); chord != "" {
+				text = append(text, chord+" replace")
+			}
+			if chord := model.registry.FormatFirstActionChord(
+				cfg.ScopeEditor, ActionNextMatch); chord != "" {
+				text = append(text, chord+" next match")
+			}
 		}
+		if chord := model.registry.FormatFirstActionChord(
+			cfg.ScopeList, ActionChooseRow); chord != "" {
+			text = append(text, chord+" apply")
+		}
+		if chord := model.registry.FormatFirstActionChord(
+			cfg.ScopeDialog, ActionClose); chord != "" {
+			text = append(text, chord+" cancel")
+		}
+		hint = strings.Join(text, " · ")
 	}
 	return []string{
 		paintOn(theme.Header, " ") + label + field,
@@ -1967,10 +1914,8 @@ func (model *Model) renderPromptBar(overlay app.Overlay, width int) []string {
 // renderPrompt draws a one-line field, with what it is for under it.
 func (model *Model) renderPrompt(overlay app.Overlay, width int) string {
 	inner := width - 4
-	keys := model.sayKeys().
-		bind(cfg.ScopeList, ActionChooseRow, "save").
-		bind(cfg.ScopeDialog, ActionClose, "cancel")
-	said := present.TruncateText(keys.buildText(), inner)
+	keys := model.buildCardKeys(app.OverlayPrompt, keyScene{overlay: overlay})
+	text := present.TruncateText(keys.buildText(), inner)
 	lines := []string{
 		model.renderField(overlay.Draft, inner, FieldLook{
 			Ground: model.styles.Theme.Header, Ink: model.styles.Theme.Text,
@@ -1979,7 +1924,7 @@ func (model *Model) renderPrompt(overlay app.Overlay, width int) string {
 		}),
 		model.styles.Muted().Render(present.TruncateText(overlay.Hint, inner)),
 	}
-	lines = model.appendCardKeyRow(lines, keys, said, cardBodyRow, cardBodyColumn)
+	lines = model.appendCardKeyRow(lines, keys, text, cardBodyRow, cardBodyColumn)
 	model.rememberCardKeys(keys)
 	return model.renderCard(" "+overlay.Title+" ", width, lines, plainCard)
 }

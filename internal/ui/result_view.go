@@ -210,10 +210,11 @@ func (model *Model) renderStatementStrip(tab *app.Tab, width, row int) string {
 	}
 	model.layout.statementChips = chips
 
-	keys := model.sayKeys().
-		say(strconv.Itoa(tab.Results.ActiveIndex()+1)+" of "+strconv.Itoa(len(statements))).
-		bindPair(cfg.ScopeGlobal, ActionPreviousStatement, ActionNextStatement,
-			"prev/next", " ")
+	keys := model.buildKeyLineOf(statementStripKeySpecs, keyScene{
+		tab: tab,
+		text: strconv.Itoa(tab.Results.ActiveIndex()+1) + " of " +
+			strconv.Itoa(len(statements)),
+	})
 	// The keys are held against the right end of the strip, which opens at the first
 	// column inside the border of the pane.
 	counted := model.writeKeyLine(keys, theme.Header, row,
@@ -292,8 +293,7 @@ func (model *Model) renderViewStrip(
 
 	hint := ""
 	if len(views) > 1 && plan.ShowsHint {
-		keys := model.sayKeys().bindPair(
-			cfg.ScopeGlobal, ActionPreviousView, ActionNextView, "prev/next", " ")
+		keys := model.buildKeyLineOf(viewStripKeySpecs, keyScene{})
 		// The strip keeps one blank column at its right end, so the keys stop before it.
 		hint = model.writeKeyLine(keys, theme.Background, row,
 			model.editorLeft+width-measureKeyLine(keys))
@@ -376,12 +376,15 @@ func (model *Model) renderBanner(
 	// The keys are the ones of the view the banner stands over, so the strip names the
 	// chord that works where the reader is and a press on it runs the right action.
 	scope := resolveRewriteScope(drawn)
-	clear := model.registry.FormatActionChordCompact(scope, ActionClearRewrites) + " clear"
+	clear := model.registry.FormatFirstActionChord(scope, ActionClearRewrites) + " clear"
 	keys, dropped := clear, ""
 	if len(tab.Filter) > 1 {
-		dropped = model.registry.FormatActionChordCompact(scope, ActionPopFilter) +
+		dropped = model.registry.FormatFirstActionChord(scope, ActionPopFilter) +
 			" remove last filter"
 		keys = dropped + " · " + clear
+	}
+	if !model.showsKeyHints() {
+		keys, dropped = "", ""
 	}
 
 	// The keys stand against the right end of the strip, so each one is recorded from
@@ -391,7 +394,9 @@ func (model *Model) renderBanner(
 		model.recordButton(row, at, present.MeasureText(dropped), scope, ActionPopFilter)
 		at += present.MeasureText(dropped) + 3
 	}
-	model.recordButton(row, at, present.MeasureText(clear), scope, ActionClearRewrites)
+	if keys != "" {
+		model.recordButton(row, at, present.MeasureText(clear), scope, ActionClearRewrites)
+	}
 
 	return model.styles.RenderStrip(
 		theme.Warning, width,
@@ -407,10 +412,7 @@ func (model *Model) renderGrid(
 
 	// A read the server can be told to stop names the key that stops it, and one it cannot
 	// names none.
-	stop := model.sayKeys()
-	if AnswersFor(connection.Session.Capabilities(), NeedsCancelsRunning) {
-		stop.bindCompact(cfg.ScopeGlobal, ActionCancelQuery, "stop")
-	}
+	stop := model.buildKeyLineOf(runningKeySpecs, keyScene{connection: connection})
 
 	switch state.Kind {
 	case app.QueryIdle:
@@ -668,14 +670,14 @@ type waitBlock struct {
 func (model *Model) renderWaitingBlock(wait waitBlock, width, height int) []string {
 	written := model.renderThinkingLine(
 		wait.label, wait.since, model.styles.Theme.Panel)
-	said := ""
+	text := ""
 	if !wait.stop.isEmpty() {
-		said = "  " + wait.stop.buildText()
+		text = "  " + wait.stop.buildText()
 	}
 
 	wheel := measureStyledWidth(written)
-	left := max((width-wheel-present.MeasureText(said))/2, 0)
-	if said != "" {
+	left := max((width-wheel-present.MeasureText(text))/2, 0)
+	if text != "" {
 		written += paintOn(model.styles.Theme.Panel, "  ") +
 			model.writeKeyLine(wait.stop, model.styles.Theme.Panel,
 				wait.top+halfRoundedUp(height-1), wait.left+left+wheel+2)
@@ -806,6 +808,9 @@ func (model *Model) describeOutcome(state app.QueryState) string {
 
 // renderEmptyState draws a pane with nothing in it: what it waits for, and the key for it.
 func (model *Model) renderEmptyState(width, height int, title string, keys []Hint) []string {
+	if !model.showsKeyHints() {
+		keys = keepKeylessHints(keys)
+	}
 	// The block stands in the middle of the pane. A line in the top corner of a tall
 	// pane looks like a leftover, not like a hint.
 	block := []string{model.styles.Muted().Render(present.TruncateText(title, width-2))}
@@ -1156,14 +1161,7 @@ func (model *Model) renderPlan(
 	tab *app.Tab, plan query.QueryPlan, width, height int, row int,
 ) []string {
 	theme := model.styles.Theme
-	said := "the raw plan"
-	if tab.RawPlan {
-		said = "the plan tree"
-	}
-	keys := model.sayKeys().
-		bindCompact(cfg.ScopePlan, ActionToggleRawPlan, said).
-		bindCompact(cfg.ScopePlan, ActionCopyPlan, "copy").
-		bindCompact(cfg.ScopePlan, ActionAiCheckPlan, "ask ai")
+	keys := model.buildKeyLineOf(planStripKeySpecs, keyScene{tab: tab})
 	// The strip opens at the first column inside the border of the pane, and its keys are
 	// held against the right end of it.
 	left := model.editorLeft + 1
@@ -1205,8 +1203,7 @@ func (model *Model) buildPlanCostLine(plan query.QueryPlan, row, left int) strin
 	if plan.Analyzed || !plan.Measurable {
 		return cost
 	}
-	keys := model.sayKeys().
-		bindCompact(cfg.ScopeGlobal, ActionExplainAnalyze, "for actual times")
+	keys := model.buildKeyLineOf(planCostKeySpecs, keyScene{})
 	if keys.isEmpty() {
 		return cost
 	}

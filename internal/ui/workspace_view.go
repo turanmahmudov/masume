@@ -369,18 +369,7 @@ const tabParts = 7
 func (model *Model) buildTabHints(
 	connection *app.Connection, tab *app.Tab, many bool,
 ) *KeyLine {
-	keys := model.sayKeys().bind(cfg.ScopeGlobal, ActionNewQueryTab, "new")
-	if many {
-		keys.bindPair(cfg.ScopeGlobal, ActionPreviousTab, ActionNextTab, "tab", " ").
-			bind(cfg.ScopeGlobal, ActionActivateTab, "go")
-	}
-	if tab.Kind == app.TabQuery || tab.Kind == app.TabNotebook {
-		keys.bind(cfg.ScopeGlobal, ActionNameTab, "name")
-	}
-	if many {
-		keys.bind(cfg.ScopeGlobal, ActionCloseTab, "close")
-	}
-	return keys
+	return model.buildKeyLineOf(tabRowKeySpecs, keyScene{connection: connection, tab: tab})
 }
 
 // The widths of one row of the object tree.
@@ -924,21 +913,9 @@ func (model *Model) renderEditorAiKey(
 	return blank + model.writeKeyLine(keys, ground, firstPaneRow, left) + blank
 }
 
-// buildEditorAiKey returns the one key the editor offers the model now.
+// buildEditorAiKey returns the one key the editor gives the model now.
 func (model *Model) buildEditorAiKey(tab *app.Tab, hasFault bool) *KeyLine {
-	keys := model.sayKeys()
-	switch {
-	case findLastRunError(tab) != "":
-		return keys.bindIcon(
-			cfg.ScopeGlobal, ActionAiFixError, cfg.IconAi, "explain the failure")
-	case hasFault:
-		return keys.bindIcon(
-			cfg.ScopeGlobal, ActionAiFixError, cfg.IconAi, "diagnose this")
-	case strings.TrimSpace(tab.Editor.Text) == "":
-		return keys.bindIcon(
-			cfg.ScopeGlobal, ActionShowAiChat, cfg.IconAi, "ask for a query")
-	}
-	return keys.bindIcon(cfg.ScopeGlobal, ActionSendToAi, cfg.IconAi, "ask about this")
+	return model.buildKeyLineOf(editorAiKeySpecs, keyScene{tab: tab, hasFault: hasFault})
 }
 
 // resolveLineSelection returns the columns of one line a selection covers, given where the
@@ -993,13 +970,26 @@ const editorPaneName = "query"
 // its place and its keys in the title, to save a row.
 func (model *Model) describeEditorTitle(tab *app.Tab, faults int) string {
 	if tab.Kind == app.TabNotebook && tab.Notebook != nil {
-		return " cell " + strconv.Itoa(tab.Notebook.Focused+1) + "/" +
+		text := " cell " + strconv.Itoa(tab.Notebook.Focused+1) + "/" +
 			strconv.Itoa(tab.Notebook.CountCells()) + " · " +
-			string(tab.Notebook.GetFocusedCell().Kind) + " · Esc back to the cells "
+			string(tab.Notebook.GetFocusedCell().Kind)
+		if chord := model.registry.FormatFirstActionChord(
+			cfg.ScopeEditor, ActionLeaveCell); chord != "" && model.showsKeyHints() {
+			text += " · " + chord + " back to the cells"
+		}
+		return text + " "
 	}
 	if total := len(tab.Completion.Candidates); total > 0 {
-		return " " + editorPaneName + " · " + strconv.Itoa(tab.Completion.Selected+1) + "/" +
-			strconv.Itoa(total) + " · ↑↓ Tab accept · Esc "
+		text := " " + editorPaneName + " · " + strconv.Itoa(tab.Completion.Selected+1) + "/" +
+			strconv.Itoa(total)
+		if model.showsKeyHints() {
+			accept := model.registry.FormatFirstActionChord(
+				cfg.ScopeDialog, ActionAcceptCompletion)
+			text += " · " + model.registry.FormatChordPair(
+				cfg.ScopeList, ActionCursorUp, ActionCursorDown, "") +
+				" " + accept + " accept · Esc"
+		}
+		return text + " "
 	}
 	if faults == 0 {
 		return " " + editorPaneName + " "
@@ -1015,7 +1005,7 @@ func (model *Model) renderFaultRow(
 ) string {
 	theme := model.styles.Theme
 	at := present.ResolvePosition(tab.Editor.Text, shown.Start)
-	said := model.writeProblemSign() + strconv.Itoa(at.Line) + ":" + strconv.Itoa(at.Column) +
+	text := model.writeProblemSign() + strconv.Itoa(at.Line) + ":" + strconv.Itoa(at.Column) +
 		"  " + strings.ReplaceAll(shown.Message, "\n", " ")
 
 	// The key that asks the model about the fault stands on the border of the pane, where
@@ -1030,8 +1020,11 @@ func (model *Model) renderFaultRow(
 				break
 			}
 		}
-		counted = strconv.Itoa(place) + "/" + strconv.Itoa(len(faults)) + " " +
-			model.registry.FormatActionChordCompact(cfg.ScopeEditor, ActionNextProblem)
+		counted = strconv.Itoa(place) + "/" + strconv.Itoa(len(faults))
+		if model.showsKeyHints() {
+			counted += " " + model.registry.FormatFirstActionChord(
+				cfg.ScopeEditor, ActionNextProblem)
+		}
 	}
 	right := model.styles.Muted().Render(counted)
 
@@ -1039,11 +1032,11 @@ func (model *Model) renderFaultRow(
 
 	// The fault itself steps to the next one, so the words work as the key they name.
 	left := model.editorLeft + 1
-	model.recordButton(row, left+1, min(present.MeasureText(said), room),
+	model.recordButton(row, left+1, min(present.MeasureText(text), room),
 		cfg.ScopeEditor, ActionNextProblem)
 
 	return paintOn(theme.Panel, " ") +
-		padStyledOn(model.styles.Error().Render(present.TruncateText(said, room)),
+		padStyledOn(model.styles.Error().Render(present.TruncateText(text, room)),
 			inner-2-measureStyledWidth(right), theme.Panel) + right +
 		paintOn(theme.Panel, " ")
 }
@@ -1112,12 +1105,15 @@ func describeEditorPlace(tab *app.Tab) string {
 
 // describeEditorBorder names the key on the border between this pane and the result.
 func (model *Model) describeEditorBorder(connection *app.Connection) string {
-	said := "full height"
+	text := "full height"
 	if !connection.ResultVisible {
-		said = "show the result"
+		text = "show the result"
 	}
-	return " " + model.registry.FormatActionChordCompact(
-		cfg.ScopeGlobal, ActionToggleResult) + " " + said + " "
+	if !model.showsKeyHints() {
+		return ""
+	}
+	return " " + model.registry.FormatFirstActionChord(
+		cfg.ScopeGlobal, ActionToggleResult) + " " + text + " "
 }
 
 // findLocalDiagnostics returns the faults the scanner found in the buffer.

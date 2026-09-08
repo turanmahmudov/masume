@@ -60,6 +60,10 @@ func TestParseUiSettingsKeepsTheDefaultsForWhatIsNotNamed(t *testing.T) {
 		t.Errorf("hiding the system schemas reads %v, wanted the default %v",
 			held.HideSystemSchemas, defaults.HideSystemSchemas)
 	}
+	if held.KeyHints != defaults.KeyHints {
+		t.Errorf("the key hints read %q, wanted the default %q",
+			held.KeyHints, defaults.KeyHints)
+	}
 }
 
 func TestParseUiSettingsReadsEverySetting(t *testing.T) {
@@ -68,6 +72,7 @@ func TestParseUiSettingsReadsEverySetting(t *testing.T) {
 theme = "gruvbox-dark"
 icons = "ascii"
 hide_system_schemas = true
+key_hints = "main"
 `)
 
 	if held.Theme != "gruvbox-dark" {
@@ -78,6 +83,23 @@ hide_system_schemas = true
 	}
 	if !held.HideSystemSchemas {
 		t.Error("hiding the system schemas was not read")
+	}
+	if held.KeyHints != cfg.KeyHintsMain {
+		t.Errorf("the key hints read %q, wanted the main mode", held.KeyHints)
+	}
+}
+
+func TestParseUiSettingsReportsAnUnknownKeyHintsMode(t *testing.T) {
+	held := readSettings(t, `
+[ui]
+key_hints = "some"
+`)
+
+	if held.KeyHints != cfg.KeyHintsFull {
+		t.Errorf("an unknown mode left the hints in %q, wanted the full mode", held.KeyHints)
+	}
+	if len(held.Problems) != 1 {
+		t.Fatalf("an unknown mode reported %v", held.Problems)
 	}
 }
 

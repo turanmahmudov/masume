@@ -158,33 +158,36 @@ func (model *Model) readFormKey(key tea.Key) (tea.Model, tea.Cmd) {
 		return model, nil
 	}
 
-	match, matched := model.keymap.MatchFirst(key,
-		FindDialogActions("confirm"), cfg.ScopeDialog)
+	match, matched := model.keymap.MatchOnly(key,
+		FindDialogActions("form"), cfg.ScopeDialog, cfg.ScopeList)
 	if matched {
 		if held, command, ran := model.runFormAction(match); ran {
 			return held, command
 		}
+		switch match.Action {
+		case ActionNextField, ActionChooseRow:
+			form.StepField(1)
+			return model, nil
+		case ActionPreviousField:
+			form.StepField(-1)
+			return model, nil
+		case ActionPreviousValue:
+			if form.StepChoice(-1) {
+				return model, nil
+			}
+		case ActionNextValue:
+			if form.StepChoice(1) {
+				return model, nil
+			}
+		}
 	}
 
 	switch key.Code {
-	case tea.KeyTab, tea.KeyDown:
-		form.StepField(1)
-		return model, nil
-	case tea.KeyUp:
-		form.StepField(-1)
-		return model, nil
-	case tea.KeyEnter:
-		form.StepField(1)
-		return model, nil
 	case tea.KeyLeft:
-		if !form.StepChoice(-1) {
-			form.Draft.MoveCaret(-1, false)
-		}
+		form.Draft.MoveCaret(-1, false)
 		return model, nil
 	case tea.KeyRight:
-		if !form.StepChoice(1) {
-			form.Draft.MoveCaret(1, false)
-		}
+		form.Draft.MoveCaret(1, false)
 		return model, nil
 	case tea.KeyBackspace:
 		form.Draft.DeleteBackward()
@@ -475,14 +478,12 @@ func (model *Model) renderForm() string {
 		lines = append(lines, model.styles.Muted().Render("not tested"))
 	}
 
-	keys := model.sayKeys().name("↑↓", "field").
-		bind(cfg.ScopeDialog, ActionTestConnection, "test").
-		bind(cfg.ScopeDialog, ActionSaveForm, "save").
-		bind(cfg.ScopeDialog, ActionClose, "cancel")
+	keys := model.buildKeyLineOf(connectionFormKeySpecs, keyScene{})
 	// The keys are cut rather than wrapped, because the card keeps one row for them.
-	said := present.TruncateText(keys.buildText(), cardWidth-4)
-	lines = append(lines, model.renderKeyLine(keys, []string{said},
-		cardTop+cardBodyRow+len(lines), left+cardBodyColumn, model.styles.Theme.Panel)[0])
+	if text := present.TruncateText(keys.buildText(), cardWidth-4); text != "" {
+		lines = append(lines, model.renderKeyLine(keys, []string{text},
+			cardTop+cardBodyRow+len(lines), left+cardBodyColumn, model.styles.Theme.Panel)[0])
+	}
 	if hasFormField(form.Shown(), "host") {
 		lines = append(lines, model.styles.Faint().Render(present.TruncateText(
 			"paste a postgres:// or mysql:// URL into host to fill the form", cardWidth-4)))

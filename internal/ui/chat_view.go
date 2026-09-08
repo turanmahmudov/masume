@@ -102,10 +102,10 @@ func (model *Model) renderAiChat(
 func (model *Model) resolveChatBodyRows(
 	connection *app.Connection, width, content int,
 ) int {
-	said := model.describeChatKeys(connection.Chat).buildText()
+	text := model.describeChatKeys(connection.Chat).buildText()
 	height := model.resolveOverlayHeight(
-		app.OverlayAiChat, 0, countHintRows(said, width))
-	return max(height-present.CardChrome-len(present.WrapWords(said, content))-1, 1)
+		app.OverlayAiChat, 0, countHintRows(text, width))
+	return max(height-present.CardChrome-countHintLines(text, content)-1, 1)
 }
 
 // chatViewRows returns how many rows of the conversation the panel shows. The panel is drawn
@@ -378,7 +378,7 @@ func (model *Model) markChatRow(marked bool) string {
 		paintOn(model.styles.Theme.Panel, " ")
 }
 
-// renderChatTurn draws one turn: who spoke, and what they said. A statement is drawn as code.
+// renderChatTurn draws one turn: the speaker and the message. A statement is drawn as code.
 func (model *Model) renderChatTurn(
 	chat *app.Chat, message app.ChatMessage, at, content int,
 ) []string {
@@ -496,8 +496,8 @@ func (model *Model) renderChatBelow(
 		lines = append(lines, paintOn(theme.Header, " ")+row)
 	}
 
-	// The faint line under the field says the most recent thing there is to say. With
-	// nothing said and nothing spent yet, it names the file the traffic is written to.
+	// The faint line under the field shows the most recent report. An empty chat has no
+	// report and no cost. The line then shows the path of the traffic log.
 	notice := chat.Notice
 	if notice == "" {
 		notice = chat.DescribeUsage()
@@ -547,31 +547,10 @@ func (model *Model) renderChatPending(pending app.PendingRun, content int) []str
 		filled.Render(" ")+padStyledOn(answers, content-1, ground))
 }
 
-// describeChatKeys names the keys the panel returns to: the answers to a question while one
+// describeChatKeys returns the keys of the chat panel: the answers to a question while one
 // waits, and the keys of the panel otherwise.
 func (model *Model) describeChatKeys(chat *app.Chat) *KeyLine {
-	if chat.Pending != nil {
-		return model.sayKeys().
-			bind(cfg.ScopeDialog, ActionAnswerYes, "run").
-			bind(cfg.ScopeDialog, ActionAnswerNo, "do not run")
-	}
-
-	// The field returns these keys itself, so the registry cannot move them.
-	keys := model.sayKeys().name("↵", "ask").name("⇧↵", "newline")
-	if chat.IsStreaming() {
-		// Named first while a reply is written, because it is the only key wanted then.
-		keys.bind(cfg.ScopeDialog, ActionStopAiReply, "stop")
-	}
-	return keys.
-		bindPair(cfg.ScopeDialog, ActionPreviousTurn, ActionNextTurn, "turn", "/").
-		bindPair(cfg.ScopeDialog, ActionScrollBack, ActionScrollForward, "page", "/").
-		// The field returns the arrows itself, so the registry cannot move these either.
-		name("↑↓", "scroll").
-		bind(cfg.ScopeDialog, ActionInsertAiSQL, "last reply query to editor").
-		bind(cfg.ScopeDialog, ActionChatToNotebook, "to a notebook").
-		bind(cfg.ScopeDialog, ActionNewAiChat, "new").
-		bind(cfg.ScopeDialog, ActionShowAiChats, "chats").
-		bind(cfg.ScopeDialog, ActionClose, "close")
+	return model.buildCardKeys(app.OverlayAiChat, keyScene{chat: chat})
 }
 
 // The columns a row of the list of conversations keeps for the title and the time.
@@ -603,10 +582,7 @@ func (model *Model) renderAiChats(
 		}))
 	}
 
-	keys := model.sayKeys().
-		bind(cfg.ScopeList, ActionChooseRow, "open").
-		bind(cfg.ScopeDialog, ActionListSecondary, "delete").
-		bind(cfg.ScopeDialog, ActionClose, "close")
+	keys := model.buildCardKeys(app.OverlayAiChats, keyScene{overlay: overlay})
 	return model.renderListCard(ListCard{
 		Kind: app.OverlayAiChats, Title: " " + model.icons.Prefix(cfg.IconAi) + "ai chats ",
 		Filter: model.renderFilterFieldOf(

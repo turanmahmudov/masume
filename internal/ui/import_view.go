@@ -38,12 +38,10 @@ func (model *Model) renderImportPicker(overlay app.Overlay, width int) string {
 			present.TruncateText(overlay.Notice, inner)))
 	}
 
-	keys := model.sayKeys().name("↑↓", "file").
-		name("→", "open the directory").name("←", "go up").
-		name("Enter", "choose").name("Esc", "cancel")
-	said := present.TruncateText(keys.buildText(), width-4)
+	keys := model.buildCardKeys(app.OverlayImport, keyScene{overlay: overlay})
+	text := present.TruncateText(keys.buildText(), width-4)
 	model.recordCardBody()
-	lines = model.appendCardKeyRow(lines, keys, said, cardBodyRow, cardBodyColumn)
+	lines = model.appendCardKeyRow(lines, keys, text, cardBodyRow, cardBodyColumn)
 	model.rememberCardKeys(keys)
 	return model.renderCard(buildImportTitle(overlay.Import), width, lines, plainCard)
 }
@@ -83,16 +81,14 @@ func (model *Model) renderImportForm(overlay app.Overlay, width int) string {
 	}
 
 	// The problem line is always counted, so the card keeps its height.
-	said := FindImportProblem(overlay, model.readActiveDialect())
-	if said == "" {
-		said = overlay.Notice
+	text := FindImportProblem(overlay, model.readActiveDialect())
+	if text == "" {
+		text = overlay.Notice
 	}
 	lines = append(lines, model.styles.Error().Render(
-		present.TruncateText(said, width-4)))
+		present.TruncateText(text, width-4)))
 
-	keys := model.sayKeys().name("↑↓", "field").name("←→", "change").
-		name("Enter", describeImportStep(overlay)).
-		bind(cfg.ScopeDialog, ActionClose, "cancel")
+	keys := model.buildCardKeys(app.OverlayImport, keyScene{overlay: overlay})
 	keyRow := present.TruncateText(keys.buildText(), width-4)
 	model.recordCardBody()
 	lines = model.appendCardKeyRow(lines, keys, keyRow, cardBodyRow, cardBodyColumn)
@@ -187,12 +183,10 @@ func (model *Model) renderImportReview(overlay app.Overlay, width int) string {
 			present.TruncateText(overlay.Notice, inner)), "")
 	}
 
-	keys := model.sayKeys().
-		name("Enter", describeImportRun(held)).
-		name("Esc", "back to the form")
-	said := present.TruncateText(keys.buildText(), width-4)
+	keys := model.buildCardKeys(app.OverlayImport, keyScene{overlay: overlay})
+	text := present.TruncateText(keys.buildText(), width-4)
 	model.recordCardBody()
-	lines = model.appendCardKeyRow(lines, keys, said, cardBodyRow, cardBodyColumn)
+	lines = model.appendCardKeyRow(lines, keys, text, cardBodyRow, cardBodyColumn)
 	model.rememberCardKeys(keys)
 	return model.renderCard(buildImportTitle(held), width, lines, plainCard)
 }

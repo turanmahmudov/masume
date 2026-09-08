@@ -29,45 +29,9 @@ func (model *Model) readOverlayKey(
 	// work as they do everywhere else it is used.
 	if overlay.Kind == app.OverlayImport && overlay.Import.Stage == app.ImportPick &&
 		key.Code != tea.KeyEscape {
-		if held, command, taken := model.readPickerMessage(tea.KeyPressMsg(key)); taken {
+		if held, command, taken := model.readImportPickerKey(*overlay, key); taken {
 			return held, command
 		}
-	}
-
-	// Escape belongs to no action. It closes what is open, or steps back where the card
-	// holds a stage to step back to.
-	if key.Code == tea.KeyEscape {
-		if leaveImportReview(overlay) {
-			return model, nil
-		}
-		model.cancelOverlay(connection, overlay)
-		return model, nil
-	}
-
-	// The card of one row steps to the row beside it, and the registry binds the sideways
-	// arrows in the grid only, so the card takes them itself.
-	if overlay.Kind == app.OverlayRowDetail &&
-		(key.Code == tea.KeyLeft || key.Code == tea.KeyRight) {
-		step := -1
-		if key.Code == tea.KeyRight {
-			step = 1
-		}
-		overlay.Window.Index = wrap(overlay.Window.Index+step, len(overlay.Window.Rows))
-		// A row of its own starts at its first column.
-		overlay.List.Offset = 0
-		return model, nil
-	}
-
-	// A diagram scrolls sideways as well, and the registry binds the sideways arrows in
-	// the grid only, so the card takes them itself.
-	if overlay.Kind == app.OverlayDiagram &&
-		(key.Code == tea.KeyLeft || key.Code == tea.KeyRight) {
-		step := ActionCursorLeft
-		if key.Code == tea.KeyRight {
-			step = ActionCursorRight
-		}
-		scrollDiagram(overlay, Match{Action: step})
-		return model, nil
 	}
 
 	// A card with several returns takes its own letters, before any binding: the letters
@@ -80,21 +44,28 @@ func (model *Model) readOverlayKey(
 		}
 	}
 
-	// The dialog scope binds one chord to more than one action, so the card on show is
-	// asked first which of them it takes. A card that is a field takes no key of a list,
-	// because the arrows belong to the field.
+	// The dialog scope binds one chord to more than one action, and each card reads its own
+	// set alone. A card that is a field reads no key of a list: the arrows belong to the
+	// field.
 	scopes := []cfg.KeyScope{cfg.ScopeDialog}
 	if takesListKeys(*overlay) {
 		scopes = append(scopes, cfg.ScopeList)
 	}
-	match, matched := model.keymap.MatchFirst(key,
-		FindDialogActions(string(overlay.Kind)), scopes...)
+	match, matched := model.keymap.MatchOnly(key,
+		FindDialogActions(describeOverlayGroup(*overlay)), scopes...)
 	if matched {
 		if handled, held, command := model.runOverlayAction(
 			connection, tab, overlay, match); handled {
 			model.previewTheme(connection)
 			return held, command
 		}
+	}
+
+	// Escape closes a card whatever it is bound to. A rebound close key then leaves no card
+	// without a way out.
+	if key.Code == tea.KeyEscape {
+		model.cancelOverlay(connection, overlay)
+		return model, nil
 	}
 
 	// A field of the overlay takes what the registry did not bind.
@@ -104,6 +75,69 @@ func (model *Model) readOverlayKey(
 		return held, command
 	}
 	return model, nil
+}
+
+// stepOverlayField moves the cursor of a form to the row before or after. It reports whether
+// the card of the overlay is a form.
+func stepOverlayField(model *Model, tab *app.Tab, overlay *app.Overlay, step int) bool {
+	switch overlay.Kind {
+	case app.OverlayImport:
+		StepImportField(overlay, step)
+	case app.OverlayChart:
+		StepChartField(overlay, step)
+	case app.OverlayExport:
+		StepExportField(overlay, step)
+	default:
+		return false
+	}
+	return true
+}
+
+// stepOverlayValue steps through the values of the row under the cursor. A row that is a
+// field and not a choice keeps the key, which moves the caret in it.
+func stepOverlayValue(model *Model, tab *app.Tab, overlay *app.Overlay, step int) bool {
+	switch overlay.Kind {
+	case app.OverlayImport:
+		if len(BuildImportFields(*overlay)[overlay.Field].Choices) == 0 {
+			return false
+		}
+		StepImportChoice(overlay, step)
+	case app.OverlayChart:
+		model.StepChartChoice(tab, overlay, step)
+	case app.OverlayExport:
+		if len(BuildExportFields(*overlay)[overlay.Field].Choices) == 0 {
+			return false
+		}
+		StepExportChoice(overlay, step)
+	default:
+		return false
+	}
+	return true
+}
+
+// The keys the file picker of an import reads, by the action bound to them. The picker is a
+// component of its own and reads key presses. A bound key reaches it as the press it runs.
+var pickerKeyOfAction = map[ActionID]rune{
+	ActionOpenDirectory:  tea.KeyRight,
+	ActionLeaveDirectory: tea.KeyLeft,
+	ActionCursorUp:       tea.KeyUp,
+	ActionCursorDown:     tea.KeyDown,
+	ActionChooseRow:      tea.KeyEnter,
+}
+
+// readImportPickerKey hands a press to the file picker of an import. A press bound to one of
+// the keys of the picker reaches it as that key.
+func (model *Model) readImportPickerKey(
+	overlay app.Overlay, key tea.Key,
+) (tea.Model, tea.Cmd, bool) {
+	held := key
+	if match, matched := model.keymap.MatchOnly(key,
+		FindDialogActions(importPickGroup), cfg.ScopeDialog, cfg.ScopeList); matched {
+		if code, known := pickerKeyOfAction[match.Action]; known {
+			held = tea.Key{Code: code}
+		}
+	}
+	return model.readPickerMessage(tea.KeyPressMsg(held))
 }
 
 // takesListKeys is true for a card whose rows the keys of a list move. A card that is a
@@ -407,10 +441,38 @@ func (model *Model) runOverlayAction(
 
 	switch match.Action {
 	case ActionClose:
-		if leaveImportReview(overlay) {
-			return true, model, nil
-		}
 		model.cancelOverlay(connection, overlay)
+		return true, model, nil
+	case ActionStepBack:
+		leaveImportReview(overlay)
+		return true, model, nil
+
+	case ActionPreviousField:
+		return stepOverlayField(model, tab, overlay, -1), model, nil
+	case ActionNextField:
+		return stepOverlayField(model, tab, overlay, 1), model, nil
+	case ActionPreviousValue:
+		return stepOverlayValue(model, tab, overlay, -1), model, nil
+	case ActionNextValue:
+		return stepOverlayValue(model, tab, overlay, 1), model, nil
+	case ActionApplyStep:
+		held, command := model.chooseOverlayRow(connection, tab, overlay, chooseInSameTab)
+		return true, held, command
+	case ActionPreviousRow, ActionNextRow:
+		step := 1
+		if match.Action == ActionPreviousRow {
+			step = -1
+		}
+		overlay.Window.Index = wrap(overlay.Window.Index+step, len(overlay.Window.Rows))
+		// A row of its own starts at its first column.
+		overlay.List.Offset = 0
+		return true, model, nil
+	case ActionScrollLeft, ActionScrollRight:
+		step := ActionCursorLeft
+		if match.Action == ActionScrollRight {
+			step = ActionCursorRight
+		}
+		scrollDiagram(overlay, Match{Action: step})
 		return true, model, nil
 
 	case ActionCursorUp:
@@ -842,11 +904,11 @@ func (model *Model) askStopBackend(
 	id := model.ActiveID()
 
 	named := strconv.FormatInt(pid, 10)
-	title, question, said := " stop the statement ",
+	title, question, text := " stop the statement ",
 		"Stop the statement in session "+named+"?",
 		"asked the server to stop the statement in session "+named
 	if ends {
-		title, question, said = " end the session ",
+		title, question, text = " end the session ",
 			"End session "+named+"? Its statement stops and its connection closes.",
 			"asked the server to end session "+named
 	}
@@ -858,7 +920,7 @@ func (model *Model) askStopBackend(
 			if !confirmed {
 				return nil
 			}
-			connection.Show(said)
+			connection.Show(text)
 			return carryAnswer(stopBackend(id, held, pid, ends))
 		}},
 	}
@@ -1169,8 +1231,8 @@ func (model *Model) showDiagram(
 		model.ActiveID(), connection.Session, table, connection.Catalog.Tables)
 }
 
-// readDiagramAnswer draws the diagram the reads answered, over the line that said it was
-// being read.
+// readDiagramAnswer draws the diagram the reads answered, over the line that reports the
+// reading.
 func (model *Model) readDiagramAnswer(answered diagramMsg) (tea.Model, tea.Cmd) {
 	connection, _, found := model.findConnection(answered.ConnectionID)
 	// A user who closed the card while the reads ran is not shown it again.
@@ -1200,81 +1262,9 @@ func (model *Model) readOverlayField(
 	connection *app.Connection, tab *app.Tab, overlay *app.Overlay, key tea.Key,
 ) (tea.Model, tea.Cmd) {
 	buffer := overlay.Draft
-	// A card whose field holds more than one line writes a line on Enter. The chat sends on
-	// Enter instead, because a question is asked far more often than it is written over
-	// several lines, and a modifier writes the line there.
+	// A card whose field holds more than one line writes a line on Enter.
 	multiline := overlay.Kind == app.OverlayCellEdit || overlay.Kind == app.OverlayAiChat ||
 		overlay.Kind == app.OverlayParameters
-	if overlay.Kind == app.OverlayAiChat && key.Code == tea.KeyEnter {
-		if key.Mod.Contains(uv.ModAlt) || key.Mod.Contains(uv.ModShift) {
-			buffer.Insert("\n")
-			return model, nil
-		}
-		return model.submitChatQuestion(connection, tab)
-	}
-
-	// The import form returns the arrows the same way the export form does, and its
-	// review takes none of them.
-	if overlay.Kind == app.OverlayImport && overlay.Import.Stage != app.ImportReview {
-		switch key.Code {
-		case tea.KeyUp:
-			StepImportField(overlay, -1)
-			return model, nil
-		case tea.KeyDown, tea.KeyTab:
-			StepImportField(overlay, 1)
-			return model, nil
-		case tea.KeyLeft, tea.KeyRight:
-			if len(BuildImportFields(*overlay)[overlay.Field].Choices) > 0 {
-				step := 1
-				if key.Code == tea.KeyLeft {
-					step = -1
-				}
-				StepImportChoice(overlay, step)
-				return model, nil
-			}
-		}
-	}
-
-	// Every row of the chart form is a choice, so the arrows are the whole of it.
-	if overlay.Kind == app.OverlayChart {
-		switch key.Code {
-		case tea.KeyUp:
-			StepChartField(overlay, -1)
-			return model, nil
-		case tea.KeyDown, tea.KeyTab:
-			StepChartField(overlay, 1)
-			return model, nil
-		case tea.KeyLeft:
-			model.StepChartChoice(tab, overlay, -1)
-			return model, nil
-		case tea.KeyRight:
-			model.StepChartChoice(tab, overlay, 1)
-			return model, nil
-		}
-	}
-
-	// A form returns the arrows itself: one moves through the rows, the other steps
-	// through the values of the row under the cursor.
-	if overlay.Kind == app.OverlayExport {
-		switch key.Code {
-		case tea.KeyUp:
-			StepExportField(overlay, -1)
-			return model, nil
-		case tea.KeyDown, tea.KeyTab:
-			StepExportField(overlay, 1)
-			return model, nil
-		case tea.KeyLeft:
-			if len(BuildExportFields(*overlay)[overlay.Field].Choices) > 0 {
-				StepExportChoice(overlay, -1)
-				return model, nil
-			}
-		case tea.KeyRight:
-			if len(BuildExportFields(*overlay)[overlay.Field].Choices) > 0 {
-				StepExportChoice(overlay, 1)
-				return model, nil
-			}
-		}
-	}
 
 	switch key.Code {
 	case tea.KeyEnter:

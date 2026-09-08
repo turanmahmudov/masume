@@ -287,12 +287,10 @@ func (model *Model) renderChartForm(tab *app.Tab, overlay app.Overlay, width int
 	lines = append(lines, model.styles.Error().Render(
 		present.TruncateText(model.FindChartProblem(tab, overlay), width-4)))
 
-	keys := model.sayKeys().name("↑↓", "field").name("←→", "change").
-		bind(cfg.ScopeDialog, ActionSaveForm, "apply").
-		bind(cfg.ScopeDialog, ActionClose, "cancel")
-	said := present.TruncateText(keys.buildText(), width-4)
+	keys := model.buildCardKeys(app.OverlayChart, keyScene{overlay: overlay})
+	text := present.TruncateText(keys.buildText(), width-4)
 	model.recordCardBody()
-	lines = model.appendCardKeyRow(lines, keys, said, cardBodyRow, cardBodyColumn)
+	lines = model.appendCardKeyRow(lines, keys, text, cardBodyRow, cardBodyColumn)
 	model.rememberCardKeys(keys)
 	model.layout.formRows = rowsHit{
 		top: model.layout.cardBodyTop, count: len(fields),

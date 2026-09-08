@@ -504,6 +504,7 @@ masume checks `host:wait_for_port` for a TCP connection until the timeout. `wait
 icons               = "plain"
 theme               = "tokyonight"
 hide_system_schemas = true
+key_hints           = "full"
 ```
 
 | Key | Type | Default | Meaning |
@@ -511,6 +512,7 @@ hide_system_schemas = true
 | `icons` | `plain` or `ascii` | `plain` | The tree glyph set. `ascii` uses ASCII characters only. An unknown name produces a report and uses `plain` |
 | `theme` | string | `ayu-dark` | A built-in theme name, a file name in `themes/` without `.toml`, or `system` for the colours of the terminal. See [themes.md](themes.md) |
 | `hide_system_schemas` | boolean | `true` | `false` displays system schemas, including `pg_catalog` and `information_schema`. `h` in the tree toggles visibility for the session |
+| `key_hints` | `full`, `main` or `off` | `full` | How many key hints the status bar, the title bar, the tab row, the pane strips and the pane borders draw. An unknown mode produces a report and uses `full`. See [Key hint modes](#key-hint-modes) |
 
 Four tables under `[ui]` override glyphs or theme settings:
 
@@ -522,6 +524,20 @@ Four tables under `[ui]` override glyphs or theme settings:
 | `[ui.syntax]` | Editor highlight styles |
 
 [`config.example.toml`](../config.example.toml) lists the icon kinds, colour names and token kinds. [Themes](themes.md) describes the colours and highlight styles.
+
+### Key hint modes
+
+| Mode | What it shows |
+| --- | --- |
+| `full` | Every key hint of the status bar, the title bar, the tab row, the pane strips, the pane borders and the cards |
+| `main` | The primary key hints only. See the list below |
+| `off` | No key hints. Every bar, strip, border and card keeps its readouts: the count of the statements, the place of the caret, the count of the faults, the rows of the result, what a card is for |
+
+`main` shows the primary keys: the key a pane is there for (open a tree row, run the statement, run all, run a notebook cell), the key that opens the menu of the row under the cursor, the keys a state raises (cancel a running read, run a failed one, review the staged changes, fetch more rows, count the rows, edit a table as a query), and the keys no other key reaches (show a hidden tree, step through the connections). On a card it shows the keys that answer it and the key that closes it, without the extras. The chat card shows `ask`, `last reply query to editor` and `close`. The notebook card shows `open` and `close`. The title bar, the pane borders and the plan strip keep their keys. The tab row and the step keys of the result strips show none, because each one stands for a chip a press reaches.
+
+`full` and `main` show the keys that reach the model: `ask ai` on the title bar, the one key of the model on the border of the editor, and `ask ai` on the strip of the plan. `off` hides all three.
+
+Every mode shows the chords in a menu row, the palette and the help card, the answer chips of a question, and a report that carries the key it is answered with, such as the key that undoes a write. A key a mode hides still works, and the palette (`^K`) and the help card (`?`) reach every action in every mode.
 
 ## Keys
 

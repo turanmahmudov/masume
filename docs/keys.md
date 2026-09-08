@@ -60,9 +60,12 @@ One card returns only its own actions, so two rows of this table can carry the s
 
 | Action | Key |
 | --- | --- |
+| `accept-completion` | `tab` |
 | `answer-no` | `n` |
 | `answer-yes` | `y` |
 | `apply-changes` | `ctrl+y` |
+| `apply-step` | `return` |
+| `chat-to-notebook` | `ctrl+g` |
 | `close` | `escape` |
 | `copy-value` | `ctrl+a` or `y` |
 | `delete-connection` | `d` |
@@ -72,30 +75,43 @@ One card returns only its own actions, so two rows of this table can carry the s
 | `insert-ai-sql` | `ctrl+j` |
 | `keep-all-values` | `a` |
 | `keep-only-value` | `o` |
+| `leave-directory` | `left` |
 | `list-secondary` | `ctrl+d` |
 | `new-ai-chat` | `ctrl+l` |
 | `new-connection` | `n` |
-| `chat-to-notebook` | `ctrl+g` |
+| `next-field` | `down` or `tab` |
+| `next-row` | `right` |
 | `next-turn` | `ctrl+n` |
+| `next-value` | `right` |
+| `open-directory` | `right` |
 | `open-in-new-tab` | `alt+return` |
 | `prettify-json` | `ctrl+f` |
+| `previous-field` | `up` |
+| `previous-row` | `left` |
 | `previous-turn` | `ctrl+p` |
+| `previous-value` | `left` |
 | `replace-in-statement` | `ctrl+r` |
 | `run-with-values` | `ctrl+r` |
 | `save-cell` | `ctrl+s` |
 | `save-form` | `ctrl+s` |
 | `scroll-back` | `pageup` |
 | `scroll-forward` | `pagedown` |
+| `scroll-left` | `left` |
+| `scroll-right` | `right` |
+| `send-question` | `return` |
 | `set-default` | `ctrl+d` |
 | `set-empty` | `ctrl+e` |
 | `set-null` | `ctrl+l` |
 | `show-ai-chats` | `ctrl+o` |
+| `step-back` | `escape` |
 | `stop-ai-reply` | `ctrl+x` |
 | `stop-session` | `x` |
 | `test-connection` | `ctrl+t` |
-| `unfold-row` | `right` |
 | `toggle-value` | `space` |
+| `unfold-row` | `right` |
+| `use-keyring` | `tab` |
 | `write-export` | `ctrl+s` |
+| `write-newline` | `shift+return` or `alt+return` |
 
 ## Finding and replacing
 
@@ -127,6 +143,7 @@ See [editing SQL](usage.md#editing-sql) for search, replacement, completion, and
 | `find-in-statement` | `alt+f` |
 | `format-sql` | `ctrl+d` |
 | `indent-lines` | `alt+]` |
+| `leave-cell` | `escape` |
 | `next-match` | `f3` |
 | `next-problem` | `f8` |
 | `open-line` | `return` |

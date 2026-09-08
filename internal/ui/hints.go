@@ -18,6 +18,8 @@ type Hint struct {
 	Label string
 	// True for a key that is always there. The bar draws it a step back.
 	Standing bool
+	// True for a primary key. The main mode shows it as well.
+	Main bool
 	// The action the key runs, so a press on the hint runs it as the key does. A hint of a
 	// pair holds both, and the half of the key that was pressed decides which one.
 	Scope  cfg.KeyScope
@@ -55,39 +57,59 @@ type HintContext struct {
 	TreeRow             *present.TreeRow
 }
 
+// resolveKeyHints returns the key hints mode. An unset mode is the full mode.
+func (model *Model) resolveKeyHints() cfg.KeyHintsMode {
+	if model.settings.KeyHints == "" {
+		return cfg.KeyHintsFull
+	}
+	return model.settings.KeyHints
+}
+
+// showsKeyHints is false in the off mode, which hides every key hint.
+func (model *Model) showsKeyHints() bool {
+	return model.resolveKeyHints() != cfg.KeyHintsOff
+}
+
+// showsEveryKeyHint is true in the full mode, which shows every key hint.
+func (model *Model) showsEveryKeyHint() bool {
+	return model.resolveKeyHints() == cfg.KeyHintsFull
+}
+
 // buildHint returns the hint for an action. It returns nothing if the action has no key, or
 // the server cannot do it.
-func (registry *KeyRegistry) buildHint(
+func (model *Model) buildHint(
 	capabilities core.Capabilities, scope cfg.KeyScope, id ActionID, label string,
 ) (Hint, bool) {
 	if !AnswersFor(capabilities, FindActionCapability(scope, id)) {
 		return Hint{}, false
 	}
-	return registry.buildScreenHint(scope, id, label)
+	return model.buildScreenHint(scope, id, label)
 }
 
-func (registry *KeyRegistry) buildScreenHint(
+func (model *Model) buildScreenHint(
 	scope cfg.KeyScope, id ActionID, label string,
 ) (Hint, bool) {
-	chords := registry.FindActionChords(scope, id)
+	chords := model.registry.FindActionChords(scope, id)
 	if len(chords) == 0 {
 		return Hint{}, false
 	}
 	return Hint{
-		Key: FormatChordCompact(chords[0]), Label: label, Scope: scope, Action: id,
+		Key: FormatChord(chords[0]), Label: label, Scope: scope, Action: id,
+		Main: IsMainHint(scope, id),
 	}, true
 }
 
 // buildPairHint returns one hint for a pair of actions, such as fold and unfold.
-func (registry *KeyRegistry) buildPairHint(
+func (model *Model) buildPairHint(
 	scope cfg.KeyScope, previous, next ActionID, label, separator string,
 ) (Hint, bool) {
-	key := registry.FormatChordPair(scope, previous, next, separator)
+	key := model.registry.FormatChordPair(scope, previous, next, separator)
 	if key == "" {
 		return Hint{}, false
 	}
 	return Hint{
 		Key: key, Label: label, Scope: scope, Action: previous, Second: next,
+		Main: IsMainHint(scope, previous),
 	}, true
 }
 
@@ -134,23 +156,25 @@ func addCopyOrQuit(keys []Hint, hasSelection bool) []Hint {
 
 // BuildPickerHints returns the keys of the profile picker. The list keys come from the
 // registry, so a preset moves the hint too.
-func (registry *KeyRegistry) BuildPickerHints(hasSelection bool) []Hint {
+func (model *Model) BuildPickerHints(hasSelection bool) []Hint {
 	keys := hintList{}
-	keys.add(registry.buildPairHint(
+	keys.add(model.buildPairHint(
 		cfg.ScopeList, ActionCursorUp, ActionCursorDown, "select", ""))
-	keys.add(registry.buildScreenHint(cfg.ScopeList, ActionChooseRow, "connect"))
+	keys.add(model.buildScreenHint(cfg.ScopeList, ActionChooseRow, "connect"))
 	return addCopyOrQuit(keys.build(), hasSelection)
 }
 
 // BuildConnectingHints returns the keys while the client waits for a server. Escape is
 // written out because the root model reads it off the event, not the registry.
-func (registry *KeyRegistry) BuildConnectingHints(hasSelection bool) []Hint {
-	return addCopyOrQuit([]Hint{{Key: "Esc", Label: "cancel"}}, hasSelection)
+func (model *Model) BuildConnectingHints(hasSelection bool) []Hint {
+	keys := hintList{}
+	keys.add(model.buildScreenHint(cfg.ScopeDialog, ActionClose, "cancel"))
+	return addCopyOrQuit(keys.build(), hasSelection)
 }
 
 // BuildCardScreenHints returns the keys of a screen whose card names its own keys. The bar
 // shows only the copy or quit key.
-func (registry *KeyRegistry) BuildCardScreenHints(hasSelection bool) []Hint {
+func (model *Model) BuildCardScreenHints(hasSelection bool) []Hint {
 	return addCopyOrQuit(nil, hasSelection)
 }
 
@@ -162,12 +186,46 @@ func standWith(hint Hint, found bool) (Hint, bool) {
 	return hint, true
 }
 
+// buildAnswerHint returns the primary key of a field or a list: the key it is answered or
+// left with. The registry has no such key, and no press runs it.
+func buildAnswerHint(chord, label string) Hint {
+	return Hint{Key: chord, Label: label, Main: true}
+}
+
+// buildAsideHint returns a secondary key of a field or a list, such as a move or a scroll.
+// Only the full mode shows it.
+func buildAsideHint(chord, label string) Hint {
+	return Hint{Key: chord, Label: label}
+}
+
+// keepKeylessHints returns the hints with no key. The off mode shows these alone.
+func keepKeylessHints(hints []Hint) []Hint {
+	kept := make([]Hint, 0, len(hints))
+	for _, hint := range hints {
+		if hint.Key == "" {
+			kept = append(kept, hint)
+		}
+	}
+	return kept
+}
+
+// keepMainHints returns the hints of the main mode: the standing keys and the primary keys.
+func keepMainHints(hints []Hint) []Hint {
+	kept := make([]Hint, 0, len(hints))
+	for _, hint := range hints {
+		if hint.Standing || hint.Main {
+			kept = append(kept, hint)
+		}
+	}
+	return kept
+}
+
 // buildOpenHint returns what Enter does on the row under the cursor.
-func (registry *KeyRegistry) buildOpenHint(
+func (model *Model) buildOpenHint(
 	capabilities core.Capabilities, row present.TreeRow,
 ) (Hint, bool) {
 	open := func(label string) (Hint, bool) {
-		return registry.buildHint(capabilities, cfg.ScopeTree, ActionOpenNode, label)
+		return model.buildHint(capabilities, cfg.ScopeTree, ActionOpenNode, label)
 	}
 	switch row.Node.Kind {
 	case present.NodeTable, present.NodeObject:
@@ -206,23 +264,23 @@ func describeFold(node present.TreeNode) string {
 
 // buildTreeHints returns the keys the row under the cursor returns. Each kind of row returns
 // a different set.
-func (registry *KeyRegistry) buildTreeHints(
+func (model *Model) buildTreeHints(
 	capabilities core.Capabilities, row *present.TreeRow, systemSchemasHidden bool,
 ) []Hint {
 	keys := hintList{}
 
 	if row != nil {
-		keys.add(registry.buildOpenHint(capabilities, *row))
+		keys.add(model.buildOpenHint(capabilities, *row))
 		if row.Node.Kind == present.NodeTable {
-			keys.add(registry.buildHint(
+			keys.add(model.buildHint(
 				capabilities, cfg.ScopeTree, ActionOpenInNewTab, "open in a new tab"))
 		}
 		if row.Node.Kind == present.NodeTable || row.Node.Kind == present.NodeColumn {
-			keys.add(registry.buildHint(
+			keys.add(model.buildHint(
 				capabilities, cfg.ScopeTree, ActionDescribeTable, "describe"))
 		}
 		if row.Expandable {
-			keys.add(registry.buildPairHint(cfg.ScopeTree, ActionFoldRow, ActionUnfoldRow,
+			keys.add(model.buildPairHint(cfg.ScopeTree, ActionFoldRow, ActionUnfoldRow,
 				describeFold(row.Node), ""))
 		}
 		if _, marks := present.FindFavouriteOf(row.Node); marks {
@@ -230,46 +288,50 @@ func (registry *KeyRegistry) buildTreeHints(
 			if row.Marked {
 				label = "unfavourite"
 			}
-			keys.add(registry.buildHint(capabilities, cfg.ScopeTree, ActionToggleFavourite, label))
+			keys.add(model.buildHint(capabilities, cfg.ScopeTree, ActionToggleFavourite, label))
 		}
 		if len(app.BuildObjectActions(row.Node, capabilities)) > 0 {
-			keys.add(registry.buildHint(capabilities, cfg.ScopeTree, ActionObjectMenu, "menu"))
+			keys.add(model.buildHint(
+				capabilities, cfg.ScopeTree, ActionObjectMenu, "menu"))
 		}
 	}
 
-	keys.add(registry.buildHint(capabilities, cfg.ScopeTree, ActionFilterTree, "filter"))
+	keys.add(model.buildHint(capabilities, cfg.ScopeTree, ActionFilterTree, "filter"))
 	systemSchemas := "hide system schemas"
 	if systemSchemasHidden {
 		systemSchemas = "show system schemas"
 	}
-	keys.add(registry.buildHint(
+	keys.add(model.buildHint(
 		capabilities, cfg.ScopeTree, ActionToggleSystemSchemas, systemSchemas))
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionRefreshObjects, "refresh"))
-	keys.add(registry.buildHint(
+	keys.add(model.buildHint(capabilities, cfg.ScopeGlobal, ActionRefreshObjects, "refresh"))
+	keys.add(model.buildHint(
 		capabilities, cfg.ScopeGlobal, ActionToggleSidebar, "hide the explorer"))
 	return keys.build()
 }
 
-func (registry *KeyRegistry) buildEditorHints(capabilities core.Capabilities) []Hint {
+func (model *Model) buildEditorHints(capabilities core.Capabilities) []Hint {
 	keys := hintList{}
-	keys.add(registry.buildHint(
+	keys.add(model.buildHint(
 		capabilities, cfg.ScopeGlobal, ActionRunAtCursor, "run the statement"))
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionRunBatch, "run all"))
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionExplain, "explain"))
+	keys.add(model.buildHint(capabilities, cfg.ScopeGlobal, ActionRunBatch, "run all"))
+	keys.add(model.buildHint(capabilities, cfg.ScopeGlobal, ActionExplain, "explain"))
 	// One key opens the field that finds, and the field itself offers to replace, so the
 	// bar names both.
-	keys.add(registry.buildHint(
+	keys.add(model.buildHint(
 		capabilities, cfg.ScopeEditor, ActionFindInStatement, "find or replace"))
 	// The key that reaches the model stands on the border of the editor, where the one key
 	// the editor offers the model always stands, so the bar does not name it a second time.
-	keys.add(registry.buildHint(
+	keys.add(model.buildHint(
 		capabilities, cfg.ScopeGlobal, ActionToggleResult, "full height"))
 	// The editor returns these keys itself, so the registry cannot move them.
-	keys.addAll([]Hint{
-		{Key: "Tab", Label: "complete"},
-		{Key: "⇧←→", Label: "select"},
-		{Key: "^A", Label: "select all"},
-	})
+	keys.add(model.buildScreenHint(cfg.ScopeDialog, ActionAcceptCompletion, "complete"))
+	// A caret key with Shift takes the selection along. The registry binds the two as one
+	// action, and the hint marks the pair the caret moves with.
+	if pair := model.registry.FormatChordPair(
+		cfg.ScopeEditor, ActionCaretLeft, ActionCaretRight, ""); pair != "" {
+		keys.addAll([]Hint{buildAsideHint("⇧ "+pair, "select")})
+	}
+	keys.add(model.buildScreenHint(cfg.ScopeEditor, ActionSelectAll, "select all"))
 	return keys.build()
 }
 
@@ -289,35 +351,39 @@ func findViewToLeaveFor(view app.ResultView, views []app.ResultView) (app.Result
 	return "", false
 }
 
-func (registry *KeyRegistry) buildViewHints(
+func (model *Model) buildViewHints(
 	view app.ResultView, views []app.ResultView, capabilities core.Capabilities,
 ) []Hint {
-	scroll := Hint{Key: "↑↓", Label: "scroll"}
+	scroll, _ := model.buildPairHint(
+		cfg.ScopeList, ActionCursorUp, ActionCursorDown, "scroll", "")
 	switch view {
 	case app.ViewTree:
 		keys := hintList{}
-		keys.add(registry.buildHint(
+		keys.add(model.buildHint(
 			capabilities, cfg.ScopeDocument, ActionOpenNode, "open or fold"))
-		keys.addAll([]Hint{{Key: "←→", Label: "fold or open"}, {Key: "↑↓", Label: "move"}})
-		keys.add(registry.buildHint(
+		keys.add(model.buildPairHint(
+			cfg.ScopeDocument, ActionFoldRow, ActionUnfoldRow, "fold or open", ""))
+		keys.add(model.buildPairHint(
+			cfg.ScopeDocument, ActionCursorUp, ActionCursorDown, "move", ""))
+		keys.add(model.buildHint(
 			capabilities, cfg.ScopeDocument, ActionCopyValue, "copy value"))
-		keys.add(registry.buildHint(
+		keys.add(model.buildHint(
 			capabilities, cfg.ScopeDocument, ActionCopyPath, "copy field"))
-		keys.add(registry.buildHint(
+		keys.add(model.buildHint(
 			capabilities, cfg.ScopeDocument, ActionSearchColumns, "search"))
-		keys.add(registry.buildHint(
+		keys.add(model.buildHint(
 			capabilities, cfg.ScopeDocument, ActionCountRows, "count"))
 		return keys.build()
 	}
 	if view == app.ViewPlan {
 		keys := hintList{}
-		keys.add(registry.buildHint(
+		keys.add(model.buildHint(
 			capabilities, cfg.ScopePlan, ActionToggleRawPlan, "raw or tree"))
-		keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionExplain, "explain"))
-		keys.add(registry.buildHint(
+		keys.add(model.buildHint(capabilities, cfg.ScopeGlobal, ActionExplain, "explain"))
+		keys.add(model.buildHint(
 			capabilities, cfg.ScopeGlobal, ActionExplainAnalyze, "analyze"))
-		keys.add(registry.buildHint(capabilities, cfg.ScopePlan, ActionCopyPlan, "copy"))
-		keys.add(registry.buildHint(capabilities, cfg.ScopePlan, ActionAiCheckPlan, "ask ai"))
+		keys.add(model.buildHint(capabilities, cfg.ScopePlan, ActionCopyPlan, "copy"))
+		keys.add(model.buildHint(capabilities, cfg.ScopePlan, ActionAiCheckPlan, "ask ai"))
 		keys.addAll([]Hint{scroll})
 		return keys.build()
 	}
@@ -337,12 +403,12 @@ func (registry *KeyRegistry) buildViewHints(
 	if target == app.ViewData {
 		label = "back to the rows"
 	}
-	return []Hint{{Key: strconv.Itoa(position + 1), Label: label}, scroll}
+	return []Hint{buildAnswerHint(strconv.Itoa(position+1), label), scroll}
 }
 
 // BuildHints returns the keys the bar names, which depend on the cursor position and what
 // the result can do.
-func (registry *KeyRegistry) BuildHints(context HintContext) []Hint {
+func (model *Model) BuildHints(context HintContext) []Hint {
 	// With nothing selected the key quits instead of copying.
 	selection := []Hint{}
 	if context.HasSelection {
@@ -352,14 +418,14 @@ func (registry *KeyRegistry) BuildHints(context HintContext) []Hint {
 
 	connection := hintList{}
 	if context.Connections > 1 {
-		connection.add(standWith(registry.buildPairHint(cfg.ScopeGlobal,
+		connection.add(standWith(model.buildPairHint(cfg.ScopeGlobal,
 			ActionPreviousConnection, ActionNextConnection, "connection", " ")))
 	}
 
 	// A hidden tree can be reached by no other key, so the bar names it first.
 	missingSidebar := hintList{}
 	if !context.SidebarVisible {
-		missingSidebar.add(standWith(registry.buildHint(
+		missingSidebar.add(standWith(model.buildHint(
 			capabilities, cfg.ScopeGlobal, ActionToggleSidebar, "explorer")))
 	}
 
@@ -376,71 +442,75 @@ func (registry *KeyRegistry) BuildHints(context HintContext) []Hint {
 	// A running query owns the connection, so cancelling is the only useful key.
 	if context.Running {
 		keys := hintList{}
-		keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionCancelQuery, "cancel"))
+		keys.add(model.buildHint(
+			capabilities, cfg.ScopeGlobal, ActionCancelQuery, "cancel"))
 		return closeBar(keys.build())
 	}
 
 	if context.Pane == app.PaneSidebar {
-		return closeBar(registry.buildTreeHints(
+		return closeBar(model.buildTreeHints(
 			capabilities, context.TreeRow, context.SystemSchemasHidden))
 	}
 	if context.Pane == app.PaneEditor {
 		if context.ListsCells {
-			return closeBar(registry.buildNotebookHints(context))
+			return closeBar(model.buildNotebookHints(context))
 		}
 		if context.TabKind == app.TabNotebook {
-			return closeBar(registry.buildCellEditorHints(context))
+			return closeBar(model.buildCellEditorHints(context))
 		}
-		return closeBar(registry.buildEditorHints(capabilities))
+		return closeBar(model.buildEditorHints(capabilities))
 	}
 
 	// After a failure: run again once it is fixed. The key that asks the model why it
 	// failed stands on the border of the editor, so the bar leaves it to the editor.
 	if context.QueryFailed {
 		keys := hintList{}
-		keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionRunAtCursor, "run"))
+		keys.add(model.buildHint(
+			capabilities, cfg.ScopeGlobal, ActionRunAtCursor, "run"))
 		return closeBar(keys.build())
 	}
 
 	// Sorting and filtering act on rows, so a view without rows offers other keys.
 	if context.View != app.ViewData {
-		return closeBar(registry.buildViewHints(context.View, context.Views, capabilities))
+		return closeBar(model.buildViewHints(context.View, context.Views, capabilities))
 	}
 
 	if !context.HasResult {
 		keys := hintList{}
-		keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionRunAtCursor, "run"))
+		keys.add(model.buildHint(capabilities, cfg.ScopeGlobal, ActionRunAtCursor, "run"))
 		return closeBar(keys.build())
 	}
 
 	// The menu holds the row and cell keys, so the bar keeps only the rest.
 	keys := hintList{}
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionOpenMenu, "menu"))
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionSearchColumns, "search"))
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionFilterWhere, "where"))
+	keys.add(model.buildHint(capabilities, cfg.ScopeGrid, ActionOpenMenu, "menu"))
+	keys.add(model.buildHint(capabilities, cfg.ScopeGrid, ActionSearchColumns, "search"))
+	keys.add(model.buildHint(capabilities, cfg.ScopeGrid, ActionFilterWhere, "where"))
 
 	if context.FilterSteps > 1 {
-		keys.add(registry.buildHint(
+		keys.add(model.buildHint(
 			capabilities, cfg.ScopeGrid, ActionPopFilter, "drop the last filter"))
 	}
 	if context.Rewritten {
-		keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionClearRewrites, "clear"))
-		keys.add(registry.buildHint(
+		keys.add(model.buildHint(capabilities, cfg.ScopeGrid, ActionClearRewrites, "clear"))
+		keys.add(model.buildHint(
 			capabilities, cfg.ScopeGlobal, ActionRevealSQL, "edit as a query"))
 	} else if context.TabKind == app.TabTable {
-		keys.add(registry.buildHint(
+		keys.add(model.buildHint(
 			capabilities, cfg.ScopeGlobal, ActionRevealSQL, "edit as a query"))
 	}
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionGoToColumn, "go to column"))
-	keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionFreezeColumns, "freeze"))
+	keys.add(model.buildHint(capabilities, cfg.ScopeGrid, ActionGoToColumn, "go to column"))
+	keys.add(model.buildHint(capabilities, cfg.ScopeGrid, ActionFreezeColumns, "freeze"))
 	if context.CanFetchMore {
-		keys.add(registry.buildHint(capabilities, cfg.ScopeGlobal, ActionNextPage, "more rows"))
+		keys.add(model.buildHint(
+			capabilities, cfg.ScopeGlobal, ActionNextPage, "more rows"))
 	}
 	if context.CanCountRows {
-		keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionCountRows, "count rows"))
+		keys.add(model.buildHint(
+			capabilities, cfg.ScopeGrid, ActionCountRows, "count rows"))
 	}
 	if context.Staged > 0 {
-		keys.add(registry.buildHint(capabilities, cfg.ScopeGrid, ActionReviewChanges,
+		keys.add(model.buildHint(capabilities, cfg.ScopeGrid, ActionReviewChanges,
 			"review "+strconv.Itoa(context.Staged)))
 	}
 

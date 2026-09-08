@@ -167,6 +167,7 @@ var defaultChords = map[string][]string{
 	"editor:previous-match":    {"shift+f3"},
 	// The row that reports a fault names this key, so it has to reach the fault it names.
 	"editor:next-problem": {"f8"},
+	"editor:leave-cell":   {"escape"},
 
 	// The cell list of a notebook. Single letters are free there, because the list takes
 	// no typed text.
@@ -283,6 +284,29 @@ var defaultChords = map[string][]string{
 	"dialog:scroll-forward": {"pagedown"},
 	"dialog:previous-turn":  {"ctrl+p"},
 	"dialog:next-turn":      {"ctrl+n"},
+	// The panel sends the question on the plain key and writes a line with a modifier.
+	"dialog:send-question": {"return"},
+	"dialog:write-newline": {"shift+return", "alt+return"},
+
+	// A form steps through its rows and through the values of the row under the cursor.
+	// One card owns each of these keys. The same arrow then serves a form, a file picker
+	// and a card of one row.
+	"dialog:previous-field":  {"up"},
+	"dialog:next-field":      {"down", "tab"},
+	"dialog:previous-value":  {"left"},
+	"dialog:next-value":      {"right"},
+	"dialog:apply-step":      {"return"},
+	"dialog:step-back":       {"escape"},
+	"dialog:previous-row":    {"left"},
+	"dialog:next-row":        {"right"},
+	"dialog:scroll-left":     {"left"},
+	"dialog:scroll-right":    {"right"},
+	"dialog:open-directory":  {"right"},
+	"dialog:leave-directory": {"left"},
+	"dialog:use-keyring":     {"tab"},
+	// The list of completions owns the keyboard while it is open. Its key is bound here,
+	// and it may share the chord the workspace uses to step through the panes.
+	"dialog:accept-completion": {"tab"},
 }
 
 // DefaultPreset is the set of keys this app ships.
