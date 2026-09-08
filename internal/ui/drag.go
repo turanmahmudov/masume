@@ -8,6 +8,7 @@ const (
 	dragEditorText
 	dragSplitLine
 	dragColumnEdge
+	dragTreeEdge
 )
 
 type pointerDrag struct {
@@ -16,9 +17,12 @@ type pointerDrag struct {
 	// pointer may wander off the track and the drag holds, which is what a scroll bar does.
 	bar  scrollHit
 	grab int
-	// True once a drag of the line has moved it at all, because a press that never moved
-	// hides the result instead.
-	movedSplit bool
+	// True once a drag of a border has moved it at all, because a press that never moved
+	// does something else: it hides the result, or it moves the keyboard to a pane.
+	moved bool
+	// True where the drag of the line began on the top border of the result. A press there
+	// that never moved reaches the result, and one on the editor border hides it.
+	splitFromResult bool
 	// The column whose border is being dragged, the width it had when the drag began, and
 	// the cell the pointer stood on then.
 	column      int
@@ -38,8 +42,12 @@ func (drag *pointerDrag) takeEditorText() {
 	*drag = pointerDrag{kind: dragEditorText}
 }
 
-func (drag *pointerDrag) takeSplitLine() {
-	*drag = pointerDrag{kind: dragSplitLine}
+func (drag *pointerDrag) takeSplitLine(fromResult bool) {
+	*drag = pointerDrag{kind: dragSplitLine, splitFromResult: fromResult}
+}
+
+func (drag *pointerDrag) takeTreeEdge() {
+	*drag = pointerDrag{kind: dragTreeEdge}
 }
 
 func (drag *pointerDrag) takeColumnEdge(column, width, from int) {

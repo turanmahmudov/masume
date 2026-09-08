@@ -183,8 +183,8 @@ func PlanViewStrip(names []string, activeIndex, available int) ViewStripPlan {
 	return ViewStripPlan{ShowsHint: numbered+viewHintWidth <= available}
 }
 
-// minSidebarWidth is the smallest width at which the object tree is still readable.
-const minSidebarWidth = 16
+// MinSidebarWidth is the smallest width at which the object tree is still readable.
+const MinSidebarWidth = 16
 
 // minPaneWidth is the width the editor and the result keep next to the tree, if the terminal
 // is wide enough.
@@ -193,7 +193,7 @@ const minPaneWidth = 32
 // PlanSidebarWidth returns the width of the object tree. It shrinks with the terminal,
 // because a tree at full width would leave no space for the panes next to it.
 func PlanSidebarWidth(available, preferred int) int {
-	room := max(available-minPaneWidth, minSidebarWidth)
+	room := max(available-minPaneWidth, MinSidebarWidth)
 	width := min(preferred, room, available)
 	if width < 0 {
 		return 0

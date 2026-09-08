@@ -48,7 +48,11 @@ func (model *Model) renderWorkspace(height int) []string {
 
 	treeWidth := 0
 	if connection.SidebarVisible {
-		treeWidth = present.PlanSidebarWidth(model.width, sidebarWidth)
+		wanted := sidebarWidth
+		if connection.SidebarWidth > 0 {
+			wanted = connection.SidebarWidth
+		}
+		treeWidth = present.PlanSidebarWidth(model.width, wanted)
 		// A terminal too narrow for the tree and a readable pane drops the tree, because a
 		// pane held at its floor next to the tree draws wider than the frame.
 		if model.width-treeWidth < narrowestPaneWidth {

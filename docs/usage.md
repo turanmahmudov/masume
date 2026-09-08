@@ -227,7 +227,8 @@ Palette-only operations include Reload the theme files and AI provider selection
 - Click a grid cell to select the cell; double-click a row to open row details.
 - Click a column header to sort; Shift-click adds the column to the sort. Sorting discards staged edits.
 - Drag a column edge to resize; double-click the edge to reset the width.
-- Drag the editor/result divider to resize panes. Click the divider without dragging to toggle results.
+- Drag the divider between the editor and the result to resize both panes. Either side of it works: the foot of the editor and the head of the result. Click the foot of the editor without dragging to toggle results.
+- Drag the right border of the object tree to set its width. The tree keeps at least 16 columns and leaves the pane beside it at least 32.
 - Drag a scrollbar or turn the wheel to scroll. The wheel leaves the cursor in place; keyboard movement returns to the cursor.
 - In the editor, click for the caret, double-click for a word, or triple-click for a line. Drag to select text.
 - Drag other displayed text for a screen selection. `Ctrl+C` copies the selected display text.

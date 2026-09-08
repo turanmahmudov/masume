@@ -149,6 +149,9 @@ type Connection struct {
 
 	// True while the object tree is drawn. `Alt+S` gives its columns to the grid.
 	SidebarVisible bool
+	// The columns the object tree asks for, which a drag of its border sets. Zero asks for
+	// the width the client opens with.
+	SidebarWidth int
 	// False while the result is hidden and the editor has the whole pane.
 	ResultVisible bool
 	// The editor height in rows. Zero uses the default height.

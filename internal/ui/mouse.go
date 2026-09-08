@@ -413,7 +413,21 @@ func (model *Model) dragSplit(mouse tea.Mouse) (tea.Model, tea.Cmd) {
 	// panes and not the foot of one.
 	connection.ResultVisible = true
 	connection.EditorHeight = rows
-	model.drag.movedSplit = true
+	model.drag.moved = true
+	return model, nil
+}
+
+// dragTreeEdge sets the width of the object tree from where the pointer stands. The width
+// the drag asks for is clamped when the frame is drawn, so a drag past either end stops at
+// the narrowest tree and the narrowest pane.
+func (model *Model) dragTreeEdge(mouse tea.Mouse) (tea.Model, tea.Cmd) {
+	connection := model.Active()
+	if connection == nil {
+		return model, nil
+	}
+	// The border is the last column of the tree, so the columns up to it are its width.
+	connection.SidebarWidth = max(mouse.X+1, present.MinSidebarWidth)
+	model.drag.moved = true
 	return model, nil
 }
 
@@ -553,6 +567,8 @@ func (model *Model) readMouseMotion(moved tea.MouseMotionMsg) (tea.Model, tea.Cm
 			return model.dragColumnEdge(mouse)
 		case dragSplitLine:
 			return model.dragSplit(mouse)
+		case dragTreeEdge:
+			return model.dragTreeEdge(mouse)
 		case dragScrollbar:
 			return model.dragScrollbar(mouse)
 		case dragEditorText:
@@ -578,15 +594,34 @@ func (model *Model) readMouseMotion(moved tea.MouseMotionMsg) (tea.Model, tea.Cm
 func (model *Model) readMouseRelease(released tea.MouseReleaseMsg) (tea.Model, tea.Cmd) {
 	if held := model.drag; held.running() {
 		model.drag.stop()
-		if !held.holds(dragSplitLine) || held.movedSplit {
+		if held.moved {
 			return model, nil
 		}
-		// A press on the line that never moved hides the result, or brings it back.
 		connection := model.Active()
 		if connection == nil {
 			return model, nil
 		}
-		return model.runAction(connection, connection.Active(),
+		tab := connection.Active()
+		// A press on a border that never moved reaches the pane it belongs to, as a press
+		// inside that pane does.
+		if held.holds(dragTreeEdge) {
+			if tab != nil {
+				tab.Focus = app.PaneSidebar
+			}
+			return model, nil
+		}
+		if !held.holds(dragSplitLine) {
+			return model, nil
+		}
+		if held.splitFromResult {
+			if tab != nil {
+				tab.Focus = app.PaneResult
+			}
+			return model, nil
+		}
+		// A press on the foot of the editor that never moved hides the result, or brings
+		// it back.
+		return model.runAction(connection, tab,
 			Match{Action: ActionToggleResult, Scope: cfg.ScopeGlobal})
 	}
 	if !model.selection.dragging {
@@ -726,6 +761,13 @@ func (model *Model) pressWorkspace(mouse tea.Mouse) (tea.Model, tea.Cmd) {
 		return model.pressCellRow(connection, tab, mouse, row)
 	}
 	if mouse.X <= model.layout.treeTo && mouse.X >= model.layout.treeFrom {
+		// The right border of the tree is the line between it and the panes: a drag on it
+		// sets the width of the tree.
+		if mouse.X == model.layout.treeTo && mouse.Button == tea.MouseLeft {
+			model.selection = screenSelection{}
+			model.drag.takeTreeEdge()
+			return model, nil
+		}
 		tab.Focus = app.PaneSidebar
 		return model, nil
 	}
@@ -740,13 +782,21 @@ func (model *Model) pressWorkspace(mouse tea.Mouse) (tea.Model, tea.Cmd) {
 			// The drag takes the press. A press that never moves is answered on the
 			// release, so a drag does not hide the result on its way past.
 			model.selection = screenSelection{}
-			model.drag.takeSplitLine()
+			model.drag.takeSplitLine(false)
 			return model, nil
 		}
 		return model.pressEditor(connection, tab, mouse)
 	}
 	if mouse.Y >= model.layout.resultTop &&
 		mouse.Y < model.layout.resultTop+model.layout.resultRows {
+		// The top border of the result is the other side of the line between the two
+		// panes, so a drag on it moves the line as a drag on the editor border does.
+		if mouse.Y == model.layout.resultTop && model.layout.editorRows > 0 &&
+			mouse.Button == tea.MouseLeft {
+			model.selection = screenSelection{}
+			model.drag.takeSplitLine(true)
+			return model, nil
+		}
 		return model.pressResultPane(connection, tab, mouse)
 	}
 	return model, nil
