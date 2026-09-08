@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"strings"
 	"time"
 
@@ -80,8 +79,7 @@ const (
 // the server closed. The statement of the user has failed already, so the wait belongs to
 // this call and not to the next one, which carries a time limit of its own.
 func (session *sqlserverSession) markBroken(ctx context.Context, err error) {
-	if ctx.Err() == nil && !errors.Is(err, driver.ErrBadConn) &&
-		!errors.Is(err, sql.ErrConnDone) {
+	if !db.IsBrokenConnection(ctx, err) {
 		return
 	}
 	session.broken = true

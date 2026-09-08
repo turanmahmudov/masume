@@ -42,6 +42,8 @@ var imageEngines = []struct {
 	{"percona", core.EngineMysql},
 	{"mongodb", core.EngineMongo},
 	{"azure-sql-edge", core.EngineSqlserver},
+	{"clickhouse-server", core.EngineClickhouse},
+	{"clickhouse", core.EngineClickhouse},
 	{"mongo", core.EngineMongo},
 	{"mysql", core.EngineMysql},
 	{"postgres", core.EnginePostgres},
@@ -284,6 +286,20 @@ func applySqlserverEnvironment(profile *cfg.Profile, environment map[string]stri
 	profile.Database = "master"
 }
 
+// applyClickhouseEnvironment fills a ClickHouse image. The image starts with the `default`
+// user and the `default` database, and takes a user, a password and a database of its own.
+func applyClickhouseEnvironment(profile *cfg.Profile, environment map[string]string) {
+	profile.User = findFirstValue(environment, "CLICKHOUSE_USER")
+	if profile.User == "" {
+		profile.User = "default"
+	}
+	profile.Password = findFirstValue(environment, "CLICKHOUSE_PASSWORD")
+	profile.Database = findFirstValue(environment, "CLICKHOUSE_DB")
+	if profile.Database == "" {
+		profile.Database = "default"
+	}
+}
+
 // resolveContainerSSLMode permits non-TLS connections for local containers.
 func resolveContainerSSLMode(engine core.Engine) core.SSLMode {
 	mode := core.ResolveEngineInfo(engine).DefaultSSLMode
@@ -343,6 +359,8 @@ func buildContainerProfile(held container) (cfg.Profile, bool) {
 		applyMongoEnvironment(&profile, environment)
 	case core.FamilySqlserver:
 		applySqlserverEnvironment(&profile, environment)
+	case core.FamilyClickhouse:
+		applyClickhouseEnvironment(&profile, environment)
 	}
 	return profile, true
 }

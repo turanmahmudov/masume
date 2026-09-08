@@ -228,10 +228,10 @@ func BuildUpdateStatement(
 	named := dialect.BuildQualifiedName(target.Table)
 
 	return query.BoundStatement{
-		SQL: fmt.Sprintf("update %s set %s where %s",
+		SQL: dialect.BuildUpdateRow(
 			named, strings.Join(clauses, ", "), predicate.text),
 		Params: append(append([]any{}, bound.Params...), predicate.params...),
-		Description: fmt.Sprintf("update %s set %s where %s",
+		Description: dialect.BuildUpdateRow(
 			target.Table.Name, strings.Join(summary, ", "), predicate.summary),
 	}, nil
 }

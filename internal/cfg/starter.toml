@@ -15,7 +15,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 # [profile.shop]
-# engine               = "postgres"   # postgres mysql sqlserver sqlite mongodb cockroach
+# engine               = "postgres"   # postgres mysql sqlserver clickhouse sqlite mongodb
 #                                     # timescale redshift neon supabase mariadb tidb
 #                                     # planetscale aurora-mysql
 # host                 = "127.0.0.1"

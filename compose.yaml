@@ -66,6 +66,26 @@ services:
       timeout: 10s
       retries: 90
 
+  # The image takes the user, the password and the database from the environment. The data
+  # stays in the container instead of a tmpfs, because the server writes it as a user of
+  # its own. The server needs many open files, and the image says so itself.
+  clickhouse:
+    image: ${MASUME_TEST_CLICKHOUSE_IMAGE:-clickhouse/clickhouse-server:25.8-alpine}
+    environment:
+      CLICKHOUSE_PASSWORD: Masume_2024
+      CLICKHOUSE_DB: shop
+    ports:
+      - "127.0.0.1:55900:9000"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--password", "Masume_2024", "-q", "select 1"]
+      interval: 1s
+      timeout: 5s
+      retries: 90
+
   mongo:
     image: ${MASUME_TEST_MONGO_IMAGE:-mongo:8}
     ports:

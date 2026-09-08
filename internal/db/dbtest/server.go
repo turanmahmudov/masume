@@ -7,6 +7,7 @@
 //	MASUME_TEST_POSTGRES=postgres://postgres:secret@127.0.0.1:55432/shop
 //	MASUME_TEST_MYSQL=mysql://root:secret@127.0.0.1:55306/shop
 //	MASUME_TEST_SQLSERVER=sqlserver://sa:Masume_2024@127.0.0.1:55433/shop
+//	MASUME_TEST_CLICKHOUSE=clickhouse://default:Masume_2024@127.0.0.1:55900/shop
 //	MASUME_TEST_MONGO=mongodb://127.0.0.1:55017/shop
 //	MASUME_TEST_MONGO_AUTH=mongodb://root:secret@127.0.0.1:55018/shop
 //	MASUME_TEST_MONGO_RS=mongodb://127.0.0.1:55020/shop
@@ -62,6 +63,9 @@ var (
 	Mongo     = Target{Variable: "MASUME_TEST_MONGO", Engine: core.EngineMongo, DefaultPort: 27017}
 	Sqlserver = Target{
 		Variable: "MASUME_TEST_SQLSERVER", Engine: core.EngineSqlserver, DefaultPort: 1433,
+	}
+	Clickhouse = Target{
+		Variable: "MASUME_TEST_CLICKHOUSE", Engine: core.EngineClickhouse, DefaultPort: 9000,
 	}
 	// MongoAuth is the same engine on a server that authenticates every command.
 	MongoAuth = Target{

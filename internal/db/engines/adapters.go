@@ -7,6 +7,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/db/auroramysql"
+	"github.com/turanmahmudov/masume/internal/db/clickhouse"
 	"github.com/turanmahmudov/masume/internal/db/mariadb"
 	"github.com/turanmahmudov/masume/internal/db/mongo"
 	"github.com/turanmahmudov/masume/internal/db/mysql"
@@ -23,11 +24,12 @@ type Adapters map[core.Engine]db.Adapter
 // CreateAdapters builds adapters with engine-specific metadata and protocol settings.
 func CreateAdapters() Adapters {
 	return Adapters{
-		core.EnginePostgres:  postgres.NewAdapter(postgres.Support, postgres.FlavourStandard),
-		core.EngineMysql:     mysql.NewAdapter(mysql.Support, mysql.FlavourStandard),
-		core.EngineSqlite:    sqlite.NewAdapter(sqlite.Support),
-		core.EngineMongo:     mongo.NewAdapter(mongo.Support),
-		core.EngineSqlserver: sqlserver.NewAdapter(sqlserver.Support),
+		core.EnginePostgres:   postgres.NewAdapter(postgres.Support, postgres.FlavourStandard),
+		core.EngineMysql:      mysql.NewAdapter(mysql.Support, mysql.FlavourStandard),
+		core.EngineSqlite:     sqlite.NewAdapter(sqlite.Support),
+		core.EngineMongo:      mongo.NewAdapter(mongo.Support),
+		core.EngineSqlserver:  sqlserver.NewAdapter(sqlserver.Support),
+		core.EngineClickhouse: clickhouse.NewAdapter(clickhouse.Support),
 
 		// These use the PostgreSQL protocol.
 		core.EngineCockroach: postgres.NewAdapter(ResolveSupport(core.EngineCockroach), postgres.FlavourCockroach),

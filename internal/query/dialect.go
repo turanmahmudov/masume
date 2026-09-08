@@ -63,10 +63,16 @@ type Dialect struct {
 	CanCompareType func(dataType string) bool
 	// IdentityColumn is the column a new table numbers its rows with.
 	IdentityColumn string
+	// TableSuffix writes the clause a new table needs after its columns, ordered by that
+	// column. A dialect that leaves it unset needs none.
+	TableSuffix func(keyColumn string) string
 	// ColumnTypes is the server type for each imported value kind.
 	ColumnTypes map[core.ColumnKind]string
 	// BindLimit is the maximum placeholders per statement. Zero uses the default 16-bit protocol limit.
 	BindLimit int
+	// UpdateRow writes the statement that assigns columns of one row. A dialect that
+	// leaves it unset writes `update … set … where …`.
+	UpdateRow func(dialect *Dialect, target, assignments, predicate string) string
 	// AddColumn and RenameTable are dialect-specific ALTER builders. A dialect that leaves
 	// one unset writes the standard form.
 	AddColumn   func(dialect *Dialect, table QualifiedName) string
@@ -134,6 +140,23 @@ func (dialect *Dialect) BuildColumnType(kind core.ColumnKind) string {
 // BuildQualifiedName writes a relation with its schema.
 func (dialect *Dialect) BuildQualifiedName(target QualifiedName) string {
 	return dialect.QuoteIdentifier(target.Schema) + "." + dialect.QuoteIdentifier(target.Name)
+}
+
+// BuildTableSuffix writes the clause a new table needs after its columns. The key column is
+// the one the rows are ordered by, and is empty where the table has none.
+func (dialect *Dialect) BuildTableSuffix(keyColumn string) string {
+	if dialect.TableSuffix == nil {
+		return ""
+	}
+	return dialect.TableSuffix(keyColumn)
+}
+
+// BuildUpdateRow writes the statement that assigns columns of one row.
+func (dialect *Dialect) BuildUpdateRow(target, assignments, predicate string) string {
+	if dialect.UpdateRow != nil {
+		return dialect.UpdateRow(dialect, target, assignments, predicate)
+	}
+	return fmt.Sprintf("update %s set %s where %s", target, assignments, predicate)
 }
 
 // BuildAddColumn writes the statement that adds a column to a relation.

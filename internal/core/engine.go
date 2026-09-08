@@ -23,6 +23,7 @@ const (
 	EnginePlanetscale Engine = "planetscale"
 	EngineAuroraMysql Engine = "aurora-mysql"
 	EngineSqlserver   Engine = "sqlserver"
+	EngineClickhouse  Engine = "clickhouse"
 	EngineMongo       Engine = "mongodb"
 )
 
@@ -32,6 +33,7 @@ var Engines = []Engine{
 	EngineCockroach, EngineTimescale, EngineRedshift, EngineNeon, EngineSupabase,
 	EngineMariadb, EngineTidb, EnginePlanetscale, EngineAuroraMysql,
 	EngineSqlserver,
+	EngineClickhouse,
 	EngineMongo,
 }
 
@@ -43,11 +45,12 @@ type Family string
 
 // The supported database protocols.
 const (
-	FamilyPostgres  Family = "postgres"
-	FamilyMysql     Family = "mysql"
-	FamilySqlite    Family = "sqlite"
-	FamilySqlserver Family = "sqlserver"
-	FamilyMongo     Family = "mongo"
+	FamilyPostgres   Family = "postgres"
+	FamilyMysql      Family = "mysql"
+	FamilySqlite     Family = "sqlite"
+	FamilySqlserver  Family = "sqlserver"
+	FamilyClickhouse Family = "clickhouse"
+	FamilyMongo      Family = "mongo"
 )
 
 // Capabilities is the set of supported engine operations.
@@ -156,6 +159,30 @@ var sqlserverCapabilities = Capabilities{
 	AppliesChangesTogether: true,
 }
 
+var clickhouseCapabilities = Capabilities{
+	// EXPLAIN returns the plan of a read. No plan carries a measurement of a run.
+	PlansStatement:      true,
+	MeasuresPlan:        false,
+	PlansEveryStatement: false,
+	// system.processes lists the running queries, and KILL QUERY stops one.
+	HasServerSessions: true,
+	// The server takes no lock a session waits for.
+	ReportsLockWaits:    false,
+	ReportsServerLoad:   true,
+	CancelsRunningQuery: true,
+	// Transactions are experimental, so this client offers none.
+	HasTransactions: false,
+	SortsRead:       true,
+	TruncatesTable:  true,
+	WritesDDL:       true,
+	// A write is a mutation of its own shape, which the write plan does not read.
+	PlansWrites: false,
+	// `set readonly = 1` refuses every write on the server.
+	TakesReadOnlyMode: true,
+	// Without a transaction, every change stands on its own.
+	AppliesChangesTogether: false,
+}
+
 var engineRegistry = map[Engine]EngineInfo{
 	EnginePostgres: {
 		Engine: EnginePostgres, Family: FamilyPostgres, Capabilities: postgresCapabilities,
@@ -254,6 +281,15 @@ var engineRegistry = map[Engine]EngineInfo{
 		Engine: EngineSqlserver, Family: FamilySqlserver, Capabilities: sqlserverCapabilities,
 		DefaultPort: 1433, NeedsUser: true, NeedsPassword: true,
 		URLSchemes: []string{"sqlserver", "mssql"}, SystemSchemas: sqlserverSystemSchemas,
+	},
+	EngineClickhouse: {
+		Engine: EngineClickhouse, Family: FamilyClickhouse,
+		Capabilities: clickhouseCapabilities,
+		DefaultPort:  9000, NeedsUser: true, NeedsPassword: true,
+		URLSchemes: []string{"clickhouse"},
+		// The server holds the catalog twice: once as `system`, and once as the standard
+		// views under two names of one database. `default` holds tables of the user.
+		SystemSchemas: []string{"system", "information_schema"},
 	},
 	EngineSqlite: {
 		Engine: EngineSqlite, Family: FamilySqlite,

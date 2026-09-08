@@ -209,6 +209,8 @@ Up and Down select a session. Enter replaces the current query text with that se
 
 SQL Server has no statement that stops one statement of another session, so `x` reports the action as unsupported. `Ctrl+D` runs `KILL`, which ends the session and its transaction.
 
+ClickHouse lists running statements instead of sessions. Both stop actions run `KILL QUERY`, which ends the statement and not the connection. The number of a row is the row of the list, because the server names a statement with a text of its own.
+
 MongoDB lists operations instead of SQL sessions. Both stop actions use `killOp`; neither action terminates the connection.
 
 ## Palette operations

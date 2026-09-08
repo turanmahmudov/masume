@@ -11,6 +11,7 @@ Engine support and test coverage are separate. The tables describe implemented b
 | PostgreSQL | 14 and 18 |
 | MySQL | 8.0 and 8.4 |
 | SQL Server | 2019 and 2022 |
+| ClickHouse | 25.8 |
 | MariaDB | 11 |
 | MongoDB | 8, as a standalone server, with authentication, and as a replica set |
 | SQLite | Temporary files without a server |
@@ -31,6 +32,7 @@ Engines in one protocol family share a driver. Catalogs, SQL features, permissio
 | MySQL | MySQL, MariaDB, TiDB, PlanetScale, Aurora MySQL |
 | SQLite | SQLite |
 | TDS | SQL Server |
+| ClickHouse native | ClickHouse |
 | MongoDB wire | MongoDB |
 
 ## Capabilities by engine
@@ -42,6 +44,7 @@ The following table contains the default flags before deployment checks:
 | Engine | Plans | Measures | Transactions | Cancels | Activity | Locks | Load | Sorts | Truncates | DDL |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | aurora-mysql | yes | yes | yes | yes | yes | no | yes | yes | yes | yes |
+| clickhouse | yes | no | no | yes | yes | no | yes | yes | yes | yes |
 | cockroach | yes | yes | yes | no | no | no | no | yes | yes | yes |
 | mariadb | yes | yes | yes | yes | yes | no | yes | yes | yes | yes |
 | mongodb | yes | yes | yes | no | yes | no | no | yes | no | no |
@@ -74,10 +77,10 @@ Other default flags are:
 | Flag | Default |
 | --- | --- |
 | Plans every statement | CockroachDB only |
-| Write previews | Every SQL engine; no MongoDB |
+| Write previews | Every SQL engine except ClickHouse; no MongoDB |
 | Read-only mode | Every engine except TiDB; MongoDB and SQL Server enforcement is client-only |
-| Atomic staged changes | Every engine; MongoDB adjusts this after connection |
-| Statement statistics | No engine before connection; PostgreSQL-family sessions enable this after an extension check, and SQL Server sessions after a permission check |
+| Atomic staged changes | Every engine except ClickHouse, which holds no transaction; MongoDB adjusts this after connection |
+| Statement statistics | No engine before connection; PostgreSQL-family sessions enable this after an extension check, SQL Server sessions after a permission check, and ClickHouse sessions after a check of its query log |
 
 ## Dashboard metrics
 
@@ -87,6 +90,7 @@ The dashboard omits unsupported panels. Activity, lock relationships, server loa
 | --- | --- | --- |
 | PostgreSQL, TimescaleDB, Neon, Supabase | Activity, locks, connections, connection limit, start time, transaction count, WAL bytes, temporary files, cache hits, replication lag | PostgreSQL statistics views, functions, and sufficient permissions |
 | MySQL, MariaDB, Aurora MySQL | Activity, connections, connection limit, start time | `information_schema.processlist`, `performance_schema.global_status`, and `@@max_connections` |
+| ClickHouse | Running statements, connections, connection limit, start time, statement statistics | `system.processes`, `system.metrics`, `system.server_settings`, and `system.query_log` |
 | SQL Server | Activity, locks, connections, connection limit, start time, statement statistics | `sys.dm_exec_sessions`, `sys.dm_exec_requests`, `sys.dm_tran_locks`, `sys.dm_os_sys_info`, and the VIEW SERVER STATE permission |
 | Redshift, TiDB | Activity only | The adapter's activity query and sufficient permissions |
 | MongoDB | Current operations | `currentOp` and sufficient permissions |
@@ -96,6 +100,8 @@ PostgreSQL metrics use `pg_stat_activity`, `pg_locks`, `pg_stat_database`, WAL f
 
 PostgreSQL-family statement statistics need an available `pg_stat_statements` extension. masume checks the extension catalog when the session opens, except for engine variants without that catalog. The server must load the extension and permit access to its statistics. The panel contains call counts, mean execution time, total execution time, and returned rows.
 
+ClickHouse statement statistics come from `system.query_log`, which the server must be configured to write. masume reads that table once when the session opens and offers the panel where the read succeeds. One row of the panel stands for one shape of statement, grouped by the hash the server normalizes it to.
+
 SQL Server statement statistics come from `sys.dm_exec_query_stats`, which needs the VIEW SERVER STATE permission. masume reads that view once when the session opens and offers the panel where the read succeeds. SQL Server load metrics do not include the PostgreSQL counters, cache hit rate, or replication lag.
 
 MySQL-family load metrics do not include PostgreSQL counters, cache hit rate, replication lag, or statement statistics. MariaDB's `performance_schema.global_status` table requires version 10.5.2 or later and an available Performance Schema. The adapter does not read MySQL lock relationships.
@@ -104,7 +110,7 @@ Static capability flags do not check every statistics view, extension setting, o
 
 ## Read-only access
 
-The client refuses recognized writes for read-only profiles. PostgreSQL-family sessions also request server read-only mode. MySQL and MariaDB use `SET SESSION TRANSACTION READ ONLY`. SQLite opens existing files with `mode=ro`; MongoDB and SQL Server have client-only checks.
+The client refuses recognized writes for read-only profiles. PostgreSQL-family sessions also request server read-only mode. MySQL and MariaDB use `SET SESSION TRANSACTION READ ONLY`. SQLite opens existing files with `mode=ro`. ClickHouse uses `SET readonly = 2`, which refuses a write and still takes the settings the driver sends. MongoDB and SQL Server have client-only checks.
 
 TiDB does not enforce the session read-only statement. An explicit TiDB profile with `mode = "read-only"` fails during connection.
 
@@ -117,6 +123,7 @@ Client classification cannot guarantee that a read has no side effects. Database
 | Engine | Port | Default `sslmode` |
 | --- | --- | --- |
 | aurora-mysql | 3306 | `prefer` |
+| clickhouse | 9000 | unset; no TLS |
 | cockroach | 26257 | `prefer` |
 | mariadb | 3306 | `prefer` |
 | mongodb | 27017 | unset; no TLS |
@@ -134,6 +141,8 @@ Client classification cannot guarantee that a read has no side effects. Database
 The table contains effective defaults. Most PostgreSQL-family and MySQL-family defaults are unset internally and behave as `prefer`.
 
 For PostgreSQL-family and MySQL-family engines, `allow` and `prefer` permit unencrypted fallback. `require` requires TLS without certificate verification. `verify-ca` checks the certificate chain; `verify-full` also checks the host name. Verification uses the system trust roots.
+
+ClickHouse differs: the native protocol does not negotiate, so unset and `allow` and `prefer` connect without encryption. `require` encrypts without certificate verification, and `verify-ca` and `verify-full` verify it. An encrypted ClickHouse listens on a port of its own, which is 9440 by default.
 
 SQL Server differs: unset and `allow` and `prefer` encrypt the login and send the rest of the session unencrypted. `disable` encrypts nothing. `require` encrypts the whole session without certificate verification, and `verify-ca` and `verify-full` verify it.
 
@@ -224,6 +233,24 @@ An estimated plan comes from `SET SHOWPLAN_ALL ON` and a measured plan from `SET
 The dashboard stops another session with `KILL`, which ends the session and its transaction. T-SQL has no statement that stops one statement of another session, so the activity list offers no cancel, and neither does the interface for a statement of this connection: `Ctrl+X` is unavailable on a SQL Server connection. Set `statement_timeout_ms` to bound a statement instead. The client stops such a statement through the driver, and it opens the connection again afterwards, because a stopped statement leaves the connection unusable. A transaction is lost with that connection, and the client says so.
 
 The server has no read-only session, so a read-only profile is enforced by this client alone. It also has no materialized view; an indexed view appears as a view.
+
+## ClickHouse
+
+masume connects to ClickHouse over its native protocol, on port 9000 by default. A ClickHouse database is a schema, and the connected one is the default.
+
+The protocol takes one statement per call, so a buffer of several statements runs one at a time and answers with the result of the last one. Such a buffer binds no values: a `:name` parameter belongs to a buffer that holds one statement.
+
+The server holds no transaction of the user, so begin, commit and rollback are refused, and staged changes are applied one after another. A change that fails leaves the changes before it in place, and the report names the change that failed.
+
+A staged edit of a row is written as `ALTER TABLE … UPDATE`, which is a mutation of the table. The session sets `mutations_sync = 1`, so the server finishes the mutation before it answers and the grid reads the row back as it now stands. A staged delete is written as `DELETE FROM`. A write reports no row count: the server counts the rows of a mutation nowhere the client can read.
+
+The server has no foreign key and keeps the constraints of a table in the statement that made it, so the relation panes show neither, and the diagram draws no relationship. The sorting key of a table appears as its primary index, and the data-skipping indexes appear beside it. A materialized view appears as one, and the table it keeps its rows in is hidden.
+
+A new table needs an engine, so the object menu writes `ENGINE = MergeTree` with the order the table keeps its rows in. An import writes the same, ordered by the first column of the file. The server numbers no column of its own, so a new table carries a plain `UInt64` key.
+
+`EXPLAIN` returns the plan of a read, as one step per line. No plan carries a measurement of a run, so the pane shows the estimate alone. Statement diagnostics use `EXPLAIN PLAN`, which reads every name of a read without running it; a statement that is not a read is not checked.
+
+`KILL QUERY` stops one statement, and both stop actions of the activity list use it: a statement of this server belongs to no session that can be closed. The server names a statement with a text of its own, so the list of this client counts its rows instead, and a stop acts on the row that was listed.
 
 ## Choosing the engine
 

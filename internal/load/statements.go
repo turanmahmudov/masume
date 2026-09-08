@@ -18,8 +18,17 @@ func BuildCreateTable(plan Plan, dialect *query.Dialect) string {
 		lines = append(lines, "  "+dialect.QuoteIdentifierIfNeeded(mapping.Target)+
 			" "+dialect.BuildColumnType(mapping.Kind))
 	}
-	return fmt.Sprintf("create table %s (\n%s\n)",
+	written := fmt.Sprintf("create table %s (\n%s\n)",
 		dialect.BuildQualifiedName(plan.Table), strings.Join(lines, ",\n"))
+	// A server that needs an engine orders the rows of the table by its first column.
+	first := ""
+	if len(mapped) > 0 {
+		first = dialect.QuoteIdentifierIfNeeded(mapped[0].Target)
+	}
+	if suffix := dialect.BuildTableSuffix(first); suffix != "" {
+		written += "\n" + suffix
+	}
+	return written
 }
 
 // writeInsert returns one INSERT statement. The write callback is the value renderer or parameter binder.

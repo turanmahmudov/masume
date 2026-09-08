@@ -68,7 +68,7 @@ Both interfaces share database tools, but their policies differ. See [AI data sh
 
 ## Features
 
-**Multiple engines:** PostgreSQL, MySQL, SQL Server, SQLite and MongoDB, plus hosted services based on them
+**Multiple engines:** PostgreSQL, MySQL, SQL Server, ClickHouse, SQLite and MongoDB, plus hosted services based on them
 
 **MCP server:** `masume --mcp` exposes selected profiles to an agent over stdio, with an access level per profile and for the whole server
 

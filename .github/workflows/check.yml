@@ -121,18 +121,22 @@ jobs:
             postgres: postgres:18-alpine
             mysql: mysql:8.4
             sqlserver: mcr.microsoft.com/mssql/server:2022-latest
+            clickhouse: clickhouse/clickhouse-server:25.8-alpine
           - name: oldest supported
             postgres: postgres:14-alpine
             mysql: mysql:8.0
             sqlserver: mcr.microsoft.com/mssql/server:2019-latest
+            clickhouse: clickhouse/clickhouse-server:24.8-alpine
           - name: mariadb
             postgres: postgres:18-alpine
             mysql: mariadb:11
             sqlserver: mcr.microsoft.com/mssql/server:2022-latest
+            clickhouse: clickhouse/clickhouse-server:25.8-alpine
     env:
       MASUME_TEST_POSTGRES_IMAGE: ${{ matrix.postgres }}
       MASUME_TEST_MYSQL_IMAGE: ${{ matrix.mysql }}
       MASUME_TEST_SQLSERVER_IMAGE: ${{ matrix.sqlserver }}
+      MASUME_TEST_CLICKHOUSE_IMAGE: ${{ matrix.clickhouse }}
     steps:
       - uses: actions/checkout@v7
         with:

@@ -5,6 +5,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/db/auroramysql"
+	"github.com/turanmahmudov/masume/internal/db/clickhouse"
 	"github.com/turanmahmudov/masume/internal/db/cockroach"
 	"github.com/turanmahmudov/masume/internal/db/mariadb"
 	"github.com/turanmahmudov/masume/internal/db/mongo"
@@ -27,7 +28,8 @@ var support = map[core.Engine]db.EngineSupport{
 	core.EngineSqlite:   sqlite.Support,
 	core.EngineMongo:    mongo.Support,
 
-	core.EngineSqlserver: sqlserver.Support,
+	core.EngineSqlserver:  sqlserver.Support,
+	core.EngineClickhouse: clickhouse.Support,
 
 	core.EngineCockroach: cockroach.Support,
 	core.EngineTimescale: timescale.Support,

@@ -112,8 +112,12 @@ func GenerateDrop(table query.QualifiedName, kind string, dialect *query.Dialect
 // GenerateCreateTable writes a CREATE TABLE with the identity column of the engine.
 func GenerateCreateTable(schema string, dialect *query.Dialect) string {
 	target := dialect.BuildQualifiedName(query.QualifiedName{Schema: schema, Name: "new_table"})
-	return "create table " + target + " (\n    " + dialect.IdentityColumn +
-		",\n    name " + dialect.BuildColumnType(core.KindText) + " not null\n);"
+	written := "create table " + target + " (\n    " + dialect.IdentityColumn +
+		",\n    name " + dialect.BuildColumnType(core.KindText) + " not null\n)"
+	if suffix := dialect.BuildTableSuffix("id"); suffix != "" {
+		written += "\n" + suffix
+	}
+	return written + ";"
 }
 
 // GenerateCreateView writes a CREATE VIEW.

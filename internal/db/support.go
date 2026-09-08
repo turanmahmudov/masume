@@ -3,7 +3,10 @@ package db
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -81,7 +84,7 @@ func HoldsReturningClause(sql string, flavour syntax.SyntaxFlavour) bool {
 }
 
 // ReadNonNegativeCount reads a catalog count, which is an estimate and never below
-// zero.
+// zero. A server that counts in unsigned numbers is read as well.
 func ReadNonNegativeCount(value any) int64 {
 	switch held := value.(type) {
 	case nil:
@@ -98,6 +101,22 @@ func ReadNonNegativeCount(value any) int64 {
 		if held > 0 {
 			return int64(held)
 		}
+	case uint64:
+		if held <= math.MaxInt64 {
+			return int64(held)
+		}
+		return math.MaxInt64
+	case uint32:
+		return int64(held)
+	case uint16:
+		return int64(held)
+	case uint8:
+		return int64(held)
+	case uint:
+		if uint64(held) <= math.MaxInt64 {
+			return int64(held)
+		}
+		return math.MaxInt64
 	case float64:
 		if held > 0 {
 			return int64(held)
@@ -341,6 +360,17 @@ func ApplyChangesInTransaction(
 		}
 	}
 	return nil
+}
+
+// IsBrokenConnection is true where the connection cannot take another statement. A stopped
+// statement leaves the socket of a driver unusable, and so does a connection the server
+// closed. An adapter that pins one connection opens it again after this.
+func IsBrokenConnection(ctx context.Context, err error) bool {
+	if err == nil {
+		return false
+	}
+	return ctx.Err() != nil || errors.Is(err, driver.ErrBadConn) ||
+		errors.Is(err, sql.ErrConnDone)
 }
 
 // SideConnection is a lazily opened connection for independent server operations.
