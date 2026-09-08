@@ -171,16 +171,37 @@ func BuildRelationSQL(
 	return statement
 }
 
+// keepSubquerySort returns the sort of a subquery with the clause the dialect needs to
+// accept a sort there.
+func keepSubquerySort(orderBy string, dialect *query.Dialect) string {
+	if orderBy == "" || dialect.Paging.SortKeeper == "" {
+		return orderBy
+	}
+	return orderBy + " " + dialect.Paging.SortKeeper
+}
+
+// sortBeforeWindow returns the sort a page window needs where the read has none.
+func sortBeforeWindow(orderBy string, dialect *query.Dialect) string {
+	if orderBy != "" {
+		return orderBy
+	}
+	return dialect.Paging.EmptySort
+}
+
 // ApplyWhere wraps the query with a filter and moves trailing limit clauses outside. ORDER BY remains inside the subquery.
-func ApplyWhere(sql, predicate string, flavour syntax.SyntaxFlavour) string {
+func ApplyWhere(sql, predicate string, dialect *query.Dialect) string {
 	trimmed := strings.TrimSpace(predicate)
-	parts := SplitStatement(sql, flavour)
+	parts := SplitStatement(sql, dialect.Syntax)
 	if trimmed == "" || parts.Body == "" {
 		return sql
 	}
-	inner := joinInner(parts.Body, parts.OrderBy)
+	inner := joinInner(parts.Body, keepSubquerySort(parts.OrderBy, dialect))
+	outerSort := ""
+	if parts.Tail != "" {
+		outerSort = dialect.Paging.EmptySort
+	}
 	return joinParts(
-		[]string{wrapStatement(inner, filterAlias), "where " + trimmed, parts.Tail},
+		[]string{wrapStatement(inner, filterAlias), "where " + trimmed, outerSort, parts.Tail},
 		parts.Terminator)
 }
 
@@ -200,7 +221,7 @@ func BuildEffectiveSQL(
 ) EffectiveStatement {
 	filtered := sql
 	if predicate != nil {
-		filtered = ApplyWhere(sql, predicate.Text, dialect.Syntax)
+		filtered = ApplyWhere(sql, predicate.Text, dialect)
 	}
 	ordered := filtered
 	if len(sort) > 0 {
@@ -219,28 +240,36 @@ func BuildCountSQL(sql string, dialect *query.Dialect) string {
 	if parts.Body == "" {
 		return sql
 	}
-	inner := joinInner(parts.Body, parts.Tail)
+	sort := ""
+	if parts.Tail != "" {
+		sort = dialect.Paging.EmptySort
+	}
+	inner := joinInner(parts.Body, sort, parts.Tail)
 	return fmt.Sprintf("select %s as total from (\n%s\n) as %s%s",
 		dialect.CountExpression, inner, countAlias, parts.Terminator)
 }
 
 // ApplyPaging adds a page limit and offset, using a subquery when trailing limit clauses exist.
-func ApplyPaging(sql string, limit, offset int, flavour syntax.SyntaxFlavour) string {
-	parts := SplitStatement(sql, flavour)
+func ApplyPaging(sql string, limit, offset int, dialect *query.Dialect) string {
+	parts := SplitStatement(sql, dialect.Syntax)
 	if parts.Body == "" {
 		return sql
 	}
-	window := fmt.Sprintf("limit %d", limit)
-	if offset > 0 {
-		window = fmt.Sprintf("limit %d offset %d", limit, offset)
+	window := dialect.BuildPageWindow(limit, offset)
+	if window == "" {
+		return sql
 	}
 
 	if parts.Tail == "" {
-		return joinParts([]string{parts.Body, parts.OrderBy, window}, parts.Terminator)
+		return joinParts(
+			[]string{parts.Body, sortBeforeWindow(parts.OrderBy, dialect), window},
+			parts.Terminator)
 	}
 	// ORDER BY can reference columns absent from the projection.
 	inner := joinInner(parts.Body, parts.OrderBy, parts.Tail)
-	return joinParts([]string{wrapStatement(inner, pageAlias), window}, parts.Terminator)
+	return joinParts(
+		[]string{wrapStatement(inner, pageAlias), dialect.Paging.EmptySort, window},
+		parts.Terminator)
 }
 
 // DescribeRewrite summarizes the grid sort and filter.

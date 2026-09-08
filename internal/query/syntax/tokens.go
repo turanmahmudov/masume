@@ -171,6 +171,9 @@ func UnquoteIdentifier(name string) string {
 	if name == "" {
 		return name
 	}
+	if name[0] == '[' {
+		return unwrapBracketName(name)
+	}
 	quote := name[0]
 	if quote != '"' && quote != '`' {
 		return name
@@ -180,6 +183,12 @@ func UnquoteIdentifier(name string) string {
 		inner = inner[:len(inner)-1]
 	}
 	return strings.ReplaceAll(inner, string(quote)+string(quote), string(quote))
+}
+
+// unwrapBracketName removes the brackets of a `[name]`, where `]]` is one character.
+func unwrapBracketName(name string) string {
+	inner := strings.TrimSuffix(name[1:], "]")
+	return strings.ReplaceAll(inner, "]]", "]")
 }
 
 // ReadCommandWord returns the opening statement keyword.

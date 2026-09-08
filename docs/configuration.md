@@ -110,11 +110,11 @@ masume ./notes.db
 
 | Form | Read as |
 | --- | --- |
-| A URL | Supported schemes: `postgres`, `postgresql`, `mysql`, `mariadb`, `cockroachdb`, `redshift`, `mongodb` |
+| A URL | Supported schemes: `postgres`, `postgresql`, `mysql`, `mariadb`, `cockroachdb`, `redshift`, `sqlserver`, `mssql`, `mongodb` |
 | A connection string | `key=value` pairs: `engine`, `host`, `hostaddr`, `port`, `dbname`, `database`, `user`, `password`, `sslmode`. The default engine is `postgres` |
 | A file path | A SQLite path ending in `.db`, `.db3`, `.sqlite` or `.sqlite3`. Other extensions require an existing SQLite header. `:memory:` is also accepted |
 
-A URL without a database uses the user name on PostgreSQL-family engines and `admin` on MongoDB. A MySQL URL requires a database. A missing URL host uses `127.0.0.1`.
+A URL without a database uses the user name on PostgreSQL-family engines and `admin` on MongoDB. A MySQL URL requires a database. A SQL Server URL without a database opens the default database of the login. A missing URL host uses `127.0.0.1`.
 
 Connection strings accept single-quoted values and backslash escapes inside quotes. `engine` accepts the profile engine names. Unknown connection string keys are errors.
 

@@ -3,13 +3,16 @@ package syntax
 
 import "strings"
 
-// SyntaxFlavour is the lexer variant. MySQL mode supports # comments and backslash escapes in ordinary strings.
+// SyntaxFlavour is the lexer variant. MySQL mode supports # comments and backslash escapes
+// in ordinary strings. SQL Server mode supports bracket names, N-prefixed strings and
+// @variables.
 type SyntaxFlavour string
 
-// The two ways a buffer is scanned.
+// The three ways a buffer is scanned.
 const (
-	FlavourStandard SyntaxFlavour = "standard"
-	FlavourMysql    SyntaxFlavour = "mysql"
+	FlavourStandard  SyntaxFlavour = "standard"
+	FlavourMysql     SyntaxFlavour = "mysql"
+	FlavourSqlserver SyntaxFlavour = "sqlserver"
 )
 
 // TokenKind is the kind of one part of the buffer.
@@ -115,6 +118,22 @@ func readQuotedEnd(sql string, start int, quote byte, escapes bool) run {
 		}
 		if sql[index] == quote {
 			if at(sql, index+1) == quote {
+				index += 2
+				continue
+			}
+			return run{end: index + 1, terminated: true}
+		}
+		index++
+	}
+	return run{end: len(sql)}
+}
+
+// readBracketEnd scans a `[name]` bracket name. A doubled `]]` is one character of the name.
+func readBracketEnd(sql string, start int) run {
+	index := start + 1
+	for index < len(sql) {
+		if sql[index] == ']' {
+			if at(sql, index+1) == ']' {
 				index += 2
 				continue
 			}
@@ -305,6 +324,41 @@ func scanDollarString(sql string, index int) (Token, bool) {
 	return buildRunToken(TokenString, index, found), true
 }
 
+// scanBracketName scans a SQL Server `[name]`.
+func scanBracketName(sql string, index int) (Token, bool) {
+	if sql[index] != '[' {
+		return Token{}, false
+	}
+	return buildRunToken(TokenQuoted, index, readBracketEnd(sql, index)), true
+}
+
+// scanUnicodeString scans a SQL Server `N'text'`.
+func scanUnicodeString(sql string, index int) (Token, bool) {
+	character := sql[index]
+	if character != 'N' && character != 'n' {
+		return Token{}, false
+	}
+	if at(sql, index+1) != '\'' {
+		return Token{}, false
+	}
+	return buildRunToken(TokenString, index, readQuotedEnd(sql, index+1, '\'', false)), true
+}
+
+// scanVariable scans a SQL Server `@name` parameter and a `@@name` server variable.
+func scanVariable(sql string, index int) (Token, bool) {
+	if sql[index] != '@' {
+		return Token{}, false
+	}
+	start := index + 1
+	if at(sql, start) == '@' {
+		start++
+	}
+	if !isWordStart(at(sql, start)) {
+		return Token{}, false
+	}
+	return Token{Kind: TokenParameter, Start: index, End: readWordEnd(sql, start)}, true
+}
+
 func scanParameter(sql string, index int) (Token, bool) {
 	if sql[index] != '$' || !isDigit(at(sql, index+1)) {
 		return Token{}, false
@@ -356,9 +410,17 @@ var mysqlScanners = []scanner{
 	scanParameter, scanNumber, scanWord, scanOperator,
 }
 
+var sqlserverScanners = []scanner{
+	scanLineComment, scanBlockComment, scanString, scanUnicodeString, scanQuotedName,
+	scanBracketName, scanVariable, scanNumber, scanWord, scanOperator,
+}
+
 func resolveScanners(flavour SyntaxFlavour) []scanner {
-	if flavour == FlavourMysql {
+	switch flavour {
+	case FlavourMysql:
 		return mysqlScanners
+	case FlavourSqlserver:
+		return sqlserverScanners
 	}
 	return standardScanners
 }

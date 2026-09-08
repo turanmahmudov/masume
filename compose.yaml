@@ -46,6 +46,25 @@ services:
       timeout: 5s
       retries: 120
 
+  # The image has no variable for a database, so the health check creates one. A check runs
+  # until it passes, and the tests start only after it has. The data stays in the container
+  # instead of a tmpfs, because the server writes it as a user of its own.
+  sqlserver:
+    image: ${MASUME_TEST_SQLSERVER_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest}
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: Masume_2024
+      MSSQL_PID: Developer
+    ports:
+      - "127.0.0.1:55433:1433"
+    healthcheck:
+      # sqlcmd 18 needs -C to accept the certificate the server made for itself.
+      test: ["CMD-SHELL",
+             "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\"
+                -Q \"if db_id('shop') is null create database shop\""]
+      interval: 2s
+      timeout: 10s
+      retries: 90
 
   mongo:
     image: ${MASUME_TEST_MONGO_IMAGE:-mongo:8}
@@ -72,9 +91,14 @@ services:
       - "127.0.0.1:55018:27017"
     tmpfs:
       - /data/db
+    # The image starts a server on the loopback address for its own setup, then restarts it
+    # on every address with authentication on. A ping over loopback answers on the first
+    # one too, so the check pings the address of the container, which only the second one
+    # listens on.
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "-u", "root", "-p", "secret",
-             "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL",
+             "mongosh --quiet --host \"$$(hostname -i)\" -u root -p secret
+                --eval \"db.adminCommand('ping')\""]
       interval: 1s
       timeout: 5s
       retries: 60

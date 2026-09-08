@@ -74,3 +74,6 @@ var SQL Language = sqlLanguage{flavour: syntax.FlavourStandard}
 
 // Mysql is the same language, read the way MySQL reads a buffer.
 var Mysql Language = sqlLanguage{flavour: syntax.FlavourMysql}
+
+// Sqlserver is the same language, read the way a SQL Server reads a buffer.
+var Sqlserver Language = sqlLanguage{flavour: syntax.FlavourSqlserver}

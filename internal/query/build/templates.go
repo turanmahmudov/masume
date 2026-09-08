@@ -3,6 +3,7 @@ package build
 import (
 	"strings"
 
+	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
@@ -37,9 +38,12 @@ const (
 	TemplateTrigger          = "trigger"
 )
 
+// generatedSelectRows is the row cap of the generated read.
+const generatedSelectRows = 100
+
 // GenerateSelect builds a query with a 100-row limit.
 func GenerateSelect(table query.QualifiedName, dialect *query.Dialect) string {
-	return "select *\n  from " + dialect.BuildQualifiedName(table) + "\n limit 100;"
+	return dialect.BuildCappedRead(dialect.BuildQualifiedName(table), generatedSelectRows)
 }
 
 // GenerateInsert builds an INSERT with named parameters. Columns with defaults are omitted unless every column has a default.
@@ -69,7 +73,7 @@ func GenerateInsert(
 
 // GenerateAddColumn writes the ALTER that adds a column.
 func GenerateAddColumn(table query.QualifiedName, dialect *query.Dialect) string {
-	return "alter table " + dialect.BuildQualifiedName(table) + "\n  add column new_column text;"
+	return dialect.BuildAddColumn(table)
 }
 
 // buildDerivedName appends a suffix and quotes the identifier when required.
@@ -85,8 +89,7 @@ func GenerateCreateIndex(table query.QualifiedName, dialect *query.Dialect) stri
 
 // GenerateRenameTable builds an ALTER TABLE rename template.
 func GenerateRenameTable(table query.QualifiedName, dialect *query.Dialect) string {
-	renamed := buildDerivedName(table.Name, "_renamed", dialect)
-	return "alter table " + dialect.BuildQualifiedName(table) + "\n  rename to " + renamed + ";"
+	return dialect.BuildRenameTable(table, buildDerivedName(table.Name, "_renamed", dialect))
 }
 
 // GenerateTruncate builds a TRUNCATE TABLE statement.
@@ -109,7 +112,8 @@ func GenerateDrop(table query.QualifiedName, kind string, dialect *query.Dialect
 // GenerateCreateTable writes a CREATE TABLE with the identity column of the engine.
 func GenerateCreateTable(schema string, dialect *query.Dialect) string {
 	target := dialect.BuildQualifiedName(query.QualifiedName{Schema: schema, Name: "new_table"})
-	return "create table " + target + " (\n    " + dialect.IdentityColumn + ",\n    name text not null\n);"
+	return "create table " + target + " (\n    " + dialect.IdentityColumn +
+		",\n    name " + dialect.BuildColumnType(core.KindText) + " not null\n);"
 }
 
 // GenerateCreateView writes a CREATE VIEW.

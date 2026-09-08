@@ -239,7 +239,7 @@ func (session *mysqlSession) countAffected(ctx context.Context) (int64, bool) {
 func (session *mysqlSession) ReadPage(
 	ctx context.Context, read db.ComposedRead, window db.ReadWindow,
 ) (db.QueryResult, error) {
-	return db.ReadSQLPage(ctx, session.RunQuery, read, window, session.Support.Dialect.Syntax)
+	return db.ReadSQLPage(ctx, session.RunQuery, read, window, session.Support.Dialect)
 }
 
 func (session *mysqlSession) CountRead(

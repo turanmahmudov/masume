@@ -207,6 +207,8 @@ Up and Down select a session. Enter replaces the current query text with that se
 
 `x` asks to cancel the selected session's statement. `Ctrl+D` asks to terminate the session and its connection. Confirm either operation before execution. Left collapses the optional panels; Right expands the panels.
 
+SQL Server has no statement that stops one statement of another session, so `x` reports the action as unsupported. `Ctrl+D` runs `KILL`, which ends the session and its transaction.
+
 MongoDB lists operations instead of SQL sessions. Both stop actions use `killOp`; neither action terminates the connection.
 
 ## Palette operations

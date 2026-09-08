@@ -36,22 +36,6 @@ func ReadEnumChoices(columnType string) []string {
 	return choices
 }
 
-// splitCommaList reads a `group_concat` column back into its parts.
-func splitCommaList(value any) []string {
-	written := db.ReadAnyText(value)
-	if written == "" {
-		return nil
-	}
-	parts := []string{}
-	for part := range strings.SplitSeq(written, ",") {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			parts = append(parts, trimmed)
-		}
-	}
-	return parts
-}
-
 // FindDefinition finds the CREATE statement in a SHOW CREATE result. The result column name varies by object type.
 func FindDefinition(row map[string]any) string {
 	for key, value := range row {
@@ -68,42 +52,10 @@ func FindDefinition(row map[string]any) string {
 
 func readMysqlForeignKey(row map[string]any) db.ForeignKey {
 	return db.ForeignKey{
-		Name: db.ReadAnyText(row["name"]), Columns: splitCommaList(row["columns"]),
+		Name: db.ReadAnyText(row["name"]), Columns: db.SplitCommaList(row["columns"]),
 		TargetSchema:  db.ReadAnyText(row["target_schema"]),
 		TargetTable:   db.ReadAnyText(row["target_table"]),
-		TargetColumns: splitCommaList(row["target_columns"]),
+		TargetColumns: db.SplitCommaList(row["target_columns"]),
 		DeleteRule:    query.ParseDeleteRule(db.ReadAnyText(row["delete_rule"])),
 	}
-}
-
-// RenderIndexDefinition builds index SQL from catalog metadata.
-func RenderIndexDefinition(
-	table db.TableRef, name string, isPrimary, isUnique bool, columns any, dialect *query.Dialect,
-) string {
-	names := db.JoinQuoted(splitCommaList(columns), dialect.QuoteIdentifier)
-	if isPrimary {
-		return "primary key (" + names + ")"
-	}
-	unique := ""
-	if isUnique {
-		unique = "unique "
-	}
-	target := dialect.BuildQualifiedName(table.Qualified())
-	return "create " + unique + "index " + dialect.QuoteIdentifier(name) +
-		" on " + target + " (" + names + ")"
-}
-
-// RenderConstraintDefinition writes the constraint as a statement reads it.
-func RenderConstraintDefinition(kind db.ConstraintKind, row map[string]any) string {
-	columns := db.ReadAnyText(row["columns"])
-	switch kind {
-	case db.ConstraintPrimaryKey:
-		return "primary key (" + columns + ")"
-	case db.ConstraintUnique:
-		return "unique (" + columns + ")"
-	case db.ConstraintForeignKey:
-		return "foreign key (" + columns + ") references " +
-			db.ReadAnyText(row["target_table"]) + " (" + db.ReadAnyText(row["target_columns"]) + ")"
-	}
-	return db.ReadAnyText(row["check_clause"])
 }

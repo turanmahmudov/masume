@@ -10,6 +10,7 @@ Engine support and test coverage are separate. The tables describe implemented b
 | --- | --- |
 | PostgreSQL | 14 and 18 |
 | MySQL | 8.0 and 8.4 |
+| SQL Server | 2019 and 2022 |
 | MariaDB | 11 |
 | MongoDB | 8, as a standalone server, with authentication, and as a replica set |
 | SQLite | Temporary files without a server |
@@ -29,6 +30,7 @@ Engines in one protocol family share a driver. Catalogs, SQL features, permissio
 | PostgreSQL | PostgreSQL, CockroachDB, TimescaleDB, Redshift, Neon, Supabase |
 | MySQL | MySQL, MariaDB, TiDB, PlanetScale, Aurora MySQL |
 | SQLite | SQLite |
+| TDS | SQL Server |
 | MongoDB wire | MongoDB |
 
 ## Capabilities by engine
@@ -49,6 +51,7 @@ The following table contains the default flags before deployment checks:
 | postgres | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | redshift | yes | no | yes | yes | yes | no | no | yes | yes | yes |
 | sqlite | yes | no | yes | no | no | no | no | yes | no | yes |
+| sqlserver | yes | yes | yes | no | yes | yes | yes | yes | yes | yes |
 | supabase | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | tidb | yes | yes | yes | yes | yes | no | no | yes | yes | yes |
 | timescale | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
@@ -72,9 +75,9 @@ Other default flags are:
 | --- | --- |
 | Plans every statement | CockroachDB only |
 | Write previews | Every SQL engine; no MongoDB |
-| Read-only mode | Every engine except TiDB; MongoDB enforcement is client-only |
+| Read-only mode | Every engine except TiDB; MongoDB and SQL Server enforcement is client-only |
 | Atomic staged changes | Every engine; MongoDB adjusts this after connection |
-| Statement statistics | No engine before connection; PostgreSQL-family sessions can enable this after an extension check |
+| Statement statistics | No engine before connection; PostgreSQL-family sessions enable this after an extension check, and SQL Server sessions after a permission check |
 
 ## Dashboard metrics
 
@@ -84,6 +87,7 @@ The dashboard omits unsupported panels. Activity, lock relationships, server loa
 | --- | --- | --- |
 | PostgreSQL, TimescaleDB, Neon, Supabase | Activity, locks, connections, connection limit, start time, transaction count, WAL bytes, temporary files, cache hits, replication lag | PostgreSQL statistics views, functions, and sufficient permissions |
 | MySQL, MariaDB, Aurora MySQL | Activity, connections, connection limit, start time | `information_schema.processlist`, `performance_schema.global_status`, and `@@max_connections` |
+| SQL Server | Activity, locks, connections, connection limit, start time, statement statistics | `sys.dm_exec_sessions`, `sys.dm_exec_requests`, `sys.dm_tran_locks`, `sys.dm_os_sys_info`, and the VIEW SERVER STATE permission |
 | Redshift, TiDB | Activity only | The adapter's activity query and sufficient permissions |
 | MongoDB | Current operations | `currentOp` and sufficient permissions |
 | CockroachDB, PlanetScale, SQLite | No dashboard metrics | None |
@@ -92,13 +96,15 @@ PostgreSQL metrics use `pg_stat_activity`, `pg_locks`, `pg_stat_database`, WAL f
 
 PostgreSQL-family statement statistics need an available `pg_stat_statements` extension. masume checks the extension catalog when the session opens, except for engine variants without that catalog. The server must load the extension and permit access to its statistics. The panel contains call counts, mean execution time, total execution time, and returned rows.
 
+SQL Server statement statistics come from `sys.dm_exec_query_stats`, which needs the VIEW SERVER STATE permission. masume reads that view once when the session opens and offers the panel where the read succeeds. SQL Server load metrics do not include the PostgreSQL counters, cache hit rate, or replication lag.
+
 MySQL-family load metrics do not include PostgreSQL counters, cache hit rate, replication lag, or statement statistics. MariaDB's `performance_schema.global_status` table requires version 10.5.2 or later and an available Performance Schema. The adapter does not read MySQL lock relationships.
 
 Static capability flags do not check every statistics view, extension setting, or permission. Missing dependencies can produce dashboard errors.
 
 ## Read-only access
 
-The client refuses recognized writes for read-only profiles. PostgreSQL-family sessions also request server read-only mode. MySQL and MariaDB use `SET SESSION TRANSACTION READ ONLY`. SQLite opens existing files with `mode=ro`; MongoDB has client-only checks.
+The client refuses recognized writes for read-only profiles. PostgreSQL-family sessions also request server read-only mode. MySQL and MariaDB use `SET SESSION TRANSACTION READ ONLY`. SQLite opens existing files with `mode=ro`; MongoDB and SQL Server have client-only checks.
 
 TiDB does not enforce the session read-only statement. An explicit TiDB profile with `mode = "read-only"` fails during connection.
 
@@ -120,6 +126,7 @@ Client classification cannot guarantee that a read has no side effects. Database
 | postgres | 5432 | `prefer` |
 | redshift | 5439 | `require` |
 | sqlite | none | none |
+| sqlserver | 1433 | unset; the login only |
 | supabase | 5432 | `require` |
 | tidb | 4000 | `prefer` |
 | timescale | 5432 | `prefer` |
@@ -127,6 +134,8 @@ Client classification cannot guarantee that a read has no side effects. Database
 The table contains effective defaults. Most PostgreSQL-family and MySQL-family defaults are unset internally and behave as `prefer`.
 
 For PostgreSQL-family and MySQL-family engines, `allow` and `prefer` permit unencrypted fallback. `require` requires TLS without certificate verification. `verify-ca` checks the certificate chain; `verify-full` also checks the host name. Verification uses the system trust roots.
+
+SQL Server differs: unset and `allow` and `prefer` encrypt the login and send the rest of the session unencrypted. `disable` encrypts nothing. `require` encrypts the whole session without certificate verification, and `verify-ca` and `verify-full` verify it.
 
 MongoDB differs: unset or `disable` uses no TLS. Explicit `allow`, `prefer`, and `require` require TLS without certificate verification and have no unencrypted fallback. MongoDB also supports `verify-ca` and `verify-full`.
 
@@ -195,6 +204,26 @@ Collection metadata samples up to 100 documents. Result columns come from the re
 Streaming omits fields first encountered after the first batch and reports an error. Headless output can already be incomplete at that point. See [headless.md](headless.md#memory-and-streaming).
 
 Set a user only for authenticated MongoDB connections. With a user, the adapter supplies credentials; without a user, it supplies none. Authentication settings beyond the profile fields are not available through native URL query options.
+
+## SQL Server
+
+masume connects to SQL Server 2016 and later, and to Azure SQL Database, over TDS. The connection opens one database, and the relations of that database appear under their schemas. `dbo` is the default schema of most logins.
+
+A page after the first is taken with `OFFSET` and `FETCH NEXT`, which the server reads after a sort only. Such a page of a read with no sort of its own gets `ORDER BY (SELECT NULL)`, which keeps the rows in the order the server returns them. That order is not guaranteed between pages, so sort a read whose pages must line up. The first page takes no window at all, and the client caps the rows as it reads them, so a read the server refuses to sort still runs: `select next value for` is one. The generated `SELECT` of the object menu caps its rows with `TOP` instead.
+
+The statement separator is the semicolon. `GO` is a separator of the command-line tools and not of the server, so a buffer that holds one fails. The server also takes `CREATE VIEW`, `CREATE FUNCTION`, `CREATE PROCEDURE` and `CREATE TRIGGER` as the first statement of a batch only, so each one needs a tab or a cell of its own.
+
+An identity column and a computed column both refuse a value from the client, so the row form leaves them out. A rename goes through `sp_rename`, which the object menu writes.
+
+A write with an `OUTPUT` clause answers with rows, and masume shows them in place of a count. The server refuses `OUTPUT` without `INTO` on a table that has an enabled trigger, so such a write needs `OUTPUT INTO` or a disabled trigger.
+
+Statement diagnostics use `sys.dm_exec_describe_first_result_set`, which compiles the statement and returns the fault as a row. A statement with a `:name` parameter is checked once the parameters have values.
+
+An estimated plan comes from `SET SHOWPLAN_ALL ON` and a measured plan from `SET STATISTICS PROFILE ON`. Both carry estimated and counted rows per step; neither carries a time per step.
+
+The dashboard stops another session with `KILL`, which ends the session and its transaction. T-SQL has no statement that stops one statement of another session, so the activity list offers no cancel, and neither does the interface for a statement of this connection: `Ctrl+X` is unavailable on a SQL Server connection. Set `statement_timeout_ms` to bound a statement instead. The client stops such a statement through the driver, and it opens the connection again afterwards, because a stopped statement leaves the connection unusable. A transaction is lost with that connection, and the client says so.
+
+The server has no read-only session, so a read-only profile is enforced by this client alone. It also has no materialized view; an indexed view appears as a view.
 
 ## Choosing the engine
 

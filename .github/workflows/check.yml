@@ -120,15 +120,19 @@ jobs:
           - name: current
             postgres: postgres:18-alpine
             mysql: mysql:8.4
+            sqlserver: mcr.microsoft.com/mssql/server:2022-latest
           - name: oldest supported
             postgres: postgres:14-alpine
             mysql: mysql:8.0
+            sqlserver: mcr.microsoft.com/mssql/server:2019-latest
           - name: mariadb
             postgres: postgres:18-alpine
             mysql: mariadb:11
+            sqlserver: mcr.microsoft.com/mssql/server:2022-latest
     env:
       MASUME_TEST_POSTGRES_IMAGE: ${{ matrix.postgres }}
       MASUME_TEST_MYSQL_IMAGE: ${{ matrix.mysql }}
+      MASUME_TEST_SQLSERVER_IMAGE: ${{ matrix.sqlserver }}
     steps:
       - uses: actions/checkout@v7
         with:

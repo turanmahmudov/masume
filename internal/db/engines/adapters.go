@@ -13,6 +13,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/planetscale"
 	"github.com/turanmahmudov/masume/internal/db/postgres"
 	"github.com/turanmahmudov/masume/internal/db/sqlite"
+	"github.com/turanmahmudov/masume/internal/db/sqlserver"
 	"github.com/turanmahmudov/masume/internal/db/tidb"
 )
 
@@ -22,10 +23,11 @@ type Adapters map[core.Engine]db.Adapter
 // CreateAdapters builds adapters with engine-specific metadata and protocol settings.
 func CreateAdapters() Adapters {
 	return Adapters{
-		core.EnginePostgres: postgres.NewAdapter(postgres.Support, postgres.FlavourStandard),
-		core.EngineMysql:    mysql.NewAdapter(mysql.Support, mysql.FlavourStandard),
-		core.EngineSqlite:   sqlite.NewAdapter(sqlite.Support),
-		core.EngineMongo:    mongo.NewAdapter(mongo.Support),
+		core.EnginePostgres:  postgres.NewAdapter(postgres.Support, postgres.FlavourStandard),
+		core.EngineMysql:     mysql.NewAdapter(mysql.Support, mysql.FlavourStandard),
+		core.EngineSqlite:    sqlite.NewAdapter(sqlite.Support),
+		core.EngineMongo:     mongo.NewAdapter(mongo.Support),
+		core.EngineSqlserver: sqlserver.NewAdapter(sqlserver.Support),
 
 		// These use the PostgreSQL protocol.
 		core.EngineCockroach: postgres.NewAdapter(ResolveSupport(core.EngineCockroach), postgres.FlavourCockroach),

@@ -10,7 +10,7 @@ import (
 )
 
 // inspectedContainers is the answer of `docker inspect`, cut down to the fields this client
-// reads. It holds the five servers of compose.yaml, a container that runs no database, and
+// reads. It holds the servers of compose.yaml, a container that runs no database, and
 // a database container that publishes no port.
 const inspectedContainers = `[
   {
@@ -55,6 +55,17 @@ const inspectedContainers = `[
     }
   },
   {
+    "Name": "/masume-test-sqlserver-1",
+    "Config": {
+      "Image": "mcr.microsoft.com/mssql/server:2022-latest",
+      "Env": ["ACCEPT_EULA=Y", "MSSQL_SA_PASSWORD=Masume_2024", "MSSQL_PID=Developer"],
+      "Labels": {}
+    },
+    "NetworkSettings": {
+      "Ports": {"1433/tcp": [{"HostIp": "127.0.0.1", "HostPort": "55433"}]}
+    }
+  },
+  {
     "Name": "/buildkit",
     "Config": {"Image": "moby/buildkit:buildx-stable-1", "Env": [], "Labels": {}},
     "NetworkSettings": {"Ports": {}}
@@ -88,8 +99,8 @@ func TestBuildProfilesFromInspectionFindsEveryDatabaseContainer(t *testing.T) {
 	for _, profile := range found {
 		names = append(names, profile.Name)
 	}
-	if len(found) != 3 {
-		t.Fatalf("the scan found %v, wanted the three database containers", names)
+	if len(found) != 4 {
+		t.Fatalf("the scan found %v, wanted the four database containers", names)
 	}
 	if _, holds := findProfileNamed(found, "buildkit"); holds {
 		t.Error("a container that runs no database was offered as a connection")
@@ -156,6 +167,7 @@ func TestBuildProfilesFromInspectionReadsTheEnvironmentOfEachFamily(t *testing.T
 	}{
 		{"masume-test-mysql-1", core.EngineMysql, "root", "shop", "secret", 55306},
 		{"masume-test-mongo-auth-1", core.EngineMongo, "root", "shop", "secret", 55018},
+		{"masume-test-sqlserver-1", core.EngineSqlserver, "sa", "master", "Masume_2024", 55433},
 	} {
 		profile, holds := findProfileNamed(found, one.name)
 		if !holds {
@@ -215,6 +227,8 @@ func TestBuildProfilesFromInspectionReadsTheEngineOfTheImage(t *testing.T) {
 		{"ghcr.io/org/postgres@sha256:abc", core.EnginePostgres},
 		{"postgres16", core.EnginePostgres},
 		{"mongodb/mongodb-community-server:8.0", core.EngineMongo},
+		{"mcr.microsoft.com/mssql/server:2022-latest", core.EngineSqlserver},
+		{"mcr.microsoft.com/azure-sql-edge:latest", core.EngineSqlserver},
 	} {
 		written := buildInspectedImage(one.image, core.ResolveDefaultPort(one.engine))
 		found, err := detect.BuildProfilesFromInspection(written)

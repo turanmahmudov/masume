@@ -1,6 +1,7 @@
 package query
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -12,6 +13,21 @@ import (
 type QualifiedName struct {
 	Schema string
 	Name   string
+}
+
+// Paging is how one dialect takes one page of a read.
+type Paging struct {
+	// BuildWindow writes the clause that follows the sort. A dialect that leaves it unset
+	// writes `limit … offset …`. An empty clause leaves the read as it is, and the rows
+	// are capped as they are read.
+	BuildWindow func(limit, offset int) string
+	// EmptySort is the sort a page window needs where the read has none.
+	EmptySort string
+	// SortKeeper is the clause that keeps a sort legal inside a subquery.
+	SortKeeper string
+	// BuildCappedRead writes the read of one relation with a row cap. A dialect that
+	// leaves it unset writes a trailing `limit`.
+	BuildCappedRead func(target string, rows int) string
 }
 
 // Dialect is the SQL generation configuration for an engine family.
@@ -39,6 +55,8 @@ type Dialect struct {
 	CountExpression string
 	// RowLockClause is the capture query locking clause, or empty for dialects without a row lock clause.
 	RowLockClause string
+	// Paging is how this dialect takes one page of a read.
+	Paging Paging
 	// QuoteTextLiteral writes a value as the server would read it, for a person to see.
 	QuoteTextLiteral func(text string) string
 	// CanCompareType is true if the server can compare this type with `=`.
@@ -49,6 +67,10 @@ type Dialect struct {
 	ColumnTypes map[core.ColumnKind]string
 	// BindLimit is the maximum placeholders per statement. Zero uses the default 16-bit protocol limit.
 	BindLimit int
+	// AddColumn and RenameTable are dialect-specific ALTER builders. A dialect that leaves
+	// one unset writes the standard form.
+	AddColumn   func(dialect *Dialect, table QualifiedName) string
+	RenameTable func(dialect *Dialect, table QualifiedName, renamed string) string
 	// DropSchema, DropTrigger, and DropRoutine are dialect-specific DROP builders.
 	DropSchema  func(dialect *Dialect, schema string) string
 	DropTrigger func(dialect *Dialect, schema, name, table string) string
@@ -82,6 +104,25 @@ func (dialect *Dialect) ResolveBindLimit() int {
 	return defaultBindLimit
 }
 
+// BuildPageWindow writes the clause that takes one page of a read.
+func (dialect *Dialect) BuildPageWindow(limit, offset int) string {
+	if dialect.Paging.BuildWindow != nil {
+		return dialect.Paging.BuildWindow(limit, offset)
+	}
+	if offset > 0 {
+		return fmt.Sprintf("limit %d offset %d", limit, offset)
+	}
+	return fmt.Sprintf("limit %d", limit)
+}
+
+// BuildCappedRead writes the read of one relation with a row cap.
+func (dialect *Dialect) BuildCappedRead(target string, rows int) string {
+	if dialect.Paging.BuildCappedRead != nil {
+		return dialect.Paging.BuildCappedRead(target, rows)
+	}
+	return fmt.Sprintf("select *\n  from %s\n limit %d;", target, rows)
+}
+
 // BuildColumnType returns the type this server writes for that kind of value.
 func (dialect *Dialect) BuildColumnType(kind core.ColumnKind) string {
 	if written, known := dialect.ColumnTypes[kind]; known {
@@ -93,6 +134,23 @@ func (dialect *Dialect) BuildColumnType(kind core.ColumnKind) string {
 // BuildQualifiedName writes a relation with its schema.
 func (dialect *Dialect) BuildQualifiedName(target QualifiedName) string {
 	return dialect.QuoteIdentifier(target.Schema) + "." + dialect.QuoteIdentifier(target.Name)
+}
+
+// BuildAddColumn writes the statement that adds a column to a relation.
+func (dialect *Dialect) BuildAddColumn(target QualifiedName) string {
+	if dialect.AddColumn != nil {
+		return dialect.AddColumn(dialect, target)
+	}
+	return "alter table " + dialect.BuildQualifiedName(target) +
+		"\n  add column new_column " + dialect.BuildColumnType(core.KindText) + ";"
+}
+
+// BuildRenameTable writes the statement that renames a relation.
+func (dialect *Dialect) BuildRenameTable(target QualifiedName, renamed string) string {
+	if dialect.RenameTable != nil {
+		return dialect.RenameTable(dialect, target, renamed)
+	}
+	return "alter table " + dialect.BuildQualifiedName(target) + "\n  rename to " + renamed + ";"
 }
 
 // BuildDropSchema writes the statement that removes a schema.

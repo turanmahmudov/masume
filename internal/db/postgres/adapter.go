@@ -327,7 +327,7 @@ func (session *postgresSession) markTransactionFromServer() {
 func (session *postgresSession) ReadPage(
 	ctx context.Context, read db.ComposedRead, window db.ReadWindow,
 ) (db.QueryResult, error) {
-	return db.ReadSQLPage(ctx, session.RunQuery, read, window, session.Support.Dialect.Syntax)
+	return db.ReadSQLPage(ctx, session.RunQuery, read, window, session.Support.Dialect)
 }
 
 func (session *postgresSession) CountRead(
@@ -668,7 +668,7 @@ func (session *postgresSession) BuildTableDDL(
 	if constraintErr != nil {
 		return nil, db.WrapDatabaseOperation("reading the constraints", constraintErr)
 	}
-	return RenderTableDDL(detail, indexes, constraints, session.Support.Dialect), nil
+	return db.RenderTableDDL(detail, indexes, constraints, session.Support.Dialect), nil
 }
 
 // ExplainQuery asks the server for the plan in the form this server takes.

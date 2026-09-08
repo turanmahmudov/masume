@@ -41,6 +41,7 @@ var imageEngines = []struct {
 	{"tidb", core.EngineTidb},
 	{"percona", core.EngineMysql},
 	{"mongodb", core.EngineMongo},
+	{"azure-sql-edge", core.EngineSqlserver},
 	{"mongo", core.EngineMongo},
 	{"mysql", core.EngineMysql},
 	{"postgres", core.EnginePostgres},
@@ -146,6 +147,8 @@ func findImageEngine(image string) (core.Engine, bool) {
 
 // imageOrganisations give the engine of every image an organisation ships.
 var imageOrganisations = map[string]core.Engine{
+	// The image of a SQL Server is `mcr.microsoft.com/mssql/server`.
+	"mssql":       core.EngineSqlserver,
 	"supabase":    core.EngineSupabase,
 	"timescale":   core.EngineTimescale,
 	"cockroachdb": core.EngineCockroach,
@@ -273,6 +276,14 @@ func applyMongoEnvironment(profile *cfg.Profile, environment map[string]string) 
 	}
 }
 
+// applySqlserverEnvironment fills a SQL Server image. The image starts with one
+// administrator, and the password of that user is the only one the container is given.
+func applySqlserverEnvironment(profile *cfg.Profile, environment map[string]string) {
+	profile.User = "sa"
+	profile.Password = findFirstValue(environment, "MSSQL_SA_PASSWORD", "SA_PASSWORD")
+	profile.Database = "master"
+}
+
 // resolveContainerSSLMode permits non-TLS connections for local containers.
 func resolveContainerSSLMode(engine core.Engine) core.SSLMode {
 	mode := core.ResolveEngineInfo(engine).DefaultSSLMode
@@ -330,6 +341,8 @@ func buildContainerProfile(held container) (cfg.Profile, bool) {
 		applyMysqlEnvironment(&profile, environment)
 	case core.FamilyMongo:
 		applyMongoEnvironment(&profile, environment)
+	case core.FamilySqlserver:
+		applySqlserverEnvironment(&profile, environment)
 	}
 	return profile, true
 }

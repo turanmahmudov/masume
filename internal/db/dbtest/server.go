@@ -6,6 +6,7 @@
 //
 //	MASUME_TEST_POSTGRES=postgres://postgres:secret@127.0.0.1:55432/shop
 //	MASUME_TEST_MYSQL=mysql://root:secret@127.0.0.1:55306/shop
+//	MASUME_TEST_SQLSERVER=sqlserver://sa:Masume_2024@127.0.0.1:55433/shop
 //	MASUME_TEST_MONGO=mongodb://127.0.0.1:55017/shop
 //	MASUME_TEST_MONGO_AUTH=mongodb://root:secret@127.0.0.1:55018/shop
 //	MASUME_TEST_MONGO_RS=mongodb://127.0.0.1:55020/shop
@@ -56,9 +57,12 @@ type Target struct {
 // MongoDB is named twice, because a server with authentication turned on returns a
 // connection differently from one without it.
 var (
-	Postgres = Target{Variable: "MASUME_TEST_POSTGRES", Engine: core.EnginePostgres, DefaultPort: 5432}
-	MySQL    = Target{Variable: "MASUME_TEST_MYSQL", Engine: core.EngineMysql, DefaultPort: 3306}
-	Mongo    = Target{Variable: "MASUME_TEST_MONGO", Engine: core.EngineMongo, DefaultPort: 27017}
+	Postgres  = Target{Variable: "MASUME_TEST_POSTGRES", Engine: core.EnginePostgres, DefaultPort: 5432}
+	MySQL     = Target{Variable: "MASUME_TEST_MYSQL", Engine: core.EngineMysql, DefaultPort: 3306}
+	Mongo     = Target{Variable: "MASUME_TEST_MONGO", Engine: core.EngineMongo, DefaultPort: 27017}
+	Sqlserver = Target{
+		Variable: "MASUME_TEST_SQLSERVER", Engine: core.EngineSqlserver, DefaultPort: 1433,
+	}
 	// MongoAuth is the same engine on a server that authenticates every command.
 	MongoAuth = Target{
 		Variable: "MASUME_TEST_MONGO_AUTH", Engine: core.EngineMongo, DefaultPort: 27017,

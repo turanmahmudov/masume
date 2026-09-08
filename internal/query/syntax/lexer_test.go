@@ -73,6 +73,54 @@ func TestTokenizeReadsTheKindsOfAStatement(t *testing.T) {
 	}
 }
 
+// A SQL Server reads a name in brackets, a Unicode string with an N before it, and a
+// variable that opens with an at sign. Standard SQL reads none of the three.
+func TestTokenizeReadsTheMarksOfASqlServer(t *testing.T) {
+	for _, held := range []struct {
+		name string
+		sql  string
+		want []string
+	}{
+		{"a name in brackets", "select [order]",
+			[]string{"keyword:select", "quoted:[order]"}},
+		{"a bracket inside a name", "select [a]]b]",
+			[]string{"keyword:select", "quoted:[a]]b]"}},
+		{"a unicode string", "select N'ada'",
+			[]string{"keyword:select", "string:N'ada'"}},
+		{"a variable", "select @name",
+			[]string{"keyword:select", "parameter:@name"}},
+		{"a variable of the server", "select @@rowcount",
+			[]string{"keyword:select", "parameter:@@rowcount"}},
+		{"a qualified name", "select * from [dbo].[orders]",
+			[]string{"keyword:select", "operator:*", "keyword:from",
+				"quoted:[dbo]", "operator:.", "quoted:[orders]"}},
+	} {
+		t.Run(held.name, func(t *testing.T) {
+			answered := readKinds(held.sql, FlavourSqlserver)
+			if !equalWritten(answered, held.want) {
+				t.Errorf("%q reads as\n  %v\nwanted\n  %v", held.sql, answered, held.want)
+			}
+		})
+	}
+}
+
+// A name in brackets reads back without them, and a doubled bracket is one character of the
+// name.
+func TestUnquoteIdentifierReadsABracketName(t *testing.T) {
+	for _, held := range []struct {
+		name string
+		want string
+	}{
+		{"[order]", "order"},
+		{"[a]]b]", "a]b"},
+		{"orders", "orders"},
+	} {
+		if answered := UnquoteIdentifier(held.name); answered != held.want {
+			t.Errorf("%q reads as %q, wanted %q", held.name, answered, held.want)
+		}
+	}
+}
+
 // MySQL opens a line comment with `#`, which standard SQL does not.
 func TestTokenizeReadsAHashCommentOnlyForMysql(t *testing.T) {
 	const sql = "select 1 # why"

@@ -177,7 +177,7 @@ func (session *sqliteSession) RunQuery(
 func (session *sqliteSession) ReadPage(
 	ctx context.Context, read db.ComposedRead, window db.ReadWindow,
 ) (db.QueryResult, error) {
-	return db.ReadSQLPage(ctx, session.RunQuery, read, window, session.Support.Dialect.Syntax)
+	return db.ReadSQLPage(ctx, session.RunQuery, read, window, session.Support.Dialect)
 }
 
 func (session *sqliteSession) CountRead(

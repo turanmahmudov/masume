@@ -14,6 +14,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/postgres"
 	"github.com/turanmahmudov/masume/internal/db/redshift"
 	"github.com/turanmahmudov/masume/internal/db/sqlite"
+	"github.com/turanmahmudov/masume/internal/db/sqlserver"
 	"github.com/turanmahmudov/masume/internal/db/supabase"
 	"github.com/turanmahmudov/masume/internal/db/tidb"
 	"github.com/turanmahmudov/masume/internal/db/timescale"
@@ -25,6 +26,8 @@ var support = map[core.Engine]db.EngineSupport{
 	core.EngineMysql:    mysql.Support,
 	core.EngineSqlite:   sqlite.Support,
 	core.EngineMongo:    mongo.Support,
+
+	core.EngineSqlserver: sqlserver.Support,
 
 	core.EngineCockroach: cockroach.Support,
 	core.EngineTimescale: timescale.Support,

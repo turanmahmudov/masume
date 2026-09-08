@@ -6,6 +6,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/mysql"
 	"github.com/turanmahmudov/masume/internal/db/postgres"
 	"github.com/turanmahmudov/masume/internal/db/sqlite"
+	"github.com/turanmahmudov/masume/internal/db/sqlserver"
 	"github.com/turanmahmudov/masume/internal/query"
 	"github.com/turanmahmudov/masume/internal/query/build"
 )
@@ -34,6 +35,8 @@ func TestGenerateSelectReadsOneRelationWithACap(t *testing.T) {
 		{"postgres", postgres.Dialect, "select *\n  from \"public\".\"users\"\n limit 100;"},
 		{"mysql", mysql.Dialect, "select *\n  from `public`.`users`\n limit 100;"},
 		{"sqlite", sqlite.Dialect, "select *\n  from \"public\".\"users\"\n limit 100;"},
+		// A SQL Server caps the rows with TOP, because a trailing window needs a sort.
+		{"sqlserver", sqlserver.Dialect, "select top 100 *\n  from [public].[users];"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			if got := build.GenerateSelect(users, held.dialect); got != held.want {

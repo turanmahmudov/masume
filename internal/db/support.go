@@ -180,13 +180,13 @@ type RunStatement func(
 // whole result.
 func ReadSQLPage(
 	ctx context.Context, run RunStatement, read ComposedRead, window ReadWindow,
-	flavour syntax.SyntaxFlavour,
+	dialect *query.Dialect,
 ) (QueryResult, error) {
 	if !read.Pageable {
 		return run(ctx, read.Text, window.Limit, read.Params)
 	}
 	paged := statement.ApplyPaging(
-		read.Text, ReadOverscanRowLimit(window.Limit), window.Offset, flavour)
+		read.Text, ReadOverscanRowLimit(window.Limit), window.Offset, dialect)
 	return run(ctx, paged, window.Limit, read.Params)
 }
 

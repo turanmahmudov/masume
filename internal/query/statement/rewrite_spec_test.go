@@ -5,6 +5,7 @@ import (
 
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db/postgres"
+	"github.com/turanmahmudov/masume/internal/db/sqlserver"
 	"github.com/turanmahmudov/masume/internal/query/statement"
 	"github.com/turanmahmudov/masume/internal/query/syntax"
 )
@@ -133,7 +134,7 @@ func TestApplyPagingWritesTheWindowOnAStatementThatHasNoneOfItsOwn(t *testing.T)
 			"select * from t\nlimit 10;"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
-			got := statement.ApplyPaging(held.sql, held.limit, held.offset, syntax.FlavourStandard)
+			got := statement.ApplyPaging(held.sql, held.limit, held.offset, postgres.Dialect)
 			if got != held.want {
 				t.Errorf("statement.ApplyPaging(%q, %d, %d)\n got %q\nwant %q",
 					held.sql, held.limit, held.offset, got, held.want)
@@ -163,7 +164,7 @@ func TestApplyPagingWrapsAStatementThatAlreadyPagesItself(t *testing.T) {
 				"limit 10 offset 5\n) as masume_page\nlimit 10 offset 20"},
 	} {
 		t.Run(held.name, func(t *testing.T) {
-			got := statement.ApplyPaging(held.sql, 10, 20, syntax.FlavourStandard)
+			got := statement.ApplyPaging(held.sql, 10, 20, postgres.Dialect)
 			if got != held.want {
 				t.Errorf("statement.ApplyPaging(%q)\n got %q\nwant %q", held.sql, got, held.want)
 			}
@@ -173,9 +174,66 @@ func TestApplyPagingWrapsAStatementThatAlreadyPagesItself(t *testing.T) {
 
 func TestApplyPagingLeavesAStatementWithNoBodyAlone(t *testing.T) {
 	for _, sql := range []string{"", "   ", ";"} {
-		if got := statement.ApplyPaging(sql, 10, 20, syntax.FlavourStandard); got != sql {
+		if got := statement.ApplyPaging(sql, 10, 20, postgres.Dialect); got != sql {
 			t.Errorf("statement.ApplyPaging(%q) = %q, want it unchanged", sql, got)
 		}
+	}
+}
+
+// A SQL Server takes a page with OFFSET and FETCH, and it reads that window after a sort
+// only. A read with no sort of its own gets one that keeps the rows as the server reads them.
+func TestApplyPagingWritesTheWindowASqlServerReads(t *testing.T) {
+	for _, held := range []struct {
+		name   string
+		sql    string
+		limit  int
+		offset int
+		want   string
+	}{
+		{"a read with no sort", "select * from [dbo].[users]", 10, 20,
+			"select * from [dbo].[users]\norder by (select null)\n" +
+				"offset 20 rows fetch next 10 rows only"},
+		// The first page takes no window at all: the client caps the rows it reads, and a
+		// statement that reads the next value of a sequence takes no sort.
+		{"the first page is left alone", "select next value for [dbo].[order_seq]", 10, 0,
+			"select next value for [dbo].[order_seq]"},
+		{"the sort of the read stays above the window", "select * from t order by a", 10, 20,
+			"select * from t\norder by a\noffset 20 rows fetch next 10 rows only"},
+		{"a window of its own goes inside a subquery",
+			"select * from t order by a offset 5 rows fetch next 5 rows only", 10, 20,
+			"select * from (\nselect * from t\norder by a\n" +
+				"offset 5 rows fetch next 5 rows only\n) as masume_page\n" +
+				"order by (select null)\noffset 20 rows fetch next 10 rows only"},
+	} {
+		t.Run(held.name, func(t *testing.T) {
+			got := statement.ApplyPaging(held.sql, held.limit, held.offset, sqlserver.Dialect)
+			if got != held.want {
+				t.Errorf("statement.ApplyPaging(%q, %d, %d)\n got %q\nwant %q",
+					held.sql, held.limit, held.offset, got, held.want)
+			}
+		})
+	}
+}
+
+// A subquery of a SQL Server takes a sort together with a window, so the filter wrapper
+// writes one that changes no row.
+func TestApplyWhereKeepsTheSortLegalInsideTheWrapperOfASqlServer(t *testing.T) {
+	got := statement.ApplyWhere("select a from t order by b", "a = 1", sqlserver.Dialect)
+	want := "select * from (\nselect a from t\norder by b offset 0 rows\n" +
+		") as masume_filter\nwhere a = 1"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// A count of a read that pages itself keeps the window, and the window needs the sort.
+func TestBuildCountSQLWritesTheSortASqlServerNeeds(t *testing.T) {
+	got := statement.BuildCountSQL(
+		"select * from t order by a offset 5 rows fetch next 5 rows only", sqlserver.Dialect)
+	want := "select count_big(*) as total from (\nselect * from t\n" +
+		"order by (select null)\noffset 5 rows fetch next 5 rows only\n) as masume_count"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
@@ -243,7 +301,7 @@ func TestBuildCountSQLLeavesAStatementWithNoBodyAlone(t *testing.T) {
 func TestApplyWhereSearchesTheWholeStatementAndPagesTheAnswer(t *testing.T) {
 	// A predicate laid inside the LIMIT would search only the rows already fetched, so the
 	// body goes in the wrapper alone and the LIMIT is written again outside it.
-	got := statement.ApplyWhere("select * from t limit 5", "a = 1", syntax.FlavourStandard)
+	got := statement.ApplyWhere("select * from t limit 5", "a = 1", postgres.Dialect)
 	want := "select * from (\nselect * from t\n) as masume_filter\nwhere a = 1\nlimit 5"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -253,7 +311,7 @@ func TestApplyWhereSearchesTheWholeStatementAndPagesTheAnswer(t *testing.T) {
 func TestApplyWhereKeepsTheOrderByInsideTheWrapper(t *testing.T) {
 	// The ORDER BY can name a column the projection does not return, so it stays with the
 	// body it belongs to.
-	got := statement.ApplyWhere("select a from t order by b", "a = 1", syntax.FlavourStandard)
+	got := statement.ApplyWhere("select a from t order by b", "a = 1", postgres.Dialect)
 	want := "select * from (\nselect a from t\norder by b\n) as masume_filter\nwhere a = 1"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -262,7 +320,7 @@ func TestApplyWhereKeepsTheOrderByInsideTheWrapper(t *testing.T) {
 
 func TestApplyWhereWithNoPredicateLeavesTheStatementAlone(t *testing.T) {
 	for _, predicate := range []string{"", "   "} {
-		got := statement.ApplyWhere("select * from t", predicate, syntax.FlavourStandard)
+		got := statement.ApplyWhere("select * from t", predicate, postgres.Dialect)
 		if want := "select * from t"; got != want {
 			t.Errorf("ApplyWhere with %q gave %q, want %q", predicate, got, want)
 		}

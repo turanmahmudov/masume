@@ -97,7 +97,7 @@ paths = []
 # A profile is one connection. The name after profile. is the picker name.
 #
 # [profile.a-name]
-# engine               = "postgres"   # postgres mysql sqlite mongodb cockroach
+# engine               = "postgres"   # postgres mysql sqlserver sqlite mongodb cockroach
 #                                     # timescale redshift neon supabase mariadb tidb
 #                                     # planetscale aurora-mysql
 # host                 = "127.0.0.1"

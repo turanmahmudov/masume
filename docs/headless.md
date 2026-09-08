@@ -32,7 +32,7 @@ Only one `-e` file is used. Repeated `-e` options use the last file. SQL that st
 
 ### Connection targets
 
-Supported URL schemes are `postgres`, `postgresql`, `cockroachdb`, `redshift`, `mysql`, `mariadb`, and `mongodb`. Other engines need a profile or a keyword connection string with `engine`.
+Supported URL schemes are `postgres`, `postgresql`, `cockroachdb`, `redshift`, `mysql`, `mariadb`, `sqlserver`, `mssql`, and `mongodb`. Other engines need a profile or a keyword connection string with `engine`.
 
 URLs support one host. Multi-host URLs and `mongodb+srv` are unsupported. The parser reads credentials, host, port, database, and `sslmode`, `ssl-mode`, or `sslMode`. Other query options are ignored and are not forwarded to the driver. This includes native options such as `authSource`, `replicaSet`, `tls`, and `connect_timeout`.
 

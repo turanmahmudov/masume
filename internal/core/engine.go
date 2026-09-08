@@ -22,6 +22,7 @@ const (
 	EngineTidb        Engine = "tidb"
 	EnginePlanetscale Engine = "planetscale"
 	EngineAuroraMysql Engine = "aurora-mysql"
+	EngineSqlserver   Engine = "sqlserver"
 	EngineMongo       Engine = "mongodb"
 )
 
@@ -30,6 +31,7 @@ var Engines = []Engine{
 	EnginePostgres, EngineMysql, EngineSqlite,
 	EngineCockroach, EngineTimescale, EngineRedshift, EngineNeon, EngineSupabase,
 	EngineMariadb, EngineTidb, EnginePlanetscale, EngineAuroraMysql,
+	EngineSqlserver,
 	EngineMongo,
 }
 
@@ -41,10 +43,11 @@ type Family string
 
 // The supported database protocols.
 const (
-	FamilyPostgres Family = "postgres"
-	FamilyMysql    Family = "mysql"
-	FamilySqlite   Family = "sqlite"
-	FamilyMongo    Family = "mongo"
+	FamilyPostgres  Family = "postgres"
+	FamilyMysql     Family = "mysql"
+	FamilySqlite    Family = "sqlite"
+	FamilySqlserver Family = "sqlserver"
+	FamilyMongo     Family = "mongo"
 )
 
 // Capabilities is the set of supported engine operations.
@@ -98,6 +101,14 @@ var postgresCatalogSchemas = []string{"pg_catalog", "information_schema"}
 // The name prefixes of the schemas a PostgreSQL server creates for itself.
 var postgresOwnPrefixes = []string{"pg_toast", "pg_temp"}
 
+// The schemas a SQL Server database holds for itself, in every database it serves.
+var sqlserverSystemSchemas = []string{
+	"sys", "information_schema", "guest",
+	"db_owner", "db_accessadmin", "db_securityadmin", "db_ddladmin",
+	"db_backupoperator", "db_datareader", "db_datawriter",
+	"db_denydatareader", "db_denydatawriter",
+}
+
 // The databases every MySQL-protocol server reserves for itself.
 var mysqlSystemSchemas = []string{"mysql", "information_schema", "performance_schema", "sys"}
 
@@ -123,6 +134,27 @@ var mysqlCapabilities = withPostgres(func(capabilities *Capabilities) {
 	// MySQL lock waits require performance_schema queries that this client does not implement.
 	capabilities.ReportsLockWaits = false
 })
+
+var sqlserverCapabilities = Capabilities{
+	// SHOWPLAN_ALL estimates the plan and STATISTICS PROFILE counts the rows of every step.
+	PlansStatement:      true,
+	MeasuresPlan:        true,
+	PlansEveryStatement: false,
+	HasServerSessions:   true,
+	ReportsLockWaits:    true,
+	ReportsServerLoad:   true,
+	// KILL ends a session. T-SQL has no statement that stops one statement, so the
+	// driver cancels through the context.
+	CancelsRunningQuery: false,
+	HasTransactions:     true,
+	SortsRead:           true,
+	TruncatesTable:      true,
+	WritesDDL:           true,
+	PlansWrites:         true,
+	// The server has no read-only session, so this client blocks the write.
+	TakesReadOnlyMode:      true,
+	AppliesChangesTogether: true,
+}
 
 var engineRegistry = map[Engine]EngineInfo{
 	EnginePostgres: {
@@ -217,6 +249,11 @@ var engineRegistry = map[Engine]EngineInfo{
 		Engine: EngineAuroraMysql, Family: FamilyMysql, Capabilities: mysqlCapabilities,
 		DefaultPort: 3306, NeedsUser: true, NeedsPassword: true,
 		SystemSchemas: mysqlSystemSchemas,
+	},
+	EngineSqlserver: {
+		Engine: EngineSqlserver, Family: FamilySqlserver, Capabilities: sqlserverCapabilities,
+		DefaultPort: 1433, NeedsUser: true, NeedsPassword: true,
+		URLSchemes: []string{"sqlserver", "mssql"}, SystemSchemas: sqlserverSystemSchemas,
 	},
 	EngineSqlite: {
 		Engine: EngineSqlite, Family: FamilySqlite,

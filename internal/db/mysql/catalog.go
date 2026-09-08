@@ -172,7 +172,7 @@ func (session *mysqlSession) ListIndexes(
 		isUnique := db.ReadNonNegativeCount(row["non_unique"]) == 0
 		indexes = append(indexes, db.IndexDetail{
 			Name: name, IsUnique: isUnique, IsPrimary: isPrimary,
-			Definition: RenderIndexDefinition(
+			Definition: db.RenderIndexDefinition(
 				table, name, isPrimary, isUnique, row["columns"], session.Support.Dialect),
 		})
 	}
@@ -195,7 +195,7 @@ func (session *mysqlSession) ListConstraints(
 		}
 		constraints = append(constraints, db.ConstraintDetail{
 			Name: db.ReadAnyText(row["name"]), Kind: kind,
-			Definition: RenderConstraintDefinition(kind, row),
+			Definition: db.RenderConstraintDefinition(kind, row),
 		})
 	}
 	return constraints, nil
