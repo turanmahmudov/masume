@@ -152,6 +152,9 @@ func TestOpensFileAndNeedsUserAgreeWithTheEntry(t *testing.T) {
 		if NeedsUser(info.Engine) != info.NeedsUser {
 			t.Errorf("%q disagrees with its entry about needing a user", info.Engine)
 		}
+		if NeedsDatabase(info.Engine) != info.NeedsDatabase {
+			t.Errorf("%q disagrees with its entry about needing a database", info.Engine)
+		}
 		if ResolveDefaultPort(info.Engine) != info.DefaultPort {
 			t.Errorf("%q disagrees with its entry about its port", info.Engine)
 		}
@@ -193,5 +196,18 @@ func TestAnEngineWithAnOptionalUserCanStillGiveAPassword(t *testing.T) {
 func TestMongodbNamesTheTransactionItsDeploymentsHold(t *testing.T) {
 	if !ResolveEngineInfo(EngineMongo).Capabilities.HasTransactions {
 		t.Error("mongodb reports that no deployment of it holds a transaction")
+	}
+}
+
+// A MySQL-protocol server connects without a database, and its catalog holds every database
+// of the server. Every other engine opens one database, so the form and the config file ask
+// for its name.
+func TestOnlyTheMysqlEnginesConnectWithoutADatabase(t *testing.T) {
+	for _, info := range ListEngineInfo() {
+		wanted := info.Family != FamilyMysql
+		if info.NeedsDatabase != wanted {
+			t.Errorf("%q needs a database: %t, wanted %t",
+				info.Engine, info.NeedsDatabase, wanted)
+		}
 	}
 }

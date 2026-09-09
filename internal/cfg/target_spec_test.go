@@ -120,11 +120,15 @@ func TestBuildProfileFromTargetFillsTheDatabaseTheServerDefaultsTo(t *testing.T)
 	}
 }
 
-// A MySQL server has no database of the same name as the user, so a URL without one cannot
-// be opened and must be reported.
-func TestBuildProfileFromTargetReportsAMysqlURLWithoutADatabase(t *testing.T) {
-	if _, err := cfg.BuildProfileFromTarget("mysql://ada@host"); err == nil {
-		t.Fatal("a MySQL URL without a database was read")
+// A MySQL connection needs no database, and the catalog holds every database of the server,
+// so a URL without one opens the server itself.
+func TestBuildProfileFromTargetReadsAMysqlURLWithoutADatabase(t *testing.T) {
+	built, err := cfg.BuildProfileFromTarget("mysql://ada@host")
+	if err != nil {
+		t.Fatalf("a MySQL URL without a database does not read: %v", err)
+	}
+	if built.Database != "" {
+		t.Errorf("the profile opens %q, wanted no database", built.Database)
 	}
 }
 

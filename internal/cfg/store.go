@@ -79,10 +79,7 @@ func writeTomlValue(value any) string {
 
 // buildProfileKeys returns ordered keys, non-empty values, and managed keys. File engines omit host, port, and user.
 func buildProfileKeys(profile Profile) ([]string, map[string]any, map[string]bool) {
-	written := map[string]any{
-		"engine":   string(profile.Engine),
-		"database": profile.Database,
-	}
+	written := map[string]any{"engine": string(profile.Engine)}
 	if !core.OpensFile(profile.Engine) {
 		written["host"] = profile.Host
 		written["port"] = profile.Port
@@ -94,6 +91,7 @@ func buildProfileKeys(profile Profile) ([]string, map[string]any, map[string]boo
 	}
 	// Empty values remove managed keys. Missing keys use reader defaults.
 	for key, value := range map[string]string{
+		"database":       profile.Database,
 		"auth":           string(profile.Auth),
 		"env":            string(profile.Environment),
 		"mode":           string(profile.AccessMode),

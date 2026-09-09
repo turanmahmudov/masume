@@ -356,9 +356,13 @@ func buildProfile(name string, source Table) (Profile, error) {
 		return Profile{}, err
 	}
 
-	database, err := readRequiredString(source, "database")
-	if err != nil {
-		return Profile{}, err
+	database := ""
+	if core.NeedsDatabase(engine) {
+		if database, err = readRequiredString(source, "database"); err != nil {
+			return Profile{}, err
+		}
+	} else {
+		database, _ = FindString(source, "database")
 	}
 
 	opensFile := core.OpensFile(engine)
@@ -512,6 +516,9 @@ func nameSecretProblems(problems []ProfileProblem) []ProfileProblem {
 func DescribeProfileTarget(profile Profile) string {
 	if core.OpensFile(profile.Engine) {
 		return profile.Database
+	}
+	if profile.Database == "" {
+		return fmt.Sprintf("%s@%s:%d", profile.User, profile.Host, profile.Port)
 	}
 	return fmt.Sprintf("%s@%s:%d/%s", profile.User, profile.Host, profile.Port, profile.Database)
 }

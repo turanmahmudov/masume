@@ -223,7 +223,7 @@ func BuildProfileFromFields(fields []FormField, source Profile, editing bool) (P
 	if built.Name == "" {
 		return Profile{}, FormError{Reason: "the profile name is missing"}
 	}
-	if built.Database == "" {
+	if built.Database == "" && core.NeedsDatabase(engine) {
 		if opensFile {
 			return Profile{}, FormError{Reason: "the database file path is missing"}
 		}
@@ -272,7 +272,8 @@ var urlSchemes = func() map[string]core.Engine {
 // sslKeys are the query keys a URL can use for the SSL setting.
 var sslKeys = []string{"sslmode", "ssl-mode", "sslMode"}
 
-// ParseConnectionURL requires a supported scheme, host, and database. The returned fields omit the password.
+// ParseConnectionURL requires a supported scheme and host. A database is required only for an
+// engine that connects to one. The returned fields omit the password.
 func ParseConnectionURL(text string) (ConnectionURL, bool) {
 	trimmed := strings.TrimSpace(text)
 	if !strings.Contains(trimmed, "://") {
@@ -291,7 +292,7 @@ func ParseConnectionURL(text string) (ConnectionURL, bool) {
 	// Connection hosts use IPv6 addresses without brackets.
 	host := strings.Trim(parsed.Hostname(), "[]")
 	database := strings.TrimPrefix(parsed.Path, "/")
-	if host == "" || database == "" {
+	if host == "" || (database == "" && core.NeedsDatabase(engine)) {
 		return ConnectionURL{}, false
 	}
 
@@ -337,7 +338,7 @@ func writeField(fields []FormField, key, value string) []FormField {
 // follows the database name only while the user has not typed a name.
 func ApplyConnectionURL(fields []FormField, held ConnectionURL) []FormField {
 	named := strings.TrimSpace(ReadField(fields, "name"))
-	if named == "" || named == buildBlankProfile().Name {
+	if held.Database != "" && (named == "" || named == buildBlankProfile().Name) {
 		named = held.Database
 	}
 

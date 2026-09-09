@@ -180,6 +180,35 @@ command_timeout = 23 # tunnel limit
 
 // A password the user cleared must be deleted from the file. A line left behind keeps the
 // connection on the old password and stores it on disk.
+// A MySQL connection needs no database. The saved profile carries no database key, and it
+// loads again as the profile that was written.
+func TestSaveProfileToFileWritesAMysqlProfileWithNoDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	profile := buildStoredProfile()
+	profile.Engine = core.EngineMysql
+	profile.Port = 3306
+	profile.Database = ""
+
+	if err := cfg.SaveProfileToFile(profile, "", path); err != nil {
+		t.Fatalf("the profile was not written: %v", err)
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("the config file was not read back: %v", err)
+	}
+	if strings.Contains(string(written), "database") {
+		t.Errorf("the file holds a database key:\n%s", written)
+	}
+
+	again := findProfile(t, cfg.LoadConfig(path), "shop")
+	if again.Database != "" {
+		t.Errorf("the profile reads %q, wanted no database", again.Database)
+	}
+	if again.Engine != core.EngineMysql {
+		t.Errorf("the engine reads %q, wanted mysql", again.Engine)
+	}
+}
+
 func TestSaveProfileToFileTakesOutAValueTheFormCleared(t *testing.T) {
 	written := saveProfile(t, `
 [profile.shop]

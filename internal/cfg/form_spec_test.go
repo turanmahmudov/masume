@@ -68,6 +68,30 @@ func TestBuildProfileFromFieldsReportsAFieldThatIsNeeded(t *testing.T) {
 	}
 }
 
+// A MySQL connection needs no database, and the sidebar holds every database of the server,
+// so the form takes a MySQL profile without one. An engine that opens one database still
+// reports the missing name.
+func TestBuildProfileFromFieldsTakesAMysqlProfileWithNoDatabase(t *testing.T) {
+	source := buildFormProfile()
+	source.Engine = core.EngineMysql
+	fields := cfg.ApplyFieldChange(cfg.BuildFormFields(source, true, nil), "database", "")
+
+	built, err := cfg.BuildProfileFromFields(fields, source, true)
+	if err != nil {
+		t.Fatalf("a MySQL profile with no database was refused: %v", err)
+	}
+	if built.Database != "" {
+		t.Errorf("the profile opens %q, wanted no database", built.Database)
+	}
+
+	postgres := buildFormProfile()
+	onePostgres := cfg.ApplyFieldChange(
+		cfg.BuildFormFields(postgres, true, nil), "database", "")
+	if _, err := cfg.BuildProfileFromFields(onePostgres, postgres, true); err == nil {
+		t.Error("a PostgreSQL profile with no database was built")
+	}
+}
+
 // A port that is not a number cannot be used, so the form reports it and does not save it.
 func TestBuildProfileFromFieldsReportsAPortThatIsNotANumber(t *testing.T) {
 	source := buildFormProfile()
@@ -111,6 +135,32 @@ func TestApplyConnectionUrlFillsTheFieldsItNames(t *testing.T) {
 		if answered := cfg.ReadField(fields, one.key); answered != one.want {
 			t.Errorf("the %s reads %q, wanted %q", one.key, answered, one.want)
 		}
+	}
+}
+
+// A MySQL URL without a database names a server, so the paste fills the form and leaves the
+// database field empty.
+func TestApplyConnectionUrlTakesAMysqlUrlWithNoDatabase(t *testing.T) {
+	held, is := cfg.ParseConnectionURL("mysql://reader@db.example.com:3306")
+	if !is {
+		t.Fatal("a MySQL URL without a database was not read")
+	}
+
+	fields := cfg.ApplyConnectionURL(cfg.BuildFormFields(cfg.Profile{}, false, nil), held)
+	for _, one := range []struct{ key, want string }{
+		{"host", "db.example.com"},
+		{"port", "3306"},
+		{"database", ""},
+		{"user", "reader"},
+	} {
+		if answered := cfg.ReadField(fields, one.key); answered != one.want {
+			t.Errorf("the %s reads %q, wanted %q", one.key, answered, one.want)
+		}
+	}
+	// The name follows the database name, and an empty one leaves the name of a new
+	// connection in place.
+	if cfg.ReadField(fields, "name") == "" {
+		t.Error("the paste cleared the name of the connection")
 	}
 }
 

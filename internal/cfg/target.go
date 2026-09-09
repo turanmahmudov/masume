@@ -185,7 +185,7 @@ func buildProfileFromURL(text string) (Profile, error) {
 	if built.Database == "" {
 		built.Database = resolveDefaultDatabase(engine, built.User)
 	}
-	if built.Database == "" {
+	if built.Database == "" && core.NeedsDatabase(engine) {
 		return Profile{}, failTarget("the URL database is missing")
 	}
 
@@ -326,9 +326,9 @@ func buildProfileFromKeywords(text string) (Profile, error) {
 		built.Host = defaultTargetHost
 	}
 	if built.Database == "" {
-		built.Database = built.User
+		built.Database = resolveDefaultDatabase(built.Engine, built.User)
 	}
-	if built.Database == "" {
+	if built.Database == "" && core.NeedsDatabase(built.Engine) {
 		return Profile{}, failTarget("the connection string database is missing")
 	}
 	return built, nil

@@ -53,7 +53,7 @@ mode     = "write"
 | `engine` | `postgres` | See [engines.md](engines.md) for the list |
 | `host` | required | The form defaults to `127.0.0.1`. Ignored for SQLite |
 | `port` | per engine | The server port |
-| `database` | required | The database name, or the SQLite file path. A leading `~` expands to the home directory |
+| `database` | required, except on MySQL-protocol engines | The database name, or the SQLite file path. A MySQL-protocol connection without one opens the server. A leading `~` expands to the home directory |
 | `user` | required if the engine needs one | Ignored for SQLite. Optional for MongoDB |
 | `auth` | `secret` if `secret` is set; otherwise `command` if `password_command` is set; otherwise `password` | The password source: `prompt`, `keyring`, `command`, `secret` or `password`. See [Passwords](#passwords) |
 | `password` | | **Ignored in files.** A non-empty string produces a warning. The configured password source still applies |
@@ -114,7 +114,7 @@ masume ./notes.db
 | A connection string | `key=value` pairs: `engine`, `host`, `hostaddr`, `port`, `dbname`, `database`, `user`, `password`, `sslmode`. The default engine is `postgres` |
 | A file path | A SQLite path ending in `.db`, `.db3`, `.sqlite` or `.sqlite3`. Other extensions require an existing SQLite header. `:memory:` is also accepted |
 
-A URL without a database uses the user name on PostgreSQL-family engines and `admin` on MongoDB. A MySQL URL requires a database. A SQL Server URL without a database opens the default database of the login. A missing URL host uses `127.0.0.1`.
+A URL without a database uses the user name on PostgreSQL-family engines and `admin` on MongoDB. A MySQL-family URL without a database opens the server itself. Every other engine requires the database in the URL. A missing URL host uses `127.0.0.1`.
 
 Connection strings accept single-quoted values and backslash escapes inside quotes. `engine` accepts the profile engine names. Unknown connection string keys are errors.
 

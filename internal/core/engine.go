@@ -83,13 +83,16 @@ type Capabilities struct {
 
 // EngineInfo is the engine metadata available before connection. Query support adds the dialect and language.
 type EngineInfo struct {
-	Engine         Engine
-	Family         Family
-	Capabilities   Capabilities
-	DefaultPort    int
-	OpensFile      bool
-	NeedsUser      bool
-	NeedsPassword  bool
+	Engine        Engine
+	Family        Family
+	Capabilities  Capabilities
+	DefaultPort   int
+	OpensFile     bool
+	NeedsUser     bool
+	NeedsPassword bool
+	// True where a connection needs the name of one database. A MySQL-protocol server
+	// connects without one.
+	NeedsDatabase  bool
 	URLSchemes     []string
 	DefaultSSLMode SSLMode
 	// The full names of the schemas this server reserves for itself.
@@ -186,7 +189,7 @@ var clickhouseCapabilities = Capabilities{
 var engineRegistry = map[Engine]EngineInfo{
 	EnginePostgres: {
 		Engine: EnginePostgres, Family: FamilyPostgres, Capabilities: postgresCapabilities,
-		DefaultPort: 5432, NeedsUser: true, NeedsPassword: true,
+		DefaultPort: 5432, NeedsUser: true, NeedsPassword: true, NeedsDatabase: true,
 		URLSchemes:    []string{"postgres", "postgresql"},
 		SystemSchemas: postgresCatalogSchemas, SystemSchemaPrefixes: postgresOwnPrefixes,
 	},
@@ -201,14 +204,14 @@ var engineRegistry = map[Engine]EngineInfo{
 			capabilities.ReportsLockWaits = false
 			capabilities.ReportsServerLoad = false
 		}),
-		DefaultPort: 26257, NeedsUser: true, NeedsPassword: true,
+		DefaultPort: 26257, NeedsUser: true, NeedsPassword: true, NeedsDatabase: true,
 		URLSchemes:           []string{"cockroachdb"},
 		SystemSchemas:        append(append([]string{}, postgresCatalogSchemas...), "pg_extension", "crdb_internal"),
 		SystemSchemaPrefixes: postgresOwnPrefixes,
 	},
 	EngineTimescale: {
 		Engine: EngineTimescale, Family: FamilyPostgres, Capabilities: postgresCapabilities,
-		DefaultPort: 5432, NeedsUser: true, NeedsPassword: true,
+		DefaultPort: 5432, NeedsUser: true, NeedsPassword: true, NeedsDatabase: true,
 		SystemSchemas:        postgresCatalogSchemas,
 		SystemSchemaPrefixes: append(append([]string{}, postgresOwnPrefixes...), "_timescaledb_", "timescaledb_"),
 	},
@@ -221,7 +224,7 @@ var engineRegistry = map[Engine]EngineInfo{
 			capabilities.ReportsLockWaits = false
 			capabilities.ReportsServerLoad = false
 		}),
-		DefaultPort: 5439, NeedsUser: true, NeedsPassword: true,
+		DefaultPort: 5439, NeedsUser: true, NeedsPassword: true, NeedsDatabase: true,
 		URLSchemes: []string{"redshift"},
 		// The cluster accepts a TLS connection only.
 		DefaultSSLMode:       SSLRequire,
@@ -230,12 +233,12 @@ var engineRegistry = map[Engine]EngineInfo{
 	},
 	EngineNeon: {
 		Engine: EngineNeon, Family: FamilyPostgres, Capabilities: postgresCapabilities,
-		DefaultPort: 5432, NeedsUser: true, NeedsPassword: true, DefaultSSLMode: SSLRequire,
+		DefaultPort: 5432, NeedsUser: true, NeedsPassword: true, NeedsDatabase: true, DefaultSSLMode: SSLRequire,
 		SystemSchemas: postgresCatalogSchemas, SystemSchemaPrefixes: postgresOwnPrefixes,
 	},
 	EngineSupabase: {
 		Engine: EngineSupabase, Family: FamilyPostgres, Capabilities: postgresCapabilities,
-		DefaultPort: 5432, NeedsUser: true, NeedsPassword: true, DefaultSSLMode: SSLRequire,
+		DefaultPort: 5432, NeedsUser: true, NeedsPassword: true, NeedsDatabase: true, DefaultSSLMode: SSLRequire,
 		SystemSchemas: append(append([]string{}, postgresCatalogSchemas...),
 			"auth", "storage", "realtime", "graphql", "graphql_public", "extensions",
 			"vault", "supabase_functions", "supabase_migrations", "pgbouncer", "net", "cron"),
@@ -279,13 +282,13 @@ var engineRegistry = map[Engine]EngineInfo{
 	},
 	EngineSqlserver: {
 		Engine: EngineSqlserver, Family: FamilySqlserver, Capabilities: sqlserverCapabilities,
-		DefaultPort: 1433, NeedsUser: true, NeedsPassword: true,
+		DefaultPort: 1433, NeedsUser: true, NeedsPassword: true, NeedsDatabase: true,
 		URLSchemes: []string{"sqlserver", "mssql"}, SystemSchemas: sqlserverSystemSchemas,
 	},
 	EngineClickhouse: {
 		Engine: EngineClickhouse, Family: FamilyClickhouse,
 		Capabilities: clickhouseCapabilities,
-		DefaultPort:  9000, NeedsUser: true, NeedsPassword: true,
+		DefaultPort:  9000, NeedsUser: true, NeedsPassword: true, NeedsDatabase: true,
 		URLSchemes: []string{"clickhouse"},
 		// The server holds the catalog twice: once as `system`, and once as the standard
 		// views under two names of one database. `default` holds tables of the user.
@@ -310,7 +313,7 @@ var engineRegistry = map[Engine]EngineInfo{
 			AppliesChangesTogether: true,
 		},
 		// A file is opened locally, so there is no port and no URL scheme.
-		DefaultPort: 0, OpensFile: true,
+		DefaultPort: 0, OpensFile: true, NeedsDatabase: true,
 	},
 	EngineMongo: {
 		Engine: EngineMongo, Family: FamilyMongo,
@@ -339,7 +342,7 @@ var engineRegistry = map[Engine]EngineInfo{
 			AppliesChangesTogether: true,
 		},
 		// A username enables authentication and password lookup. Profiles without a user omit authentication.
-		NeedsPassword: true,
+		NeedsPassword: true, NeedsDatabase: true,
 		DefaultPort:   27017,
 		URLSchemes:    []string{"mongodb"},
 		SystemSchemas: []string{"admin", "config", "local"},
@@ -403,6 +406,11 @@ func OpensFile(engine Engine) bool {
 // NeedsUser is true if the engine connects as a named user.
 func NeedsUser(engine Engine) bool {
 	return ResolveEngineInfo(engine).NeedsUser
+}
+
+// NeedsDatabase is true if the engine connects to one named database.
+func NeedsDatabase(engine Engine) bool {
+	return ResolveEngineInfo(engine).NeedsDatabase
 }
 
 // ResolveDefaultPort returns the default port of the engine.
