@@ -1,9 +1,12 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/turanmahmudov/masume/internal/cfg"
+	"github.com/turanmahmudov/masume/internal/core"
+	"github.com/turanmahmudov/masume/internal/present"
 )
 
 func TestThePickerStepsRoundTheEndsOfTheList(t *testing.T) {
@@ -116,5 +119,40 @@ func TestChooseProfileAsksForAPasswordTheClientCannotFind(t *testing.T) {
 	}
 	if model.picker.password == nil || model.picker.password.Text != "" {
 		t.Error("the password field was not opened empty")
+	}
+}
+
+// The list names the engine of every connection, so two profiles of one server are told
+// apart before either one is opened.
+func TestThePickerNamesTheEngineOfEveryConnection(t *testing.T) {
+	model := buildOfflineModel(t, 120, 30)
+	model.screen = ScreenPickingProfile
+	model.profiles = []cfg.Profile{
+		{Name: "shop", Engine: core.EngineMysql, Host: "127.0.0.1", Port: 3306, User: "root"},
+		{Name: "notes", Engine: core.EngineSqlite, Database: "/tmp/notes.db"},
+	}
+
+	drawn := stripEscapes(model.renderPicker())
+	for _, wanted := range []string{"mysql", "sqlite"} {
+		if !strings.Contains(drawn, wanted) {
+			t.Errorf("the list does not name %q:\n%s", wanted, drawn)
+		}
+	}
+}
+
+// A card too narrow for the engine name beside the target drops the engine column, so the
+// row still fits the width of the card.
+func TestThePickerRowFitsTheNarrowCard(t *testing.T) {
+	model := buildOfflineModel(t, 60, 30)
+	model.screen = ScreenPickingProfile
+	model.profiles = []cfg.Profile{
+		{Name: "shop", Engine: core.EngineAuroraMysql, Host: "127.0.0.1", Port: 3306, User: "root"},
+	}
+
+	for _, line := range strings.Split(stripEscapes(model.renderPicker()), "\n") {
+		if present.MeasureText(line) > 60 {
+			t.Errorf("a row of %d columns does not fit the screen: %q",
+				present.MeasureText(line), line)
+		}
 	}
 }

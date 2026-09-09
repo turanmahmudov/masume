@@ -35,6 +35,9 @@ const (
 	// The border, the padding of the card, and the padding of a row.
 	pickerChrome = 6
 	pickerGap    = 1
+	// The narrowest target column. A card that cannot hold this beside the engine name
+	// drops the engine column.
+	pickerTargetWidth = 12
 	// pickerCardChrome is the border, the blank row inside it, the blank row over the
 	// keys, and the row of keys.
 	pickerCardChrome = 6
@@ -163,6 +166,15 @@ func (model *Model) pickedProfile() (cfg.Profile, bool) {
 // renderPicker draws the connections of the config file and of the project file, one row
 // each. The screen draws its own rows, because a row holds parts that each keep their own
 // width.
+// measureLongestEngineName returns the columns the longest engine name of the list takes.
+func measureLongestEngineName(profiles []cfg.Profile) int {
+	longest := 0
+	for _, profile := range profiles {
+		longest = max(longest, present.MeasureText(string(profile.Engine)))
+	}
+	return longest
+}
+
 func (model *Model) renderPicker() string {
 	theme := model.styles.Theme
 	cardWidth := present.ResolveCardWidth(widestPickerCard, narrowestPickerCard, model.width)
@@ -174,8 +186,18 @@ func (model *Model) renderPicker() string {
 	}) {
 		sourceWidth = pickerSourceWidth
 	}
-	targetWidth := max(cardWidth-pickerChrome-pickerOpenWidth-pickerNameWidth-
-		pickerEnvWidth-pickerModeWidth-sourceWidth-pickerGap*3, 12)
+	fixedWidth := pickerChrome + pickerOpenWidth + pickerNameWidth + pickerEnvWidth +
+		pickerModeWidth + sourceWidth + pickerGap*3
+	// The engine column is as wide as the longest engine name in the list, and it stands
+	// only where the target keeps its own room beside it.
+	room := cardWidth - fixedWidth
+	engineWidth := measureLongestEngineName(model.profiles)
+	if room-engineWidth-pickerGap < pickerTargetWidth {
+		engineWidth = 0
+	} else {
+		room -= engineWidth + pickerGap
+	}
+	targetWidth := max(room, pickerTargetWidth)
 
 	lines := []string{}
 	if len(model.profiles) == 0 {
@@ -245,6 +267,10 @@ func (model *Model) renderPicker() string {
 			modeStyle.Render(mode+" ")
 		if sourceWidth > 0 {
 			written += modeStyle.Render(present.FitText(source, sourceWidth))
+		}
+		if engineWidth > 0 {
+			written += modeStyle.Render(
+				present.FitText(string(profile.Engine), engineWidth) + " ")
 		}
 		written += targetStyle.Render(target)
 		lines = append(lines, row.Width(cardWidth-2).Render(" "+written))
