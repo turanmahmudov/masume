@@ -669,11 +669,7 @@ func (model *Model) readKey(key tea.Key) (tea.Model, tea.Cmd) {
 		if model.confirm != nil {
 			return model, nil
 		}
-		if model.askSaveOnExit() {
-			return model, nil
-		}
-		model.quitting = true
-		return model, model.shutDown()
+		return model, model.quitOrAsk()
 	}
 
 	if model.confirm != nil {
@@ -762,6 +758,71 @@ func keepPasswordOutOfTheFile(profile cfg.Profile) (cfg.Profile, error) {
 	}
 	profile.Auth = cfg.AuthKeyring
 	return profile, nil
+}
+
+// quitOrAsk ends the client, and puts the questions about work that is not written first.
+func (model *Model) quitOrAsk() tea.Cmd {
+	if model.askDiscardOnExit() {
+		return nil
+	}
+	if model.askSaveOnExit() {
+		return nil
+	}
+	model.quitting = true
+	return model.shutDown()
+}
+
+// askDiscardOnExit asks about the staged changes and the open transactions that the end of
+// the client drops, and reports whether it asked.
+func (model *Model) askDiscardOnExit() bool {
+	staged, transactions := model.countUnwrittenWork()
+	if (staged == 0 && transactions == 0) || model.confirm != nil {
+		return false
+	}
+	model.confirm = &confirmState{
+		Title: " quit ",
+		Body:  describeUnwrittenWork(staged, transactions),
+		Yes:   "quit and discard", No: "keep working",
+		Destructive: true,
+		Answer: func(confirmed bool) tea.Cmd {
+			if !confirmed {
+				return nil
+			}
+			if model.askSaveOnExit() {
+				return nil
+			}
+			model.quitting = true
+			return model.shutDown()
+		},
+	}
+	return true
+}
+
+// countUnwrittenWork returns the staged changes of every tab, and the number of notebooks
+// that hold an open transaction.
+func (model *Model) countUnwrittenWork() (staged int, transactions int) {
+	for _, connection := range model.connections.all() {
+		for _, tab := range connection.Tabs {
+			staged += core.CountChanges(tab.Pending)
+			if tab.Notebook != nil && tab.Notebook.HoldsTransaction {
+				transactions++
+			}
+		}
+	}
+	return staged, transactions
+}
+
+// describeUnwrittenWork returns the body of the question the client asks before it ends.
+func describeUnwrittenWork(staged, transactions int) string {
+	parts := make([]string, 0, 2)
+	if staged > 0 {
+		parts = append(parts, present.DescribeStagedChanges(staged))
+	}
+	if transactions > 0 {
+		parts = append(parts, present.FormatCountOf(
+			int64(transactions), "open transaction", "open transactions"))
+	}
+	return "Quitting discards " + strings.Join(parts, " and ") + "."
 }
 
 // askSaveOnExit asks whether the connections that are in no config file are written to it

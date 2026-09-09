@@ -24,7 +24,7 @@ Type SQL or use the terminal paste command. `Ctrl+V` only pastes text last copie
 
 Completion appears while typing. Up and Down select a candidate; Tab accepts the candidate. Enter always inserts a newline, including while completion is open. Esc dismisses completion. Without completion, Tab changes panes.
 
-Shift with movement keys extends the selection. `Ctrl+A` selects all editor text. `Ctrl+C` copies and clears the selection; without a selection, `Ctrl+C` quits. `Ctrl+D` formats SQL, `Alt+C` toggles line comments, and `Alt+[` or `Alt+]` changes indentation.
+Shift with movement keys extends the selection. `Ctrl+A` selects all editor text. `Ctrl+C` copies and clears the selection; without a selection, `Ctrl+C` quits, and asks first about staged changes and open transactions. `Ctrl+D` formats SQL, `Alt+C` toggles line comments, and `Alt+[` or `Alt+]` changes indentation.
 
 `Alt+F` opens Find. Enter applies the search; `F3` and `Shift+F3` select the next or previous match. Matching uses plain substrings, including matches inside longer names.
 

@@ -26,7 +26,7 @@ Plain global keys type characters while the editor has focus. These include `?`,
 
 `alt`, `meta`, and `option` are equivalent configuration modifiers. This reference and the help screen use Alt. Spaces separate key presses: `alt+p s` is Alt+P, then lowercase `s`. `C c` is uppercase C, then lowercase c.
 
-`Ctrl+C` copies an editor or mouse text selection and clears the selection. Without a selection, `Ctrl+C` quits, with a connection-save question when applicable. `Esc` closes a card, dismisses completion, or clears a workspace selection.
+`Ctrl+C` copies an editor or mouse text selection and clears the selection. Without a selection, `Ctrl+C` quits. It asks first about staged changes and open transactions, and then about a connection that is in no config file. `Esc` closes a card, dismisses completion, or clears a workspace selection.
 
 `Tab` accepts a listed completion; otherwise, `Tab` moves focus. `Enter` inserts a newline in the editor. `Ctrl+V` pastes the last text copied inside masume. Use the terminal paste command for the operating system clipboard.
 
