@@ -370,7 +370,7 @@ var gridActions = []ActionDefinition{
 	{ID: ActionSortColumn, Needs: NeedsSortsRead},
 	{ID: ActionAddSortColumn, Needs: NeedsSortsRead},
 	{ID: ActionOpenRow}, {ID: ActionViewCell}, {ID: ActionEditCell},
-	{ID: ActionToggleDelete}, {ID: ActionDuplicateRow}, {ID: ActionReviewChanges, MainHint: true},
+	{ID: ActionToggleDelete}, {ID: ActionDuplicateRow}, {ID: ActionReviewChanges},
 	{ID: ActionUndoChange}, {ID: ActionRedoChange},
 	{ID: ActionCountRows, AnswersInResult: true, MainHint: true},
 	{ID: ActionFollowForeignKey}, {ID: ActionInsertRow},

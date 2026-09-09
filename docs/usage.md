@@ -124,7 +124,7 @@ Grid writes require a writable profile, a single identifiable table, loaded colu
 
 The cell editor offers choices for known enum and boolean columns. `Ctrl+S` stages the value. `Ctrl+L` stages NULL, `Ctrl+E` stages an empty value, and `Ctrl+D` stages DEFAULT. `Ctrl+F` formats JSON in a JSON cell editor. These card keys do not run their global actions.
 
-Staging does not write to the database. In the review card, `Ctrl+Y` applies changes, `x` discards changes, and Esc returns without applying. A failed apply retains staged changes. Engines without atomic staged writes ask before applying multiple changes individually; a failure can leave earlier changes written.
+Staging does not write to the database. The right of the status bar counts the staged changes and names the key of the review, such as `● 3 staged · p to review`. In the review card, `Ctrl+Y` applies changes, `x` discards changes, and Esc returns without applying. A failed apply retains staged changes. Engines without atomic staged writes ask before applying multiple changes individually; a failure can leave earlier changes written.
 
 Staged changes belong to one statement result. Return to that result before applying, or discard the staged changes.
 

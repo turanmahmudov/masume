@@ -138,17 +138,30 @@ func TestTheMainModeShowsTheKeyThatOpensTheTree(t *testing.T) {
 	}
 }
 
-// One key writes the staged changes, and the count alone does not name it. The main mode
-// keeps that key, and the key is a button as every key of the bar is.
-func TestTheMainModeShowsTheKeyOfTheStagedChanges(t *testing.T) {
+// The count of the staged changes stands on the right of the bar, and names the key that
+// opens the review beside it. The keys on the left hold no second copy of that key.
+func TestTheStagedCountNamesTheKeyOfTheReview(t *testing.T) {
 	model, tab := buildHintModeModel(t, cfg.KeyHintsMain)
 	stageCellEdits(tab, 2)
 
-	if bar := readStatusBar(t, model); !strings.Contains(bar, "review 2") {
+	bar := readStatusBar(t, model)
+	if !strings.Contains(bar, "2 staged · p to review") {
 		t.Errorf("the status bar drew %q, wanted the key that reviews the changes", bar)
 	}
-	if _, found := findCardButton(model, ActionReviewChanges); !found {
-		t.Error("the key of the main mode recorded no button")
+	if strings.Contains(bar, "review 2") {
+		t.Errorf("the status bar drew %q, wanted the review key once", bar)
+	}
+}
+
+// The key answers in the grid, so a tab that reads the editor is left with the count.
+func TestTheStagedCountNamesNoKeyInTheEditor(t *testing.T) {
+	model, tab := buildHintModeModel(t, cfg.KeyHintsMain)
+	stageCellEdits(tab, 2)
+	tab.Focus = app.PaneEditor
+
+	if bar := readStatusBar(t, model); !strings.Contains(bar, "2 staged") ||
+		strings.Contains(bar, "to review") {
+		t.Errorf("the status bar drew %q, wanted the count without the key", bar)
 	}
 }
 
@@ -221,7 +234,7 @@ var mainHintActions = []string{
 	"global/run-at-cursor", "global/run-batch", "global/save-query", "global/send-to-ai",
 	"global/show-ai-chat", "global/show-help", "global/show-palette",
 	"global/toggle-sidebar",
-	"grid/count-rows", "grid/open-menu", "grid/review-changes",
+	"grid/count-rows", "grid/open-menu",
 	"list/choose-row",
 	"notebook/run-cell", "notebook/run-from-cell",
 	"plan/ai-check-plan",

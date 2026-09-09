@@ -47,7 +47,6 @@ type HintContext struct {
 	SidebarVisible bool
 	Rewritten      bool
 	FilterSteps    int
-	Staged         int
 	CanFetchMore   bool
 	CanCountRows   bool
 	Running        bool
@@ -509,11 +508,6 @@ func (model *Model) BuildHints(context HintContext) []Hint {
 		keys.add(model.buildHint(
 			capabilities, cfg.ScopeGrid, ActionCountRows, "count rows"))
 	}
-	if context.Staged > 0 {
-		keys.add(model.buildHint(capabilities, cfg.ScopeGrid, ActionReviewChanges,
-			"review "+strconv.Itoa(context.Staged)))
-	}
-
 	return closeBar(keys.build())
 }
 

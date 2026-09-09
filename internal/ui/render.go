@@ -440,7 +440,6 @@ func (model *Model) renderWorkspaceStatusBar() string {
 		HasResult: hasResult, Connections: model.connections.count(),
 		HasSelection: model.holdsSelection(), SidebarVisible: connection.SidebarVisible,
 		Rewritten: tab.HasRewrite(), FilterSteps: len(tab.Filter),
-		Staged:       core.CountChanges(tab.Pending),
 		CanFetchMore: tab.Results.CanFetchMore(),
 		CanCountRows: tab.Results.CanCountRows() &&
 			(active == nil || !active.HasTotalRows),
@@ -473,7 +472,8 @@ func (model *Model) describeStatus(
 
 	staged := core.CountChanges(tab.Pending)
 	if staged > 0 {
-		return model.icons.Prefix(cfg.IconDot) + strconv.Itoa(staged) + " staged", app.NoticeActive
+		return model.icons.Prefix(cfg.IconDot) + strconv.Itoa(staged) + " staged" +
+			model.describeReviewKey(tab), app.NoticeActive
 	}
 
 	switch connection.Session.ReadTransactionState() {
@@ -487,6 +487,20 @@ func (model *Model) describeStatus(
 		return warning + "autocommit is off", app.NoticeInfo
 	}
 	return "", app.NoticeInfo
+}
+
+// describeReviewKey returns the key that opens the review card, which the bar writes after
+// the count of the staged changes. The key answers in the grid, so a tab with the focus on
+// another pane is left with the count alone.
+func (model *Model) describeReviewKey(tab *app.Tab) string {
+	if tab.Focus != app.PaneResult {
+		return ""
+	}
+	chords := model.registry.FindActionChords(cfg.ScopeGrid, ActionReviewChanges)
+	if len(chords) == 0 {
+		return ""
+	}
+	return " · " + FormatChord(chords[0]) + " to review"
 }
 
 // readFocusedCellKind returns the kind of the focused cell, and nothing for a tab that
