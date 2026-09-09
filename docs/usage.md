@@ -46,7 +46,7 @@ Named parameters such as `:customer_id` open a JSON value form before execution.
 
 Read-only profiles refuse writes. Other profiles can ask for confirmation or show a write plan. Review the SQL and affected rows before accepting. See [write guards](configuration.md#a-profile) and [write plans](configuration.md#measuring-a-write).
 
-`Ctrl+X` requests query cancellation and stops a running export. Cancellation support depends on the engine. `Ctrl+C` is not the query cancellation command.
+`Ctrl+X` requests query cancellation and stops a running export. Cancellation support depends on the engine. CockroachDB, MongoDB, PlanetScale, SQL Server and SQLite take no cancel: the key is hidden there, and the wheel of the run shows `this engine cannot stop a running statement`. `Ctrl+C` is not the query cancellation command.
 
 ## Transactions
 

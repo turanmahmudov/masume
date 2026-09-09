@@ -21,6 +21,9 @@ import (
 // needsResult is what a view says while nothing has run.
 const needsResult = "run a query first"
 
+// noCancelNote is drawn beside the wheel of a run on an engine that takes no cancel.
+const noCancelNote = "this engine cannot stop a running statement"
+
 // The widths of the result pane.
 const (
 	// The gutter numbers each row of the result, so the footer can name where the cursor is.
@@ -410,9 +413,13 @@ func (model *Model) renderGrid(
 	theme := model.styles.Theme
 	state := tab.Results.State()
 
-	// A read the server can be told to stop names the key that stops it, and one it cannot
-	// names none.
+	// The wheel of a run shows the key that stops it, and the note where the engine takes
+	// no cancel.
 	stop := model.buildKeyLineOf(runningKeySpecs, keyScene{connection: connection})
+	note := ""
+	if !AnswersFor(connection.Session.Capabilities(), NeedsCancelsRunning) {
+		note = noCancelNote
+	}
 
 	switch state.Kind {
 	case app.QueryIdle:
@@ -428,7 +435,7 @@ func (model *Model) renderGrid(
 		})
 	case app.QueryRunning:
 		return model.renderWaitingBlock(waitBlock{
-			label: "running", since: model.findRunStart(tab), stop: stop,
+			label: "running", since: model.findRunStart(tab), stop: stop, note: note,
 			top: model.layout.gridHeaderRow, left: model.editorLeft + 1,
 		}, width, height)
 	case app.QueryFailed:
@@ -662,6 +669,8 @@ type waitBlock struct {
 	// the word runs it.
 	stop      *KeyLine
 	top, left int
+	// note is drawn where the stop key would be, for a wait no key stops.
+	note string
 }
 
 // renderWaitingBlock draws the wheel of a wait in the middle of the pane, where an empty pane
@@ -671,16 +680,22 @@ func (model *Model) renderWaitingBlock(wait waitBlock, width, height int) []stri
 	written := model.renderThinkingLine(
 		wait.label, wait.since, model.styles.Theme.Panel)
 	text := ""
-	if !wait.stop.isEmpty() {
+	switch {
+	case !wait.stop.isEmpty():
 		text = "  " + wait.stop.buildText()
+	case wait.note != "":
+		text = "  " + wait.note
 	}
 
 	wheel := measureStyledWidth(written)
 	left := max((width-wheel-present.MeasureText(text))/2, 0)
-	if text != "" {
+	switch {
+	case !wait.stop.isEmpty():
 		written += paintOn(model.styles.Theme.Panel, "  ") +
 			model.writeKeyLine(wait.stop, model.styles.Theme.Panel,
 				wait.top+halfRoundedUp(height-1), wait.left+left+wheel+2)
+	case wait.note != "":
+		written += paintText(model.styles.Theme.Muted, model.styles.Theme.Panel, text)
 	}
 
 	return centerRows([]string{strings.Repeat(" ", left) + written}, height)

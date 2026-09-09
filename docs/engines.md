@@ -62,7 +62,7 @@ The following table contains the default flags before deployment checks:
 - **Plans**: Query plans for supported statements.
 - **Measures**: Execution measurements in supported plans.
 - **Transactions**: Explicit begin, commit, and rollback operations.
-- **Cancels**: Dedicated cancellation of the current query.
+- **Cancels**: Dedicated cancellation of the current query. An engine without it hides the cancel key, and the wheel of a running statement shows `this engine cannot stop a running statement`.
 - **Activity**: Session or operation listing. Stopping another session also requires server permission.
 - **Locks**: Blocking relationships between sessions.
 - **Load**: Connection counts, limits, and server start time. Additional metrics depend on the engine.
