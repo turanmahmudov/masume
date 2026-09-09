@@ -118,11 +118,53 @@ Both interfaces share database tools, but their policies differ. See [AI data sh
 
 ## Install
 
-Each command below installs the latest tagged release.
+Each command below installs the latest tagged release. The packages and archives are on the [releases page](https://github.com/turanmahmudov/masume/releases/latest).
 
-- **Script:** `curl -fsSL https://raw.githubusercontent.com/turanmahmudov/masume/master/install.sh | sh` installs `masume` in `~/.local/bin`.
-- **mise:** `mise use -g github:turanmahmudov/masume@latest` downloads the release archive.
-- **Go 1.27 or later:** `go install github.com/turanmahmudov/masume@latest` builds from the module proxy.
+### Script
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/turanmahmudov/masume/master/install.sh | sh
+```
+
+The script puts `masume` in `~/.local/bin`.
+
+### mise
+
+```sh
+mise use -g github:turanmahmudov/masume@latest
+```
+
+### Debian and Ubuntu
+
+```sh
+sudo dpkg -i masume_0.0.4_linux_amd64.deb  # adapt the version and the architecture
+```
+
+### Fedora and RHEL
+
+```sh
+sudo rpm -i masume_0.0.4_linux_amd64.rpm  # adapt the version and the architecture
+```
+
+### Alpine
+
+The packages are unsigned, so `apk` needs `--allow-untrusted`.
+
+```sh
+sudo apk add --allow-untrusted masume_0.0.4_linux_amd64.apk  # adapt the version and the architecture
+```
+
+### Archive
+
+Unpack the `tar.gz` for the platform and put `masume` on the PATH.
+
+### Go
+
+```sh
+go install github.com/turanmahmudov/masume@latest
+```
+
+Go 1.27 or later builds it from the module proxy.
 
 ### From source
 
