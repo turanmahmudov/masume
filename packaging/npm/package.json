@@ -1,0 +1,53 @@
+{
+  "name": "masume",
+  "version": "0.0.0",
+  "description": "A database client for the terminal",
+  "keywords": [
+    "database",
+    "terminal",
+    "tui",
+    "cli",
+    "sql",
+    "postgresql",
+    "mysql",
+    "sqlserver",
+    "clickhouse",
+    "sqlite",
+    "mongodb",
+    "mcp"
+  ],
+  "homepage": "https://github.com/turanmahmudov/masume",
+  "bugs": "https://github.com/turanmahmudov/masume/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/turanmahmudov/masume.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Turan Mahmudov",
+  "type": "commonjs",
+  "goBinary": {
+    "name": "masume",
+    "url": "https://github.com/turanmahmudov/masume/releases/download/v{{version}}/masume_{{version}}_{{platform}}_{{arch}}.tar.gz"
+  },
+  "bin": {
+    "masume": "bin/masume.js"
+  },
+  "files": [
+    "bin/masume.js",
+    "checksums.txt"
+  ],
+  "scripts": {
+    "postinstall": "node bin/masume.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

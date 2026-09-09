@@ -2,6 +2,7 @@
 # Pinned so that the tools below are built with the Go version from go.mod. A tool built
 # with an older Go cannot read the packages that this tree compiles.
 go = "1.27"
+node = "24"
 staticcheck = "2026.2.1"
 "aqua:goreleaser/goreleaser" = "2.18.0"
 "go:golang.org/x/tools/cmd/goimports" = "latest"
@@ -145,6 +146,13 @@ run = "staticcheck ./..."
 description = "Validate .goreleaser.yaml"
 run = "goreleaser check"
 
+[tasks.packaging-check]
+description = "Check the npm package files"
+run = '''
+set -eu
+node --check packaging/npm/bin/masume.js
+'''
+
 [tasks.lint]
 description = "Run every check that needs no server"
 depends = [
@@ -155,6 +163,7 @@ depends = [
   "errcheck",
   "deadcode",
   "release-check",
+  "packaging-check",
 ]
 
 [tasks.check]

@@ -5,3 +5,6 @@ coverage.out
 coverage.html
 /.demo/
 *.mp4
+/packaging/npm/bin/masume
+/packaging/npm/checksums.txt
+/packaging/npm/LICENSE

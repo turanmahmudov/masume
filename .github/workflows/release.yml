@@ -46,3 +46,58 @@ jobs:
             dist/*.rpm
             dist/*.apk
             dist/checksums.txt
+
+  npm:
+    needs: release
+    name: npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: build the package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          gh release download "$GITHUB_REF_NAME" --pattern checksums.txt --dir packaging/npm
+          cp LICENSE packaging/npm/
+          npm --prefix packaging/npm version "$version" --no-git-tag-version --allow-same-version
+          mkdir -p dist
+          npm pack ./packaging/npm --pack-destination dist
+
+      - name: install the package and run it
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          npm install -g --prefix "$RUNNER_TEMP/npm" "./dist/masume-$version.tgz"
+          "$RUNNER_TEMP/npm/bin/masume" --version
+
+      - name: check every archive the package can download
+        run: |
+          set -eu
+          node -e 'const { version, goBinary } = require("./packaging/npm/package.json");
+          for (const platform of ["linux_amd64", "linux_arm64", "darwin_amd64", "darwin_arm64"]) {
+            const [os, arch] = platform.split("_");
+            console.log(goBinary.url.replace(/{{version}}/g, version).replace(/{{platform}}/g, os).replace(/{{arch}}/g, arch));
+          }' | while read -r url; do curl -fsIL -o /dev/null "$url"; done
+
+      - name: publish
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          case "$version" in
+          *-*) npm publish "./dist/masume-$version.tgz" --access public --tag next ;;
+          *) npm publish "./dist/masume-$version.tgz" --access public ;;
+          esac

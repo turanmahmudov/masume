@@ -134,6 +134,14 @@ The script puts `masume` in `~/.local/bin`.
 mise use -g github:turanmahmudov/masume@latest
 ```
 
+### npm
+
+```sh
+npm install -g masume
+```
+
+`npx masume` runs it without an install.
+
 ### Debian and Ubuntu
 
 ```sh

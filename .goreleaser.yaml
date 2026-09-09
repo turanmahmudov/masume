@@ -85,6 +85,10 @@ release:
     ```
 
     ```sh
+    npm install -g masume@{{ trimprefix .Tag "v" }}
+    ```
+
+    ```sh
     go install github.com/turanmahmudov/masume@{{ .Tag }}
     ```
 
