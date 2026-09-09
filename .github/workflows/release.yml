@@ -42,4 +42,7 @@ jobs:
         with:
           subject-path: |
             dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*.apk
             dist/checksums.txt

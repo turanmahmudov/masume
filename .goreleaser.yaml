@@ -34,6 +34,31 @@ archives:
       - LICENSE
       - config.example.toml
 
+nfpms:
+  - id: masume
+    package_name: masume
+    ids: [masume]
+    formats: [deb, rpm, apk]
+    maintainer: Turan Mahmudov <turan.mahmudov@gmail.com>
+    description: A database client for the terminal
+    homepage: https://github.com/turanmahmudov/masume
+    license: Apache-2.0
+    section: database
+    contents:
+      - src: README.md
+        dst: /usr/share/doc/masume/README.md
+      - src: config.example.toml
+        dst: /usr/share/doc/masume/config.example.toml
+      - src: LICENSE
+        dst: /usr/share/licenses/masume/LICENSE
+        packager: rpm
+      - src: LICENSE
+        dst: /usr/share/doc/masume/LICENSE
+        packager: deb
+      - src: LICENSE
+        dst: /usr/share/doc/masume/LICENSE
+        packager: apk
+
 checksum:
   name_template: checksums.txt
   algorithm: sha256
@@ -63,7 +88,7 @@ release:
     go install github.com/turanmahmudov/masume@{{ .Tag }}
     ```
 
-    Or take an archive below, unpack it, and put `masume` on the PATH.
+    Or take an archive, a `.deb`, an `.rpm` or an `.apk` below. Unpack an archive and put `masume` on the PATH.
 
     Check what you downloaded against `checksums.txt`:
 
