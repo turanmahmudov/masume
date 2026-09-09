@@ -76,6 +76,15 @@ func (form *FormState) openField() {
 	form.Draft = app.NewEditorBuffer(value, len(value))
 }
 
+// findFocusedField returns the field under the caret, and false where the form shows none.
+func (form *FormState) findFocusedField() (cfg.FormField, bool) {
+	shown := form.Shown()
+	if form.Cursor < 0 || form.Cursor >= len(shown) {
+		return cfg.FormField{}, false
+	}
+	return shown[form.Cursor], true
+}
+
 // keepField writes the draft back into the field under the caret.
 func (form *FormState) keepField() {
 	shown := form.Shown()
@@ -445,9 +454,6 @@ func (model *Model) renderForm() string {
 
 	// The card stands under the title bar, and its height follows what it holds.
 	cardRows := len(form.Shown()) + formCardChrome
-	if hasFormField(form.Shown(), "host") {
-		cardRows++
-	}
 	left := halfRoundedUp(model.width - cardWidth)
 	cardTop := titleBarRows + halfRoundedUp(model.height-2-cardRows)
 	model.layout.formChoices = nil
@@ -506,10 +512,8 @@ func (model *Model) renderForm() string {
 		lines = append(lines, model.renderKeyLine(keys, []string{text},
 			cardTop+cardBodyRow+len(lines), left+cardBodyColumn, model.styles.Theme.Panel)[0])
 	}
-	if hasFormField(form.Shown(), "host") {
-		lines = append(lines, model.styles.Faint().Render(present.TruncateText(
-			"paste a postgres:// or mysql:// URL into host to fill the form", cardWidth-4)))
-	}
+	lines = append(lines, model.styles.Faint().Render(
+		present.TruncateText(model.describeFormHint(), cardWidth-4)))
 
 	// Where the rows of the fields land on the screen, so a press marks the row it looks
 	// like.
@@ -526,8 +530,21 @@ func (model *Model) renderForm() string {
 const fieldMarkerWidth = 2
 
 // formCardChrome is the rows the card keeps besides its fields: the blank row, the row that
-// reports the test, the row of keys, the two borders and the blank row inside each one.
-const formCardChrome = 7
+// reports the test, the row of keys, the row of the hint, the two borders and the blank row
+// inside each one.
+const formCardChrome = 8
+
+// describeFormHint returns the faint line under the fields: the password source of the auth
+// field, or the paste hint of the form.
+func (model *Model) describeFormHint() string {
+	if field, focused := model.form.findFocusedField(); focused && field.Key == "auth" {
+		return cfg.DescribeAuthMode(model.form.Draft.Text)
+	}
+	if hasFormField(model.form.Shown(), "host") {
+		return "paste a postgres:// or mysql:// URL into host to fill the form"
+	}
+	return ""
+}
 
 // hasFormField is true where the form shows the field of this key.
 func hasFormField(fields []cfg.FormField, key string) bool {

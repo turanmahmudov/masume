@@ -340,3 +340,16 @@ autocommit = true
 		t.Error("autocommit was lost")
 	}
 }
+
+// The five password sources read alike in the form, so each one has a line of its own that
+// says where the password comes from. A name that is not a source has none.
+func TestDescribeAuthModeNamesEverySource(t *testing.T) {
+	for _, mode := range cfg.AuthModes {
+		if cfg.DescribeAuthMode(string(mode)) == "" {
+			t.Errorf("the %q source has no line", mode)
+		}
+	}
+	if held := cfg.DescribeAuthMode("nope"); held != "" {
+		t.Errorf("a name that is no source reads %q", held)
+	}
+}

@@ -390,6 +390,27 @@ func followEngine(before, after []FormField, engine string) []FormField {
 	return written
 }
 
+// DescribeAuthMode returns the line the form shows for the password source of that name.
+func DescribeAuthMode(written string) string {
+	mode, known := core.FindAllowed(AuthModes, written)
+	if !known {
+		return ""
+	}
+	switch mode {
+	case AuthPassword:
+		return "the environment variable in password env"
+	case AuthCommand:
+		return "the first output line of password command"
+	case AuthPrompt:
+		return "masume asks at every connection"
+	case AuthKeyring:
+		return "the system keyring holds the password"
+	case AuthSecret:
+		return "the secret store at secret ref"
+	}
+	return ""
+}
+
 // DescribeFormValue returns a value as the form draws it. An empty field shows a
 // placeholder.
 func DescribeFormValue(field FormField) string {
