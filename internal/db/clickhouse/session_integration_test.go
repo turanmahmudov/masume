@@ -20,23 +20,24 @@ import (
 	"github.com/turanmahmudov/masume/internal/db/engines"
 )
 
-// testSchema is the database of these tests. The server takes one statement at a time, so
-// each one runs on its own.
-const testSchema = "masume_test"
+// testSchema is the database of these tests, which is the database the connection opens.
+// The tree of a ClickHouse profile draws that database alone. The server takes one statement
+// at a time, so each one runs on its own.
+const testSchema = "shop"
 
 var shopSchema = []string{
-	`create database if not exists masume_test`,
-	`drop table if exists masume_test.orders`,
-	`create table masume_test.orders (
+	`create database if not exists shop`,
+	`drop table if exists shop.orders`,
+	`create table shop.orders (
 	   id       UInt64,
 	   customer String,
 	   total    Decimal(10,2),
 	   paid_at  Nullable(DateTime64(3)),
 	   loud     String materialized upper(customer)
 	 ) engine = MergeTree order by id`,
-	`alter table masume_test.orders
+	`alter table shop.orders
 	   add index customer_idx customer type set(100) granularity 4`,
-	`insert into masume_test.orders (id, customer, total)
+	`insert into shop.orders (id, customer, total)
 	   values (1, 'ada', 12.50), (2, 'grace', 0), (3, 'alan', 99.00)`,
 }
 
@@ -46,7 +47,7 @@ func openShop(t *testing.T) db.Session {
 	dbtest.RunStatements(t, session, shopSchema...)
 	t.Cleanup(func() {
 		_, _ = session.RunQuery(context.Background(),
-			"drop table if exists masume_test.orders", dbtest.ReadEverything, nil)
+			"drop table if exists shop.orders", dbtest.ReadEverything, nil)
 	})
 	return session
 }
@@ -71,7 +72,7 @@ func TestServerRunsAReadAndAnswersItsColumns(t *testing.T) {
 	session := openShop(t)
 
 	answered, err := session.RunQuery(context.Background(),
-		"select customer, total from masume_test.orders order by customer",
+		"select customer, total from shop.orders order by customer",
 		dbtest.ReadEverything, nil)
 	if err != nil {
 		t.Fatalf("the read answered %v", err)
@@ -126,8 +127,8 @@ func TestServerRunsEveryStatementOfABuffer(t *testing.T) {
 	ctx := context.Background()
 
 	read, err := session.RunQuery(ctx,
-		"insert into masume_test.orders (id, customer, total) values (4, 'lin', 1); "+
-			"select customer from masume_test.orders order by customer",
+		"insert into shop.orders (id, customer, total) values (4, 'lin', 1); "+
+			"select customer from shop.orders order by customer",
 		dbtest.ReadEverything, nil)
 	if err != nil {
 		t.Fatalf("the buffer answered %v", err)
@@ -141,8 +142,8 @@ func TestServerRunsEveryStatementOfABuffer(t *testing.T) {
 
 	// A write answers with no count of its own on this server.
 	written, writeErr := session.RunQuery(ctx,
-		"select customer from masume_test.orders; "+
-			"alter table masume_test.orders update total = 2 where id = 1",
+		"select customer from shop.orders; "+
+			"alter table shop.orders update total = 2 where id = 1",
 		dbtest.ReadEverything, nil)
 	if writeErr != nil {
 		t.Fatalf("the buffer answered %v", writeErr)
@@ -258,7 +259,7 @@ func TestServerAnswersAStatementItRefuses(t *testing.T) {
 	session := openShop(t)
 
 	_, err := session.RunQuery(context.Background(),
-		"select * from masume_test.nothing_here", dbtest.ReadEverything, nil)
+		"select * from shop.nothing_here", dbtest.ReadEverything, nil)
 	if err == nil {
 		t.Fatal("a read of a table that is not there answered no error")
 	}
@@ -276,7 +277,7 @@ func TestServerPlansAStatement(t *testing.T) {
 	ctx := context.Background()
 
 	plan, err := session.ExplainQuery(ctx,
-		"select customer from masume_test.orders where id = 2", false)
+		"select customer from shop.orders where id = 2", false)
 	if err != nil {
 		t.Fatalf("the plan answered %v", err)
 	}
@@ -295,7 +296,7 @@ func TestServerPlansAStatement(t *testing.T) {
 
 	// No plan of this server carries a measurement, so a measured plan is refused.
 	if _, measureErr := session.ExplainQuery(ctx,
-		"select customer from masume_test.orders", true); measureErr == nil {
+		"select customer from shop.orders", true); measureErr == nil {
 		t.Error("a measured plan answered no error")
 	}
 }
@@ -304,7 +305,7 @@ func TestServerNamesTheFaultOfAStatement(t *testing.T) {
 	session := openShop(t)
 	ctx := context.Background()
 
-	problem, faulty := session.CheckStatement(ctx, "select * from masume_test.nothing_here")
+	problem, faulty := session.CheckStatement(ctx, "select * from shop.nothing_here")
 	if !faulty {
 		t.Fatal("a read of a table that is not there was checked as good")
 	}
@@ -312,7 +313,7 @@ func TestServerNamesTheFaultOfAStatement(t *testing.T) {
 		t.Errorf("the fault reads %q and does not name the table", problem.Message)
 	}
 	if _, held := session.CheckStatement(
-		ctx, "select customer from masume_test.orders"); held {
+		ctx, "select customer from shop.orders"); held {
 		t.Error("a statement the server reads was checked as faulty")
 	}
 
@@ -363,7 +364,7 @@ func TestServerStreamsAResultInBatches(t *testing.T) {
 
 	batches, rows := 0, 0
 	counted, err := session.StreamQuery(context.Background(),
-		"select customer from masume_test.orders", nil, 2,
+		"select customer from shop.orders", nil, 2,
 		func(batch [][]any, columns []db.ResultColumn) error {
 			batches++
 			rows += len(batch)
@@ -391,7 +392,7 @@ func TestServerAppliesStagedChanges(t *testing.T) {
 	orders := findTable(t, session, "orders")
 
 	read, err := session.RunQuery(ctx,
-		"select id, customer from masume_test.orders where customer = 'ada'",
+		"select id, customer from shop.orders where customer = 'ada'",
 		dbtest.ReadEverything, nil)
 	if err != nil {
 		t.Fatalf("the read answered %v", err)
@@ -415,7 +416,7 @@ func TestServerAppliesStagedChanges(t *testing.T) {
 	}
 
 	after, afterErr := session.RunQuery(ctx,
-		"select customer from masume_test.orders where customer = 'ida'",
+		"select customer from shop.orders where customer = 'ida'",
 		dbtest.ReadEverything, nil)
 	if afterErr != nil {
 		t.Fatalf("the read answered %v", afterErr)
@@ -432,7 +433,7 @@ func TestServerAppliesAStagedDelete(t *testing.T) {
 	orders := findTable(t, session, "orders")
 
 	read, err := session.RunQuery(ctx,
-		"select id, customer from masume_test.orders where customer = 'grace'",
+		"select id, customer from shop.orders where customer = 'grace'",
 		dbtest.ReadEverything, nil)
 	if err != nil {
 		t.Fatalf("the read answered %v", err)
@@ -450,7 +451,7 @@ func TestServerAppliesAStagedDelete(t *testing.T) {
 	}
 
 	counted, countErr := session.RunQuery(ctx,
-		"select count() from masume_test.orders", dbtest.ReadEverything, nil)
+		"select count() from shop.orders", dbtest.ReadEverything, nil)
 	if countErr != nil {
 		t.Fatalf("the count answered %v", countErr)
 	}
@@ -565,7 +566,7 @@ func TestServerRefusesAWriteOnAReadOnlyConnection(t *testing.T) {
 	defer func() { _ = session.Close() }()
 
 	_, writeErr := session.RunQuery(ctx,
-		"optimize table masume_test.orders", dbtest.ReadEverything, nil)
+		"optimize table shop.orders", dbtest.ReadEverything, nil)
 	if writeErr == nil {
 		t.Fatal("a read-only session ran a write on the server")
 	}
@@ -586,7 +587,7 @@ func TestServerRefusesAWriteOnAReadOnlyConnection(t *testing.T) {
 	}
 	defer func() { _ = held.Close() }()
 	if _, err := held.RunQuery(ctx,
-		"insert into masume_test.orders (id) values (9)", dbtest.ReadEverything,
+		"insert into shop.orders (id) values (9)", dbtest.ReadEverything,
 		nil); err == nil {
 		t.Error("the client sent a write on a read-only connection")
 	}

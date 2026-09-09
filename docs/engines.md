@@ -236,7 +236,7 @@ The server has no read-only session, so a read-only profile is enforced by this 
 
 ## ClickHouse
 
-masume connects to ClickHouse over its native protocol, on port 9000 by default. A ClickHouse database is a schema, and the connected one is the default.
+masume connects to ClickHouse over its native protocol, on port 9000 by default. A ClickHouse database is a schema, and the connected one is the default. The object tree draws that database alone.
 
 The protocol takes one statement per call, so a buffer of several statements runs one at a time and answers with the result of the last one. Such a buffer binds no values: a `:name` parameter belongs to a buffer that holds one statement.
 

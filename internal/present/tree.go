@@ -352,6 +352,8 @@ type TreeResult struct {
 
 // TreeInput holds every input of BuildTree.
 type TreeInput struct {
+	// The schemas the server holds, including one that holds no relation and no object.
+	Schemas []string
 	Tables  []db.TableRef
 	Objects []db.SchemaObject
 	Roles   []db.DbRole
@@ -563,10 +565,14 @@ func groupObjectsBySchema(
 }
 
 // collectSchemaNames returns every schema of the catalog, as a set and as an ordered list.
+// The list of the server holds the schemas that no relation and no object names.
 func collectSchemaNames(
-	tables []db.TableRef, objects []db.SchemaObject,
+	schemas []string, tables []db.TableRef, objects []db.SchemaObject,
 ) (map[string]bool, []string) {
 	held := map[string]bool{}
+	for _, schema := range schemas {
+		held[schema] = true
+	}
 	for _, table := range tables {
 		held[table.Schema] = true
 	}
@@ -671,7 +677,8 @@ func BuildTree(input TreeInput) TreeResult {
 	tablesBySchema, tablesByName := groupTablesBySchema(input.Tables, readFilterFor)
 	objectsBySchema := groupObjectsBySchema(input.Objects, readFilterFor)
 
-	allSchemas, sortedSchemas := collectSchemaNames(input.Tables, input.Objects)
+	allSchemas, sortedSchemas := collectSchemaNames(
+		input.Schemas, input.Tables, input.Objects)
 	schemas, hiddenSystem := keepDrawnSchemas(sortedSchemas, engine, input.HideSystemSchemas)
 	knownRecent := keepKnownRecent(input.Recent, schemas)
 

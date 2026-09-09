@@ -53,7 +53,7 @@ mode     = "write"
 | `engine` | `postgres` | See [engines.md](engines.md) for the list |
 | `host` | required | The form defaults to `127.0.0.1`. Ignored for SQLite |
 | `port` | per engine | The server port |
-| `database` | required, except on MySQL-protocol engines | The database name, or the SQLite file path. A MySQL-protocol connection without one opens the server. A leading `~` expands to the home directory |
+| `database` | required, except on MySQL-protocol engines | The database name, or the SQLite file path. The object tree draws that database alone on a MySQL-protocol and a ClickHouse connection. A MySQL-protocol connection without one opens the server, and the tree draws every database of it. A leading `~` expands to the home directory |
 | `user` | required if the engine needs one | Ignored for SQLite. Optional for MongoDB |
 | `auth` | `secret` if `secret` is set; otherwise `command` if `password_command` is set; otherwise `password` | The password source: `prompt`, `keyring`, `command`, `secret` or `password`. See [Passwords](#passwords) |
 | `password` | | **Ignored in files.** A non-empty string produces a warning. The configured password source still applies |

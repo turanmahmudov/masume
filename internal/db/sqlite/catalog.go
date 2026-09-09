@@ -53,9 +53,15 @@ func (session *sqliteSession) readCatalog(
 	return read, rows.Err()
 }
 
-// listSchemas returns the file and everything attached to it, which is what SQLite
+// ListSchemas returns the file and everything attached to it, including one that holds no
+// table.
+func (session *sqliteSession) ListSchemas(ctx context.Context) ([]string, error) {
+	return session.readSchemaNames(ctx), nil
+}
+
+// readSchemaNames returns the file and everything attached to it, which is what SQLite
 // calls a schema.
-func (session *sqliteSession) listSchemas(ctx context.Context) []string {
+func (session *sqliteSession) readSchemaNames(ctx context.Context) []string {
 	rows, err := session.readCatalog(
 		ctx, "select name from pragma_database_list order by seq")
 	if err != nil {
@@ -79,7 +85,7 @@ func (session *sqliteSession) buildCatalogName(schema string) string {
 func (session *sqliteSession) ListTables(ctx context.Context) ([]db.TableRef, error) {
 	tables := []db.TableRef{}
 
-	for _, schema := range session.listSchemas(ctx) {
+	for _, schema := range session.readSchemaNames(ctx) {
 		estimates := session.readRowEstimates(ctx, schema)
 		rows, err := session.readCatalog(ctx, fmt.Sprintf(`
         select name, type
@@ -156,7 +162,7 @@ func readTriggerEvents(written string) string {
 func (session *sqliteSession) ListSchemaObjects(ctx context.Context) ([]db.SchemaObject, error) {
 	objects := []db.SchemaObject{}
 
-	for _, schema := range session.listSchemas(ctx) {
+	for _, schema := range session.readSchemaNames(ctx) {
 		rows, err := session.readCatalog(ctx, fmt.Sprintf(`
         select name, tbl_name, sql
           from %s
@@ -300,7 +306,7 @@ func (session *sqliteSession) readKeyColumns(
 func (session *sqliteSession) ListRelationships(ctx context.Context) ([]db.Relationship, error) {
 	relationships := []db.Relationship{}
 
-	for _, schema := range session.listSchemas(ctx) {
+	for _, schema := range session.readSchemaNames(ctx) {
 		rows, err := session.readCatalog(ctx, fmt.Sprintf(`
         select name
           from %s

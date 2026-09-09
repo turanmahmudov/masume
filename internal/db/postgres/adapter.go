@@ -452,6 +452,22 @@ func (session *postgresSession) readRows(
 	return read, rows.Err()
 }
 
+// ListSchemas returns the schemas of the connected database, including one that holds
+// nothing. A PostgreSQL connection reads one database, so the list is of that database.
+func (session *postgresSession) ListSchemas(ctx context.Context) ([]string, error) {
+	rows, err := session.readRows(ctx, listSchemasSQL)
+	if err != nil {
+		return nil, err
+	}
+	schemas := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if name := db.ReadAnyText(row["name"]); name != "" {
+			schemas = append(schemas, name)
+		}
+	}
+	return schemas, nil
+}
+
 func (session *postgresSession) ListTables(ctx context.Context) ([]db.TableRef, error) {
 	rows, err := session.readRows(ctx, listTablesSQL)
 	if err != nil {

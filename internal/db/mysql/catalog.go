@@ -8,8 +8,26 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
+// ListSchemas returns the databases the tree draws: the one the profile names, or every
+// database of the server where it names none.
+func (session *mysqlSession) ListSchemas(ctx context.Context) ([]string, error) {
+	statement, params := buildMysqlSchemasSQL(session.profile.Database)
+	rows, _, err := session.readNamedRows(ctx, statement, params...)
+	if err != nil {
+		return nil, err
+	}
+	schemas := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if name := db.ReadAnyText(row["name"]); name != "" {
+			schemas = append(schemas, name)
+		}
+	}
+	return schemas, nil
+}
+
 func (session *mysqlSession) ListTables(ctx context.Context) ([]db.TableRef, error) {
-	rows, _, err := session.readNamedRows(ctx, listMysqlTablesSQL)
+	statement, params := buildMysqlTablesSQL(session.profile.Database)
+	rows, _, err := session.readNamedRows(ctx, statement, params...)
 	if err != nil {
 		return nil, err
 	}
@@ -42,11 +60,14 @@ func (session *mysqlSession) ListRoles(ctx context.Context) ([]db.DbRole, error)
 }
 
 func (session *mysqlSession) ListSchemaObjects(ctx context.Context) ([]db.SchemaObject, error) {
-	routineRows, _, err := session.readNamedRows(ctx, listMysqlRoutinesSQL)
+	routineStatement, routineParams := buildMysqlRoutinesSQL(session.profile.Database)
+	routineRows, _, err := session.readNamedRows(ctx, routineStatement, routineParams...)
 	if err != nil {
 		return nil, db.WrapDatabaseOperation("reading the routines", err)
 	}
-	triggerRows, _, triggerErr := session.readNamedRows(ctx, listMysqlTriggersSQL)
+	triggerStatement, triggerParams := buildMysqlTriggersSQL(session.profile.Database)
+	triggerRows, _, triggerErr := session.readNamedRows(
+		ctx, triggerStatement, triggerParams...)
 	if triggerErr != nil {
 		return nil, db.WrapDatabaseOperation("reading the triggers", triggerErr)
 	}
@@ -144,7 +165,8 @@ func (session *mysqlSession) DescribeTable(
 }
 
 func (session *mysqlSession) ListRelationships(ctx context.Context) ([]db.Relationship, error) {
-	rows, _, err := session.readNamedRows(ctx, listMysqlRelationshipsSQL)
+	statement, params := buildMysqlRelationshipsSQL(session.profile.Database)
+	rows, _, err := session.readNamedRows(ctx, statement, params...)
 	if err != nil {
 		return nil, err
 	}

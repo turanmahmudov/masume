@@ -128,7 +128,7 @@ func TestImportWritesATableAndFillsIt(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		_, _ = session.RunQuery(context.Background(),
-			"drop table if exists masume_test.imported_people", dbtest.ReadEverything, nil)
+			"drop table if exists shop.imported_people", dbtest.ReadEverything, nil)
 	})
 
 	// A new table of this server needs an engine, which the dialect writes.
@@ -154,7 +154,7 @@ func TestImportWritesATableAndFillsIt(t *testing.T) {
 	}
 
 	answered, readErr := session.RunQuery(ctx,
-		"select name, age, paid from masume_test.imported_people order by name",
+		"select name, age, paid from shop.imported_people order by name",
 		dbtest.ReadEverything, nil)
 	if readErr != nil {
 		t.Fatalf("the read answered %v", readErr)
@@ -181,7 +181,7 @@ func TestWritePlanIsNotOffered(t *testing.T) {
 		t.Error("the engine reads as one that measures a write")
 	}
 	if _, built := writeplan.Build(ctx, session, writeplan.Request{
-		SQL:    "alter table masume_test.orders update total = 1 where customer = 'ada'",
+		SQL:    "alter table shop.orders update total = 1 where customer = 'ada'",
 		Tables: tables, Mode: cfg.PlanUndo, UndoRows: 100,
 	}); built {
 		t.Error("a write was measured on a server that plans none")

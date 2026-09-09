@@ -28,6 +28,15 @@ func buildOwnSchemaFilter(column string) string {
 	return strings.Join(written, "\n     and ")
 }
 
+// The schemas of the connected database, including a schema that holds nothing.
+var listSchemasSQL = `
+  select n.nspname as name
+    from pg_namespace n
+   where ` + buildSystemSchemaFilter("n.nspname") + `
+     and ` + buildOwnSchemaFilter("n.nspname") + `
+   order by n.nspname
+`
+
 var listTablesSQL = `
   select n.nspname as schema,
          c.relname  as name,

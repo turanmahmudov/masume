@@ -1129,6 +1129,7 @@ func (model *Model) readCatalogAnswer(answered catalogReadMsg) (tea.Model, tea.C
 	}
 
 	connection.Catalog.Problem = ""
+	connection.Catalog.Schemas = answered.Schemas
 	connection.Catalog.Tables = answered.Tables
 	connection.Catalog.Objects = answered.Objects
 	connection.Catalog.Roles = answered.Roles
@@ -1145,7 +1146,7 @@ func (model *Model) readCatalogAnswer(answered catalogReadMsg) (tea.Model, tea.C
 	// before them was dropped with the rest of the catalog.
 	return model, tea.Batch(
 		keepCatalog(answered.ConnectionID, model.log, connection.Profile().Name,
-			answered.Tables, answered.Objects, answered.Roles),
+			answered.Schemas, answered.Tables, answered.Objects, answered.Roles),
 		model.readOpenTableDetails(answered.ConnectionID, connection),
 	)
 }

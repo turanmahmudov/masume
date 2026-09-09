@@ -15,6 +15,14 @@ var systemSchemaList = func() string {
 	return "(" + strings.Join(named, ", ") + ")"
 }()
 
+// The schemas of the connected database, including a schema that holds nothing.
+var listSchemasSQL = `
+  select s.name as [name]
+    from sys.schemas s
+   where lower(s.name) not in ` + systemSchemaList + `
+   order by s.name
+`
+
 // The type of a column, written the way a statement of the user writes it.
 const columnTypeExpression = `
          t.name + case

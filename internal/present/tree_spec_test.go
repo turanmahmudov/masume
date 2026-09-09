@@ -207,6 +207,37 @@ func TestBuildTreeGivesEveryRowAnIdOfItsOwn(t *testing.T) {
 	}
 }
 
+// A database that holds no relation is drawn, because a user opens it to create the first
+// table. The schema list of the server names it, and no relation does.
+func TestBuildTreeDrawsASchemaThatHoldsNothing(t *testing.T) {
+	input := buildTreeInput()
+	input.Schemas = []string{"public", "archive", "empty_one"}
+
+	held := present.BuildTree(input)
+	row, there := findRow(held.Rows, "empty_one")
+	if !there {
+		t.Fatal("the tree does not hold the database that holds nothing")
+	}
+	if row.Detail != "0" {
+		t.Errorf("the row reports %q relations, wanted none", row.Detail)
+	}
+	if !row.Selectable {
+		t.Error("the row cannot be selected, so no menu opens on it")
+	}
+}
+
+// A filter looks for a relation, so a schema that holds nothing matching stays hidden while
+// the filter is on.
+func TestBuildTreeLeavesOutAnEmptySchemaUnderAFilter(t *testing.T) {
+	input := buildTreeInput()
+	input.Schemas = []string{"public", "empty_one"}
+	input.Filter = "orders"
+
+	if _, there := findRow(present.BuildTree(input).Rows, "empty_one"); there {
+		t.Error("the filtered tree holds a schema with nothing that matches")
+	}
+}
+
 // The tree draws an empty catalog before the first read returns, and it must draw the
 // folders and not an empty pane.
 func TestBuildTreeHoldsAnEmptyCatalog(t *testing.T) {

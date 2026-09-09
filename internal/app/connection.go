@@ -55,6 +55,8 @@ func (notice *Notice) ReadLife() time.Duration {
 
 // Catalog is the loaded server metadata.
 type Catalog struct {
+	// The schemas the server holds, including one that holds no relation and no object.
+	Schemas []string
 	Tables  []db.TableRef
 	Objects []db.SchemaObject
 	Roles   []db.DbRole

@@ -55,6 +55,12 @@ func (session *mongoSession) ListTables(ctx context.Context) ([]db.TableRef, err
 	return tables, nil
 }
 
+// ListSchemas returns the databases the connection may read, including one that holds no
+// collection.
+func (session *mongoSession) ListSchemas(ctx context.Context) ([]string, error) {
+	return session.listDatabaseNames(ctx)
+}
+
 // listDatabaseNames returns available databases, or only the connection database if listing is forbidden.
 func (session *mongoSession) listDatabaseNames(ctx context.Context) ([]string, error) {
 	names, err := session.client.ListDatabaseNames(ctx, bson.D{})

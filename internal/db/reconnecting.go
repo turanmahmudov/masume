@@ -146,6 +146,12 @@ func (session *ReconnectingSession) Composer() Composer {
 	return held.Composer()
 }
 
+func (session *ReconnectingSession) ListSchemas(ctx context.Context) ([]string, error) {
+	held, done := session.hold()
+	defer done()
+	return held.ListSchemas(ctx)
+}
+
 func (session *ReconnectingSession) ListTables(ctx context.Context) ([]TableRef, error) {
 	held, done := session.hold()
 	defer done()

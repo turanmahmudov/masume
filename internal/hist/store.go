@@ -69,6 +69,7 @@ type SavedWorkspace struct {
 
 // CatalogSnapshot is the cached object tree from the last catalog read.
 type CatalogSnapshot struct {
+	Schemas json.RawMessage `json:"schemas"`
 	Tables  json.RawMessage `json:"tables"`
 	Objects json.RawMessage `json:"objects"`
 	Roles   json.RawMessage `json:"roles"`

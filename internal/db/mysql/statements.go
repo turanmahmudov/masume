@@ -13,15 +13,39 @@ var mysqlSystemSchemaList = func() string {
 	return "(" + strings.Join(named, ", ") + ")"
 }()
 
-var listMysqlTablesSQL = `
+// scopeMysqlSchema returns the clause and the parameter that keep one database. A profile
+// that names no database reads every database of the server.
+func scopeMysqlSchema(column, database string) (string, []any) {
+	if database == "" {
+		return "", nil
+	}
+	return "\n     and " + column + " = ?", []any{database}
+}
+
+// buildMysqlSchemasSQL returns the database list, including a database that holds nothing.
+func buildMysqlSchemasSQL(database string) (string, []any) {
+	clause, params := scopeMysqlSchema("schema_name", database)
+	return `
+  select schema_name as name
+    from information_schema.schemata
+   where lower(schema_name) not in ` + mysqlSystemSchemaList + clause + `
+   order by schema_name
+`, params
+}
+
+// buildMysqlTablesSQL returns the relation list.
+func buildMysqlTablesSQL(database string) (string, []any) {
+	clause, params := scopeMysqlSchema("table_schema", database)
+	return `
   select table_schema            as ` + "`schema`" + `,
          table_name              as name,
          table_type              as kind,
          coalesce(table_rows, 0) as estimated_rows
     from information_schema.tables
-   where lower(table_schema) not in ` + mysqlSystemSchemaList + `
+   where lower(table_schema) not in ` + mysqlSystemSchemaList + clause + `
    order by table_schema, table_name
-`
+`, params
+}
 
 const describeMysqlColumnsSQL = `
   select column_name    as name,
@@ -54,7 +78,10 @@ const describeMysqlForeignKeysSQL = `
    order by k.constraint_name
 `
 
-var listMysqlRelationshipsSQL = `
+// buildMysqlRelationshipsSQL returns every foreign key of the databases the tree draws.
+func buildMysqlRelationshipsSQL(database string) (string, []any) {
+	clause, params := scopeMysqlSchema("k.table_schema", database)
+	return `
   select k.constraint_name as name,
          k.table_schema    as ` + "`schema`" + `,
          k.table_name      as ` + "`table`" + `,
@@ -69,11 +96,12 @@ var listMysqlRelationshipsSQL = `
      and r.constraint_name   = k.constraint_name
      and r.table_name        = k.table_name
    where k.referenced_table_name is not null
-     and lower(k.table_schema) not in ` + mysqlSystemSchemaList + `
+     and lower(k.table_schema) not in ` + mysqlSystemSchemaList + clause + `
    group by k.table_schema, k.table_name, k.constraint_name,
             k.referenced_table_schema, k.referenced_table_name
    order by k.table_schema, k.table_name, k.constraint_name
-`
+`, params
+}
 
 // The role list uses privilege grantees.
 const listMysqlRolesSQL = `
@@ -84,25 +112,33 @@ const listMysqlRolesSQL = `
    order by grantee
 `
 
-var listMysqlRoutinesSQL = `
+// buildMysqlRoutinesSQL returns the function and procedure list.
+func buildMysqlRoutinesSQL(database string) (string, []any) {
+	clause, params := scopeMysqlSchema("routine_schema", database)
+	return `
   select routine_schema              as ` + "`schema`" + `,
          routine_name                as name,
          lower(routine_type)         as routine_type,
          coalesce(dtd_identifier, '') as detail
     from information_schema.routines
-   where lower(routine_schema) not in ` + mysqlSystemSchemaList + `
+   where lower(routine_schema) not in ` + mysqlSystemSchemaList + clause + `
    order by routine_schema, routine_name
-`
+`, params
+}
 
-var listMysqlTriggersSQL = `
+// buildMysqlTriggersSQL returns the trigger list.
+func buildMysqlTriggersSQL(database string) (string, []any) {
+	clause, params := scopeMysqlSchema("trigger_schema", database)
+	return `
   select trigger_schema     as ` + "`schema`" + `,
          trigger_name       as name,
          event_object_table as detail,
          lower(event_manipulation) as events
     from information_schema.triggers
-   where lower(trigger_schema) not in ` + mysqlSystemSchemaList + `
+   where lower(trigger_schema) not in ` + mysqlSystemSchemaList + clause + `
    order by trigger_schema, trigger_name
-`
+`, params
+}
 
 const listMysqlIndexesSQL = `
   select index_name as name,

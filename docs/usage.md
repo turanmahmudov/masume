@@ -10,6 +10,8 @@ An explicit target or `$DATABASE_URL` can open a connection directly. See [conne
 
 A connection without restored tabs starts with an empty query tab and focus in the object tree. `Tab` and `Shift+Tab` move between visible panes. `Alt+P s` focuses the tree, `Alt+P e` focuses the editor, and `Alt+P r` focuses results.
 
+The tree draws every schema of the server, including one that holds no relation. A MySQL-family or ClickHouse profile that names a database draws that database alone. A MySQL-family profile without one draws every database of the server. See [a profile](configuration.md#a-profile).
+
 In the tree, arrows move, expand, and collapse nodes. `Enter` on a table opens its rows or reuses its existing tab. `o` opens another tab for that table. `i` opens the Columns view. `Enter` on a column inserts its qualified name into a query editor.
 
 `/` filters the tree; Enter keeps the filter, and Esc clears the active filter entry. A filter started inside a schema searches that schema. `f` toggles a favourite, `h` toggles system schemas, and `F5` refreshes the catalog.

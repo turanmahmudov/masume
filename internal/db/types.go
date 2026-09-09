@@ -314,6 +314,10 @@ type SessionInfo interface {
 // CatalogReader returns what the server holds: its relations, the objects beside them, and
 // the definition of each.
 type CatalogReader interface {
+	// ListSchemas returns every schema the tree draws, including one that holds nothing.
+	// A MySQL-protocol or ClickHouse profile that names a database lists that database
+	// alone. The other engines list the schemas of the connected database.
+	ListSchemas(ctx context.Context) ([]string, error)
 	// ListTables returns every relation the server holds.
 	ListTables(ctx context.Context) ([]TableRef, error)
 	ListRoles(ctx context.Context) ([]DbRole, error)

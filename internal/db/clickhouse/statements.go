@@ -16,18 +16,42 @@ var systemSchemaList = func() string {
 	return "(" + strings.Join(named, ", ") + ")"
 }()
 
-// A materialized view keeps its rows in a table of its own, which the server names with a
-// leading dot. That table belongs to the view and not to the user.
-var listTablesSQL = `
+// scopeDatabase returns the clause and the parameter that keep one database. A profile that
+// names no database reads every database of the server.
+func scopeDatabase(column, database string) (string, []any) {
+	if database == "" {
+		return "", nil
+	}
+	return "\n     and " + column + " = ?", []any{database}
+}
+
+// buildSchemasSQL returns the database list, including a database that holds nothing.
+func buildSchemasSQL(database string) (string, []any) {
+	clause, params := scopeDatabase("name", database)
+	return `
+  select name as name
+    from system.databases
+   where name not in ` + systemSchemaList + clause + `
+   order by name
+`, params
+}
+
+// buildTablesSQL returns the relation list. A materialized view keeps its rows in a table of
+// its own, which the server names with a leading dot. That table belongs to the view and not
+// to the user.
+func buildTablesSQL(database string) (string, []any) {
+	clause, params := scopeDatabase("database", database)
+	return `
   select database as ` + "`schema`" + `,
          name as name,
          engine as engine,
          coalesce(total_rows, 0) as estimated_rows
     from system.tables
    where database not in ` + systemSchemaList + `
-     and name not like '.inner%'
+     and name not like '.inner%'` + clause + `
    order by database, name
-`
+`, params
+}
 
 const describeColumnsSQL = `
   select name as name,

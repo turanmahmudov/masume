@@ -17,6 +17,7 @@ type treeFingerprint struct {
 	objects     int
 	roles       int
 	details     uint64
+	schemas     int
 	expanded    uint64
 	favourites  uint64
 	recent      uint64
@@ -31,6 +32,7 @@ type treeFingerprint struct {
 func (connection *Connection) buildTreeFingerprint(now time.Time) treeFingerprint {
 	return treeFingerprint{
 		readAt:      connection.Catalog.ReadAt,
+		schemas:     len(connection.Catalog.Schemas),
 		tables:      len(connection.Catalog.Tables),
 		objects:     len(connection.Catalog.Objects),
 		roles:       len(connection.Catalog.Roles),
@@ -53,7 +55,8 @@ func (connection *Connection) BuildTree(now time.Time) present.TreeResult {
 	}
 
 	result := present.BuildTree(present.TreeInput{
-		Tables: connection.Catalog.Tables, Objects: connection.Catalog.Objects,
+		Schemas: connection.Catalog.Schemas,
+		Tables:  connection.Catalog.Tables, Objects: connection.Catalog.Objects,
 		Roles: connection.Catalog.Roles, Details: connection.Catalog.Details,
 		Favourites: connection.Marks.Favourites, Recent: connection.Marks.Recent,
 		Engine: connection.Profile().Engine, HideSystemSchemas: connection.Tree.HideSystemSchemas,

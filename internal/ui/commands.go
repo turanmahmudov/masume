@@ -37,6 +37,7 @@ type connectedMsg struct {
 // catalogReadMsg returns a read of the object tree.
 type catalogReadMsg struct {
 	ConnectionID int
+	Schemas      []string
 	Tables       []db.TableRef
 	Objects      []db.SchemaObject
 	Roles        []db.DbRole
@@ -313,12 +314,19 @@ func readCatalog(connectionID int, session db.CatalogReader, announce bool) tea.
 			return answered
 		}
 		answered.Tables = tables
+		// The schema list holds the databases and the schemas that hold nothing, which no
+		// relation names.
+		schemas, schemaErr := session.ListSchemas(ctx)
+		answered.Schemas = schemas
 		objects, objectErr := session.ListSchemaObjects(ctx)
 		roles, roleErr := session.ListRoles(ctx)
 		answered.Objects, answered.Roles = objects, roles
-		if objectErr != nil {
+		switch {
+		case schemaErr != nil:
+			answered.PartProblem = db.DescribeError(schemaErr)
+		case objectErr != nil:
 			answered.PartProblem = db.DescribeError(objectErr)
-		} else if roleErr != nil {
+		case roleErr != nil:
 			answered.PartProblem = db.DescribeError(roleErr)
 		}
 		return answered
@@ -717,11 +725,12 @@ func keepVisit(connectionID int, log *hist.Store, profileName, schema string) te
 
 // keepCatalog writes the last catalog read of a profile, so a reconnect draws it at once.
 func keepCatalog(
-	connectionID int, log *hist.Store, profileName string,
+	connectionID int, log *hist.Store, profileName string, schemas []string,
 	tables []db.TableRef, objects []db.SchemaObject, roles []db.DbRole,
 ) tea.Cmd {
 	return writeHistory(connectionID, "cannot save the catalog", func() error {
 		snapshot := hist.CatalogSnapshot{}
+		snapshot.Schemas, _ = json.Marshal(schemas)
 		snapshot.Tables, _ = json.Marshal(tables)
 		snapshot.Objects, _ = json.Marshal(objects)
 		snapshot.Roles, _ = json.Marshal(roles)

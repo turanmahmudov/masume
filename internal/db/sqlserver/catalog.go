@@ -8,6 +8,23 @@ import (
 	"github.com/turanmahmudov/masume/internal/query"
 )
 
+// ListSchemas returns the schemas of the connected database, including one that holds
+// nothing. The catalog views of the server are of one database, so the list is of that
+// database.
+func (session *sqlserverSession) ListSchemas(ctx context.Context) ([]string, error) {
+	rows, _, err := session.readNamedRows(ctx, listSchemasSQL)
+	if err != nil {
+		return nil, err
+	}
+	schemas := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if name := db.ReadAnyText(row["name"]); name != "" {
+			schemas = append(schemas, name)
+		}
+	}
+	return schemas, nil
+}
+
 func (session *sqlserverSession) ListTables(ctx context.Context) ([]db.TableRef, error) {
 	rows, _, err := session.readNamedRows(ctx, listTablesSQL)
 	if err != nil {
