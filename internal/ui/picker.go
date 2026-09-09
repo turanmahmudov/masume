@@ -17,6 +17,9 @@ type pickerState struct {
 	// True where the user asked to keep the typed password in the keyring of the
 	// operating system.
 	keepInKeyring bool
+	// True where the typed password tests the connection form instead of opening a
+	// connection.
+	testsForm bool
 }
 
 func (picker *pickerState) step(by, count int) {
@@ -43,11 +46,20 @@ func (picker *pickerState) pick(profiles []cfg.Profile) (cfg.Profile, bool) {
 func (picker *pickerState) askPassword(profile cfg.Profile) {
 	picker.pending, picker.password = profile, app.NewEditorBuffer("", 0)
 	picker.keepInKeyring = profile.Auth == cfg.AuthKeyring && secret.IsAvailable()
+	picker.testsForm = false
 }
 
-// offersKeyring is true where the card draws the box that keeps the password.
+// askPasswordForFormTest opens the field for the profile the form describes. A test uses
+// the typed password and stores nothing.
+func (picker *pickerState) askPasswordForFormTest(profile cfg.Profile) {
+	picker.askPassword(profile)
+	picker.testsForm = true
+}
+
+// offersKeyring is true where the card draws the box that keeps the password. A test of the
+// form keeps no password.
 func (picker *pickerState) offersKeyring() bool {
-	return secret.IsAvailable()
+	return secret.IsAvailable() && !picker.testsForm
 }
 
 func (picker *pickerState) waitsFor(name string) bool {

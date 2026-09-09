@@ -399,7 +399,7 @@ select "remember in the keyring", or set password_env, password_command
 or a [secret] store
 ```
 
-Ignoring `password` does not change `auth`. The configured environment variable, command, secret store or keyring still applies. The client prompts only when the selected source and engine require a prompt. SQLite needs no password. MongoDB without a user does not prompt unless `auth = "prompt"`.
+Ignoring `password` does not change `auth`. The configured environment variable, command, secret store or keyring still applies. The client prompts only when the selected source and engine require a prompt. SQLite needs no password. MongoDB without a user does not prompt unless `auth = "prompt"`. A test from the connection form asks for the password through the same dialog, and keeps none of it.
 
 `masume run` and `masume --mcp` cannot prompt. A required password must come from a non-interactive source. Saving a profile removes an existing `password` assignment from that profile block.
 

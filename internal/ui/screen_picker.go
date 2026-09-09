@@ -305,8 +305,12 @@ func (model *Model) renderPassword() string {
 	profile := model.picker.pending
 	keys := model.buildKeyLineOf(passwordKeySpecs, keyScene{})
 
+	opening := "connecting to "
+	if model.picker.testsForm {
+		opening = "testing "
+	}
 	lines := []string{
-		model.styles.Muted().Render("connecting to ") +
+		model.styles.Muted().Render(opening) +
 			model.styles.Ink().Render(profile.Name) +
 			model.styles.Muted().Render(" · ") +
 			paintText(model.styles.EnvironmentColor(profile.Environment), nil, string(profile.Environment)),
@@ -464,7 +468,7 @@ func (model *Model) readPasswordKey(key tea.Key) (tea.Model, tea.Cmd) {
 		cfg.ScopeDialog, cfg.ScopeList); matched {
 		switch match.Action {
 		case ActionClose:
-			model.screen = ScreenPickingProfile
+			model.leavePasswordPrompt()
 			return model, nil
 		case ActionUseKeyring:
 			if model.picker.offersKeyring() {
@@ -472,6 +476,9 @@ func (model *Model) readPasswordKey(key tea.Key) (tea.Model, tea.Cmd) {
 			}
 			return model, nil
 		case ActionChooseRow:
+			if model.picker.testsForm {
+				return model.testFormWithTypedPassword()
+			}
 			profile := model.picker.pending
 			model.screen = ScreenConnecting
 			return model, connect(model.adapters, profile, model.picker.password.Text)
@@ -480,7 +487,7 @@ func (model *Model) readPasswordKey(key tea.Key) (tea.Model, tea.Cmd) {
 
 	switch key.Code {
 	case tea.KeyEscape:
-		model.screen = ScreenPickingProfile
+		model.leavePasswordPrompt()
 		return model, nil
 	case tea.KeyBackspace:
 		model.picker.password.DeleteBackward()
@@ -499,6 +506,18 @@ func (model *Model) readPasswordKey(key tea.Key) (tea.Model, tea.Cmd) {
 		model.picker.password.Insert(key.Text)
 	}
 	return model, nil
+}
+
+// leavePasswordPrompt returns to the screen that asked for the password.
+func (model *Model) leavePasswordPrompt() {
+	if model.picker.testsForm {
+		model.picker.testsForm = false
+		if model.form != nil {
+			model.screen = ScreenEditingConnection
+			return
+		}
+	}
+	model.screen = ScreenPickingProfile
 }
 
 // pasteIntoPassword writes what the terminal pasted into the password field.

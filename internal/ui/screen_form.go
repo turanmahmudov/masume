@@ -144,6 +144,20 @@ func testFormConnection(adapters engines.Adapters, profile cfg.Profile, password
 	}
 }
 
+// testFormWithTypedPassword runs the test of the form with the password the user typed, and
+// returns to the form.
+func (model *Model) testFormWithTypedPassword() (tea.Model, tea.Cmd) {
+	profile, password := model.picker.pending, model.picker.password.Text
+	model.picker.testsForm = false
+	if model.form == nil {
+		model.screen = ScreenPickingProfile
+		return model, nil
+	}
+	model.screen = ScreenEditingConnection
+	model.form.Test, model.form.Message = TestRunning, ""
+	return model, testFormConnection(model.adapters, profile, password)
+}
+
 // readFormKey returns what one press does in the connection form.
 func (model *Model) readFormKey(key tea.Key) (tea.Model, tea.Cmd) {
 	form := model.form
@@ -248,6 +262,14 @@ func (model *Model) runFormAction(match Match) (tea.Model, tea.Cmd, bool) {
 		}
 		if err != nil {
 			form.Test, form.Message = TestFailed, err.Error()
+			return model, nil, true
+		}
+		// The user is the only source of some passwords, so the test asks for one first,
+		// as opening a connection does.
+		if cfg.NeedsPasswordPrompt(profile) {
+			form.Test, form.Message = TestIdle, ""
+			model.picker.askPasswordForFormTest(profile)
+			model.screen = ScreenPromptingPassword
 			return model, nil, true
 		}
 		password, passwordErr := cfg.ResolveProfilePassword(profile)

@@ -378,7 +378,7 @@ var (
 		keyOf(cfg.ScopeDialog, ActionDeleteConnection, "delete"),
 	}
 	passwordKeySpecs = []keySpec{
-		keyOf(cfg.ScopeList, ActionChooseRow, "connect"),
+		keyOf(cfg.ScopeList, ActionChooseRow, "").withLabel(describePasswordUse),
 		keyOf(cfg.ScopeDialog, ActionClose, "cancel"),
 		keyOf(cfg.ScopeDialog, ActionUseKeyring, "keyring").onlyWhen(offersKeyring),
 	}
@@ -511,6 +511,15 @@ func readSceneChat(scene keyScene) *app.Chat {
 		return scene.connection.Chat
 	}
 	return nil
+}
+
+// describePasswordUse returns what the typed password does: it tests the connection form,
+// or it opens the connection.
+func describePasswordUse(scene keyScene) string {
+	if scene.model.picker.testsForm {
+		return "test"
+	}
+	return "connect"
 }
 
 func offersKeyring(scene keyScene) bool {
