@@ -360,6 +360,68 @@ func TestToggleFavouriteMarksAndUnmarks(t *testing.T) {
 	}
 }
 
+// A profile that opens another server keeps none of the names of the old one. The statements
+// it ran and the queries it saved are text of the user, so they stay.
+func TestForgetProfileStateDropsTheNamesOfTheOldServer(t *testing.T) {
+	store := openTestStore(t)
+
+	if err := store.SaveWorkspace("shop", SavedWorkspace{
+		Tabs: []SavedTab{{Kind: "table", Schema: "public", Name: "orders"}},
+	}); err != nil {
+		t.Fatalf("the tabs were not saved: %v", err)
+	}
+	if err := store.SaveCatalog("shop", CatalogSnapshot{
+		Version: cacheVersion, Tables: json.RawMessage(`[]`),
+	}); err != nil {
+		t.Fatalf("the catalog was not saved: %v", err)
+	}
+	if err := store.ToggleFavourite("shop", core.Favourite{
+		Kind: core.FavouriteTable, Schema: "public", Name: "orders",
+	}); err != nil {
+		t.Fatalf("the favourite was not marked: %v", err)
+	}
+	if err := store.VisitSchema("shop", "public"); err != nil {
+		t.Fatalf("the visit was not recorded: %v", err)
+	}
+	if err := store.Record(HistoryEntry{ProfileName: "shop", SQL: "select 1"}); err != nil {
+		t.Fatalf("the statement was not recorded: %v", err)
+	}
+	if err := store.SaveQuery("shop", "held", "select 2"); err != nil {
+		t.Fatalf("the query was not saved: %v", err)
+	}
+
+	if err := store.ForgetProfileState("shop"); err != nil {
+		t.Fatalf("the removal answered %v", err)
+	}
+
+	if _, found, err := store.FindWorkspace("shop"); found || err != nil {
+		t.Errorf("the tabs are still there, and the read answered %v", err)
+	}
+	if _, found := store.FindCatalog("shop"); found {
+		t.Error("the object tree of the old server is still cached")
+	}
+	if held, err := store.ListFavourites("shop"); err != nil || len(held) != 0 {
+		t.Errorf("the favourites read %+v, and the list answered %v", held, err)
+	}
+	if held, err := store.ListRecentSchemas("shop", 10); err != nil || len(held) != 0 {
+		t.Errorf("the visited schemas read %+v, and the list answered %v", held, err)
+	}
+	if held, err := store.ListRecent("shop", 10); err != nil || len(held) != 1 {
+		t.Errorf("the statements read %+v, and the list answered %v", held, err)
+	}
+	if held, err := store.ListSaved("shop"); err != nil || len(held) != 1 {
+		t.Errorf("the saved queries read %+v, and the list answered %v", held, err)
+	}
+}
+
+// A store the client could not open takes the removal and does nothing.
+func TestForgetProfileStateOnANilStoreAnswers(t *testing.T) {
+	var store *Store
+	if err := store.ForgetProfileState("shop"); err != nil {
+		t.Errorf("ForgetProfileState answered %v", err)
+	}
+}
+
 // The recent schemas are ordered by a counter and not by a timestamp, because two visits in
 // the same millisecond have the same timestamp and the order is the purpose of the list.
 func TestVisitSchemaKeepsTheOrderOfTwoVisitsInOneMoment(t *testing.T) {

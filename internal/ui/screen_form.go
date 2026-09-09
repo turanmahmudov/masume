@@ -10,6 +10,7 @@ import (
 
 	"github.com/turanmahmudov/masume/internal/app"
 	"github.com/turanmahmudov/masume/internal/cfg"
+	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
 	"github.com/turanmahmudov/masume/internal/db/engines"
 	"github.com/turanmahmudov/masume/internal/present"
@@ -322,6 +323,7 @@ func (model *Model) saveForm() (tea.Model, tea.Cmd) {
 	profile.InConfigFile = true
 	// The config file of the user now holds it, so the project file no longer provides it.
 	profile.ProjectFile = ""
+	model.forgetStateOfAnotherTarget(replacing, profile)
 
 	model.profiles = replaceProfile(model.profiles, replacing, profile)
 	// The file now holds it, so the question asked before the client ends does not offer
@@ -334,6 +336,36 @@ func (model *Model) saveForm() (tea.Model, tea.Cmd) {
 	model.screen = ScreenPickingProfile
 	model.form = nil
 	return model, nil
+}
+
+// forgetStateOfAnotherTarget drops the tabs, the object tree, the favourites and the visited
+// schemas kept under a name that now opens another engine or another database. The stored
+// names are the schemas and the tables of the server the name opened before, and the new one
+// holds none of them. It reads the list of profiles, so it runs before the save replaces the
+// profile in it.
+func (model *Model) forgetStateOfAnotherTarget(replacing string, saved cfg.Profile) {
+	for _, name := range []string{replacing, saved.Name} {
+		if name == "" {
+			continue
+		}
+		at, found := findProfileIndex(model.profiles, name)
+		if !found || !opensAnotherTarget(model.profiles[at], saved) {
+			continue
+		}
+		if err := model.log.ForgetProfileState(name); err != nil {
+			model.picker.problem = err.Error()
+			return
+		}
+	}
+}
+
+// opensAnotherTarget is true where the two profiles read their objects out of different
+// places: another engine, or another database of an engine that opens one database.
+func opensAnotherTarget(before, after cfg.Profile) bool {
+	if before.Engine != after.Engine {
+		return true
+	}
+	return core.NeedsDatabase(after.Engine) && before.Database != after.Database
 }
 
 // replaceProfile writes the profile back into the list, and drops the name it replaced.

@@ -377,6 +377,36 @@ func (store *Store) SaveWorkspace(profileName string, workspace SavedWorkspace) 
 	return transaction.Commit()
 }
 
+// ForgetProfileState deletes the tabs, the object tree, the favourites and the visited
+// schemas of one profile. The statements it ran and the queries it saved stay.
+func (store *Store) ForgetProfileState(profileName string) error {
+	if store == nil {
+		return nil
+	}
+	store.workspaceGuard.Lock()
+	defer store.workspaceGuard.Unlock()
+
+	transaction, err := store.file.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = transaction.Rollback() }()
+
+	for _, table := range []string{
+		"workspace_tab", "catalog_cache", "favourite_object", "recent_schema",
+	} {
+		if _, err := transaction.Exec(
+			`DELETE FROM `+table+` WHERE profile_name = ?`, profileName); err != nil {
+			return err
+		}
+	}
+	if err := transaction.Commit(); err != nil {
+		return err
+	}
+	delete(store.workspaceChange, profileName)
+	return nil
+}
+
 // readSavedTabKind returns the kind of the table or of the object. Both use the same
 // column.
 func readSavedTabKind(tab SavedTab) string {
