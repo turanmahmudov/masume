@@ -63,6 +63,111 @@ func TestSplitStatementsEndsAStatementOnlyAtARealSemicolon(t *testing.T) {
 		// the semicolon inside it is text.
 		{"a semicolon after an escaped quote", `select 'a\'; b'`, syntax.FlavourMysql,
 			[]string{`select 'a\'; b'`}},
+
+		// A trigger body and a stored routine hold their statements between `begin` and
+		// `end`, and the block keeps its own semicolon.
+		{
+			"a trigger body",
+			"create trigger t after insert on orders begin update c set n=n; end;\n" +
+				"select 1;",
+			syntax.FlavourStandard,
+			[]string{
+				"create trigger t after insert on orders begin update c set n=n; end;",
+				"select 1",
+			},
+		},
+		{
+			"two statements in a body",
+			"create trigger t after insert on orders begin insert into a values (1); " +
+				"insert into b values (2); end;",
+			syntax.FlavourStandard,
+			[]string{
+				"create trigger t after insert on orders begin insert into a values (1); " +
+					"insert into b values (2); end;",
+			},
+		},
+		{
+			"a nested block",
+			"create procedure p() begin begin insert into a values (1); end; end;",
+			syntax.FlavourMysql,
+			[]string{
+				"create procedure p() begin begin insert into a values (1); end; end;",
+			},
+		},
+		// `begin` on its own opens a transaction, and the statements after it are their
+		// own.
+		{"a transaction", "begin; insert into a values (1); commit;", syntax.FlavourStandard,
+			[]string{"begin", "insert into a values (1)", "commit"}},
+		// A `case` expression closes with `end` and holds no semicolon of its own.
+		{
+			"a case expression",
+			"select case when a then 1 else 2 end from t; select 2",
+			syntax.FlavourStandard,
+			[]string{"select case when a then 1 else 2 end from t", "select 2"},
+		},
+		// A statement that ends in a `case` keeps no semicolon: only the block of a
+		// routine needs its terminator.
+		{
+			"a case at the end of the statement",
+			"select case when a then 1 end; select 2",
+			syntax.FlavourStandard,
+			[]string{"select case when a then 1 end", "select 2"},
+		},
+		// `end if` and `end loop` close what opened no block of its own, so the body runs
+		// on to its own `end`.
+		{
+			"a routine holding an if",
+			"create procedure p() begin if a then insert into t values (1); end if; end;\n" +
+				"select 1;",
+			syntax.FlavourMysql,
+			[]string{
+				"create procedure p() begin if a then insert into t values (1); " +
+					"end if; end;",
+				"select 1",
+			},
+		},
+		{
+			"a routine holding a loop",
+			"create procedure p() begin my_loop: loop insert into t values (1); " +
+				"end loop; end;",
+			syntax.FlavourMysql,
+			[]string{
+				"create procedure p() begin my_loop: loop insert into t values (1); " +
+					"end loop; end;",
+			},
+		},
+		{
+			"a routine holding a case",
+			"create procedure p() begin case a when 1 then insert into t values (1); " +
+				"end case; end;\nselect 1;",
+			syntax.FlavourMysql,
+			[]string{
+				"create procedure p() begin case a when 1 then insert into t values (1); " +
+					"end case; end;",
+				"select 1",
+			},
+		},
+		{
+			"a routine holding a loop and a statement after it",
+			"create procedure p() begin my_loop: loop insert into t values (1); " +
+				"end loop; end;\nselect 1;",
+			syntax.FlavourMysql,
+			[]string{
+				"create procedure p() begin my_loop: loop insert into t values (1); " +
+					"end loop; end;",
+				"select 1",
+			},
+		},
+		{
+			"two routines",
+			"create procedure a() begin insert into t values (1); end;\n" +
+				"create procedure b() begin insert into t values (2); end;",
+			syntax.FlavourMysql,
+			[]string{
+				"create procedure a() begin insert into t values (1); end;",
+				"create procedure b() begin insert into t values (2); end;",
+			},
+		},
 	} {
 		t.Run(held.name, func(t *testing.T) {
 			answered := statement.SplitStatements(held.sql, held.flavour)

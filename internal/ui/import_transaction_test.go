@@ -29,7 +29,7 @@ func TestOpenImportRefusesExistingTransactions(t *testing.T) {
 			if command != nil || connection.Overlay.Import.Running || connection.Overlay.Notice != importTransactionProblem {
 				t.Fatal("the review did not refuse the transaction")
 			}
-			answered := runImport(connection, 1, load.Plan{}, connection.Session.Dialect())().(importRanMsg)
+			answered := runImport(connection, 1, load.Plan{}, connection.Session.Dialect(), 0, nil)().(importRanMsg)
 			if answered.Problem != importTransactionProblem || connection.Session.ReadTransactionState() != state {
 				t.Fatalf("state %q, answer %+v", connection.Session.ReadTransactionState(), answered)
 			}
@@ -40,7 +40,7 @@ func TestOpenImportRefusesExistingTransactions(t *testing.T) {
 func TestRunImportRefusesTransactionOpenedAfterDispatch(t *testing.T) {
 	session := openTransactionSession(t)
 	connection := app.NewConnection(session, nil, false)
-	command := runImport(connection, 1, load.Plan{}, session.Dialect())
+	command := runImport(connection, 1, load.Plan{}, session.Dialect(), 0, nil)
 	if answered := runTransactionStatement(t, session, "insert into entries values (1)", false); answered.Problem != "" {
 		t.Fatal(answered.Problem)
 	}
@@ -75,7 +75,7 @@ func TestRunImportCommitsOrRollsBackItsOwnTransaction(t *testing.T) {
 		if fail {
 			plan.Table.Name = "missing"
 		}
-		answered := runImport(connection, 1, plan, session.Dialect())().(importRanMsg)
+		answered := runImport(connection, 1, plan, session.Dialect(), 0, nil)().(importRanMsg)
 		if (answered.Problem != "") != fail || session.ReadTransactionState() != db.TransactionNone {
 			t.Fatalf("state %q, answer %+v", session.ReadTransactionState(), answered)
 		}

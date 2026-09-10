@@ -3,9 +3,14 @@ package build_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/turanmahmudov/masume/internal/core"
+	"github.com/turanmahmudov/masume/internal/db/clickhouse"
+	"github.com/turanmahmudov/masume/internal/db/mysql"
 	"github.com/turanmahmudov/masume/internal/db/postgres"
+	"github.com/turanmahmudov/masume/internal/db/sqlite"
+	"github.com/turanmahmudov/masume/internal/db/sqlserver"
 	"github.com/turanmahmudov/masume/internal/query"
 	"github.com/turanmahmudov/masume/internal/query/build"
 )
@@ -482,6 +487,55 @@ func TestBuildFilterSQLWritesEveryTestOfAStep(t *testing.T) {
 			built := build.ComposeFilter([]core.FilterStep{held.step}, postgres.Dialect, 1)
 			if built.Text != held.want {
 				t.Errorf("Text = %q, want %q", built.Text, held.want)
+			}
+		})
+	}
+}
+
+// Every server reads back the literal its own dialect writes: the bytes, the boolean, the
+// list and the moment each have a form of their own.
+func TestRenderLiteralWritesTheFormOfEachServer(t *testing.T) {
+	moment := time.Date(2026, 9, 10, 14, 30, 0, 0, time.UTC)
+	fraction := time.Date(2026, 9, 10, 14, 30, 0, 250000000, time.UTC)
+
+	for _, held := range []struct {
+		name     string
+		dialect  *query.Dialect
+		value    any
+		dataType string
+		want     string
+	}{
+		{"postgres bytes", postgres.Dialect, []byte{0, 255, 16}, "bytea", `'\x00ff10'`},
+		{"mysql bytes", mysql.Dialect, []byte{0, 255, 16}, "blob", `x'00ff10'`},
+		{"sqlite bytes", sqlite.Dialect, []byte{0, 255, 16}, "blob", `x'00ff10'`},
+		{"sqlserver bytes", sqlserver.Dialect, []byte{0, 255, 16}, "varbinary", "0x00ff10"},
+		{"clickhouse bytes", clickhouse.Dialect, []byte{0, 255, 16}, "String",
+			"unhex('00ff10')"},
+		{"empty bytes", mysql.Dialect, []byte{}, "blob", `x''`},
+
+		{"a boolean", postgres.Dialect, true, "boolean", "true"},
+		{"a boolean on sql server", sqlserver.Dialect, true, "bit", "1"},
+		{"a false boolean on sql server", sqlserver.Dialect, false, "bit", "0"},
+
+		{"a postgres list", postgres.Dialect, []any{"one", "two;three"}, "text[]",
+			`'{"one","two;three"}'`},
+		{"a list holding a quote", postgres.Dialect, []any{`a"b`}, "text[]",
+			`'{"a\"b"}'`},
+		{"an empty list", postgres.Dialect, []any{}, "text[]", `'{}'`},
+		{"a clickhouse list", clickhouse.Dialect, []any{"one", "two"}, "Array(String)",
+			"['one','two']"},
+		{"a list on a server that holds none", mysql.Dialect, []any{"one"}, "json",
+			`'["one"]'`},
+
+		{"a moment", postgres.Dialect, moment, "timestamp", "'2026-09-10 14:30:00'"},
+		{"a moment holding a fraction", postgres.Dialect, fraction, "timestamp",
+			"'2026-09-10 14:30:00.250'"},
+		{"a date", postgres.Dialect, moment, "date", "'2026-09-10'"},
+	} {
+		t.Run(held.name, func(t *testing.T) {
+			got := build.RenderLiteral(held.value, held.dialect, held.dataType)
+			if got != held.want {
+				t.Errorf("RenderLiteral(%v) = %q, want %q", held.value, got, held.want)
 			}
 		})
 	}

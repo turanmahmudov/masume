@@ -3,6 +3,7 @@ package query
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/turanmahmudov/masume/internal/core"
@@ -77,6 +78,20 @@ type Dialect struct {
 	// one unset writes the standard form.
 	AddColumn   func(dialect *Dialect, table QualifiedName) string
 	RenameTable func(dialect *Dialect, table QualifiedName, renamed string) string
+	// RenderBool writes a boolean as a literal this server reads back. A dialect that
+	// leaves it unset writes `true` and `false`.
+	RenderBool func(held bool) string
+	// RenderBytes writes raw bytes as a literal this server reads back. A dialect that
+	// leaves it unset writes the bytes as text.
+	RenderBytes func(hex string) string
+	// RenderList writes a list value as a literal this server reads back. The texts are
+	// the elements as they were read. A dialect that leaves it unset holds no list type,
+	// and the list is written as JSON text.
+	RenderList func(dialect *Dialect, texts []string) string
+	// SelectSchema writes the statement that makes a schema the default for the
+	// statements after it. A dialect that leaves it unset needs none, because its
+	// definitions name their schema themselves.
+	SelectSchema func(dialect *Dialect, schema string) string
 	// DropSchema, DropTrigger, and DropRoutine are dialect-specific DROP builders.
 	DropSchema  func(dialect *Dialect, schema string) string
 	DropTrigger func(dialect *Dialect, schema, name, table string) string
@@ -174,6 +189,41 @@ func (dialect *Dialect) BuildRenameTable(target QualifiedName, renamed string) s
 		return dialect.RenameTable(dialect, target, renamed)
 	}
 	return "alter table " + dialect.BuildQualifiedName(target) + "\n  rename to " + renamed + ";"
+}
+
+// BuildRenderedBool writes a boolean as a literal this server reads back.
+func (dialect *Dialect) BuildRenderedBool(held bool) string {
+	if dialect.RenderBool == nil {
+		return strconv.FormatBool(held)
+	}
+	return dialect.RenderBool(held)
+}
+
+// BuildRenderedBytes writes raw bytes as a literal, and reports whether this server reads
+// one back.
+func (dialect *Dialect) BuildRenderedBytes(hex string) (string, bool) {
+	if dialect.RenderBytes == nil {
+		return "", false
+	}
+	return dialect.RenderBytes(hex), true
+}
+
+// BuildRenderedList writes a list value as a literal, and reports whether this server holds
+// a list type at all.
+func (dialect *Dialect) BuildRenderedList(texts []string) (string, bool) {
+	if dialect.RenderList == nil {
+		return "", false
+	}
+	return dialect.RenderList(dialect, texts), true
+}
+
+// BuildSelectSchema writes the statement that makes a schema the default. It is empty for a
+// server that needs none.
+func (dialect *Dialect) BuildSelectSchema(schema string) string {
+	if dialect.SelectSchema == nil {
+		return ""
+	}
+	return dialect.SelectSchema(dialect, schema)
 }
 
 // BuildDropSchema writes the statement that removes a schema.

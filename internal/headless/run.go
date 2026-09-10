@@ -80,12 +80,8 @@ func (options Options) report(format string, parts ...any) {
 
 // Run opens the connection, runs every statement, and returns the exit code of the run.
 func Run(ctx context.Context, adapters engines.Adapters, options Options) int {
-	if cfg.NeedsPasswordPrompt(options.Profile) && options.Password == "" {
-		options.report("%s requires a password; headless mode cannot prompt for passwords. "+
-			"Set password_env, password_command, or a [secret] store on the profile, or "+
-			"save the password in the keyring through the interactive client",
-			options.Profile.Name)
-		return CodeConnection
+	if code := checkPassword(options); code != CodeOK {
+		return code
 	}
 
 	session, preConnect, code := openSession(ctx, adapters, options)
@@ -132,6 +128,19 @@ func resolveBatchSize(options Options) int {
 		return cfg.DefaultPageSize
 	}
 	return options.Profile.PageSize
+}
+
+// checkPassword reports a profile whose password only a prompt can answer, because a run
+// without a screen has no prompt.
+func checkPassword(options Options) int {
+	if !cfg.NeedsPasswordPrompt(options.Profile) || options.Password != "" {
+		return CodeOK
+	}
+	options.report("%s requires a password; headless mode cannot prompt for passwords. "+
+		"Set password_env, password_command, or a [secret] store on the profile, or "+
+		"save the password in the keyring through the interactive client",
+		options.Profile.Name)
+	return CodeConnection
 }
 
 // openSession runs the pre-connect command of the profile and opens the connection.

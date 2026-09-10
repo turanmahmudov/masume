@@ -72,7 +72,7 @@ func (model *Model) openImport(
 		Draft: app.NewEditorBuffer("", 0),
 	}
 	// The card opens on the picker, and the path can still be typed on the row it fills in.
-	return model, model.openFilePicker(model.ActiveID())
+	return model, model.openFilePicker(model.ActiveID(), load.ListFileExtensions())
 }
 
 // buildImportTarget returns the columns of the table the rows go into, as the import reads
@@ -125,7 +125,7 @@ func (model *Model) stepImport(
 	if readFieldKey(*overlay) == "path" {
 		held.Stage = app.ImportPick
 		overlay.Notice = ""
-		return model, model.openFilePicker(model.ActiveID())
+		return model, model.openFilePicker(model.ActiveID(), load.ListFileExtensions())
 	}
 	if overlay.Draft != nil && held.Stage != app.ImportReview {
 		ReadImportField(overlay, overlay.Draft.Text)
@@ -148,7 +148,12 @@ func (model *Model) stepImport(
 	case app.ImportMapping:
 		return model, checkImportFile(id, held.Plan, connection.Session.Dialect())
 	}
-	return model, runImport(connection, id, held.Plan, connection.Session.Dialect())
+	writes := int64(held.Report.Rows - held.Report.Refused)
+	held.Progress = app.Progress{Total: writes, Label: "rows"}
+	updates, follow := startProgress(id, app.OverlayImport)
+	return model, tea.Batch(
+		runImport(connection, id, held.Plan, connection.Session.Dialect(), writes, updates),
+		follow)
 }
 
 // leaveImportReview takes the review back to the form.
@@ -213,6 +218,7 @@ func checkImportFile(connectionID int, plan load.Plan, dialect *query.Dialect) t
 // the rows the check refused.
 func runImport(
 	connection *app.Connection, connectionID int, plan load.Plan, dialect *query.Dialect,
+	writes int64, updates chan app.Progress,
 ) tea.Cmd {
 	session := connection.Session
 	// Closing the card ends the import, and the server rolls the transaction back.
@@ -221,6 +227,7 @@ func runImport(
 
 	return func() tea.Msg {
 		defer stop()
+		defer closeProgress(updates)
 		fail := func(problem string) tea.Msg {
 			return importRanMsg{ConnectionID: connectionID, Problem: problem}
 		}
@@ -231,7 +238,11 @@ func runImport(
 		if err := session.BeginTransaction(ctx); err != nil {
 			return fail(db.DescribeError(err))
 		}
-		written, err := writeImportRows(ctx, session, plan, dialect)
+		written, err := writeImportRows(ctx, session, plan, dialect, func(rows int) {
+			sendProgress(updates, app.Progress{
+				Done: int64(rows), Total: writes, Label: "rows",
+			})
+		})
 		if err != nil {
 			// The rollback runs whatever stopped the import, so it takes its own context.
 			if rollbackErr := session.RollbackTransaction(
@@ -252,6 +263,7 @@ func runImport(
 // file holds that the check did not refuse.
 func writeImportRows(
 	ctx context.Context, session db.Session, plan load.Plan, dialect *query.Dialect,
+	onWritten func(rows int),
 ) (int, error) {
 	if plan.CreatesTable {
 		if _, err := session.RunQuery(
@@ -280,6 +292,9 @@ func writeImportRows(
 		}
 		written += len(batch)
 		batch = batch[:0]
+		if onWritten != nil {
+			onWritten(written)
+		}
 		return nil
 	}
 

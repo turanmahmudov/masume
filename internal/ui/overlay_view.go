@@ -127,6 +127,7 @@ var overlayWidths = map[app.OverlayKind]int{
 	app.OverlayHelp:       78,
 	app.OverlayExport:     76,
 	app.OverlayImport:     84,
+	app.OverlayDump:       84,
 	app.OverlayConfirm:    76,
 	app.OverlayChoice:     76,
 	app.OverlayPrompt:     76,
@@ -293,6 +294,8 @@ func (model *Model) renderOverlay(
 		return model.renderExport(overlay, width)
 	case app.OverlayImport:
 		return model.renderImport(overlay, width)
+	case app.OverlayDump:
+		return model.renderDump(overlay, width)
 	case app.OverlayAiChat:
 		return model.renderAiChat(connection, overlay, width)
 	case app.OverlayAiChats:

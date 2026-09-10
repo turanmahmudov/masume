@@ -23,6 +23,8 @@ var Dialect = &query.Dialect{
 	CountExpression:  "count()",
 	// The server takes no row lock a statement can ask for.
 	RowLockClause: "",
+	// ClickHouse reads bytes through unhex.
+	RenderBytes: func(hex string) string { return "unhex('" + hex + "')" },
 	QuoteTextLiteral: func(text string) string {
 		return "'" + strings.ReplaceAll(text, "'", "''") + "'"
 	},
@@ -58,6 +60,18 @@ var Dialect = &query.Dialect{
 				query.QualifiedName{Schema: target.Schema, Name: renamed}) + ";"
 	},
 	// A ClickHouse schema is a database, so a drop removes the database.
+	// A ClickHouse array is written as `[…]`, and each element as a literal of its own.
+	RenderList: func(dialect *query.Dialect, texts []string) string {
+		written := make([]string, 0, len(texts))
+		for _, text := range texts {
+			if text == "NULL" {
+				written = append(written, text)
+				continue
+			}
+			written = append(written, dialect.QuoteTextLiteral(text))
+		}
+		return "[" + strings.Join(written, ",") + "]"
+	},
 	DropSchema: func(dialect *query.Dialect, schema string) string {
 		return "drop database " + dialect.QuoteIdentifier(schema) + ";"
 	},

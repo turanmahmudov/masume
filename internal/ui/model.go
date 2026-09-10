@@ -53,9 +53,9 @@ type Model struct {
 	ai         cfg.AiConfig
 	aiProvider cfg.AiProviderID
 
-	// The file picker of the import that is open on each connection. It is kept here
+	// The file picker of the card that is open on each connection. It is kept here
 	// because it answers with commands of the draw loop.
-	importPickers map[int]*filepicker.Model
+	filePickers map[int]*filepicker.Model
 
 	profiles []cfg.Profile
 	// The project file of the working directory, which provides profiles and statements
@@ -407,6 +407,15 @@ func (model *Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 
 	case importRanMsg:
 		return model.readImportRun(held)
+
+	case progressMsg:
+		return model.readProgress(held)
+
+	case dumpWrittenMsg:
+		return model.readDumpWritten(held)
+
+	case restoreRanMsg:
+		return model.readRestoreRan(held)
 
 	case healthDueMsg:
 		return model.readHealthDue(held)

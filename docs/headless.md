@@ -220,6 +220,37 @@ masume nb run reports/revenue-review.masume.md -p shop --param day=2026-09-01 -f
 
 `--only CELL` runs one cell by id. `--explain` writes a JSON plan of every statement and runs none of them. `markdown` writes the whole notebook with the rows of every cell. See the [notebook guide](notebooks.md#without-a-screen).
 
+## Dump and restore
+
+`masume dump` writes a schema as SQL and `masume restore` runs such a file back into a server. Both use the profiles, the connection commands, the timeouts and the exit codes above.
+
+```sh
+masume dump -p shop --schema public --drop shop.sql
+masume dump -p shop - | gzip > shop.sql.gz
+masume restore -p shop-staging shop.sql
+```
+
+```text
+masume dump [TARGET] FILE
+masume restore [TARGET] FILE
+```
+
+| Argument | Meaning |
+| --- | --- |
+| `FILE` | The dump file. A single `-` writes stdout, and a restore reads stdin |
+| `-p`, `--profile NAME` | A profile from the config file or the project file |
+| `-s`, `--schema NAME` | The schema to dump. Without it, the default schema of the connection |
+| `-t`, `--table NAME` | One table, as `name` or `schema.name`. Repeat for more, and the objects are left out |
+| `-c`, `--content WHAT` | `schema and rows` by default, or `schema only` or `rows only` |
+| `--drop` | Write a `DROP … IF EXISTS` for everything the dump makes |
+| `-h`, `--help` | Print help and exit |
+
+A dump holds the types, sequences and functions of the schema, then its tables and their rows, then the views over them, then its triggers. Every table stands after the tables its foreign keys name. Roles, grants and owners are not written. A dump only reads, so a read-only profile writes one.
+
+Neither command runs on an engine that reports no definitions, such as MongoDB, which holds another language.
+
+A restore runs each statement on its own, in file order, with no wrapping transaction. It stops at the first failure, reports the statement that failed and how many ran before it, and exits with code 1. A read-only profile exits with code 3 and sends nothing.
+
 ## Config and history
 
 `masume run` reads the config and project files without writing either file. A run without a config file does not create the starter file. The terminal client and `masume --detect` can create that file.

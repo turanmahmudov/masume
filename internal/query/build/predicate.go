@@ -1,13 +1,38 @@
 package build
 
 import (
+	"encoding/hex"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/query"
 )
+
+// nullListElement is the element of a list that holds no value, as every server writes it.
+const nullListElement = "NULL"
+
+// renderList writes a list value the way this server reads one back. A server with no list
+// type holds none, and the value is written as text instead.
+func renderList(value any, dialect *query.Dialect, dataType string) (string, bool) {
+	if core.IsDocumentType(dataType) || !core.IsListValue(value) {
+		return "", false
+	}
+	held := reflect.ValueOf(value)
+	texts := make([]string, 0, held.Len())
+	for at := range held.Len() {
+		element := held.Index(at).Interface()
+		if element == nil {
+			texts = append(texts, nullListElement)
+			continue
+		}
+		texts = append(texts, core.FormatCell(element, ""))
+	}
+	return dialect.BuildRenderedList(texts)
+}
 
 // Predicate is a filter as SQL for one server, with its bind values.
 type Predicate struct {
@@ -25,7 +50,16 @@ func RenderLiteral(value any, dialect *query.Dialect, dataType string) string {
 	case float64:
 		return strconv.FormatFloat(held, 'g', -1, 64)
 	case bool:
-		return strconv.FormatBool(held)
+		return dialect.BuildRenderedBool(held)
+	case []byte:
+		if written, holds := dialect.BuildRenderedBytes(hex.EncodeToString(held)); holds {
+			return written
+		}
+	case time.Time:
+		return dialect.QuoteTextLiteral(core.FormatTimeLiteral(held, dataType))
+	}
+	if written, holds := renderList(value, dialect, dataType); holds {
+		return written
 	}
 	return dialect.QuoteTextLiteral(core.FormatCell(value, dataType))
 }

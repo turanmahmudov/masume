@@ -96,6 +96,8 @@ Both interfaces share database tools, but their policies differ. See [AI data sh
 
 **Export and copy:** CSV and JSON files. Clipboard formats also include Markdown, `INSERT` statements, row JSON and column `IN` clauses. See [copy and export](docs/usage.md#copy-and-export) for row scope and CSV transformations.
 
+**Dump and restore:** a schema as a SQL file: its types, sequences and functions, its tables and rows, its views and its triggers, ordered so the file runs from the top. `masume dump` and `masume restore` do the same without a screen. See [dump and restore](docs/usage.md#dump-and-restore).
+
 **Import:** CSV or JSON into an existing or new SQL table. A file picker, column mapping and local validation precede execution. Database constraints can still reject accepted rows. See [importing files](docs/usage.md#importing-files).
 
 **Query history and saved queries.** Tab restoration retains query text and selected settings, but not result rows, staged edits or transactions.
@@ -188,6 +190,8 @@ mise run install
 ```text
 masume                       open the client
 masume run [TARGET] STATEMENT run statements and exit
+masume dump [TARGET] FILE    write a schema as SQL and exit
+masume restore [TARGET] FILE run the statements of a SQL file and exit
 masume URL                   open a supported connection URL
 masume FILE                  open an existing SQLite file
 masume DSN                   open a keyword connection string

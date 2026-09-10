@@ -10,7 +10,6 @@ import (
 
 	"github.com/turanmahmudov/masume/internal/app"
 	"github.com/turanmahmudov/masume/internal/cfg"
-	"github.com/turanmahmudov/masume/internal/load"
 	"github.com/turanmahmudov/masume/internal/present"
 )
 
@@ -22,11 +21,11 @@ const fileSizeWidth = 7
 // pickerRows is how many rows of files the picker draws.
 const pickerRows = 12
 
-// buildFilePicker returns the picker of one import, opened in the directory the client was
-// started in and offering the files an import can read.
-func (model *Model) buildFilePicker() filepicker.Model {
+// buildFilePicker returns a picker opened in the directory the client was started in,
+// offering the files of those extensions.
+func (model *Model) buildFilePicker(extensions []string) filepicker.Model {
 	picker := filepicker.New()
-	picker.AllowedTypes = load.ListFileExtensions()
+	picker.AllowedTypes = extensions
 	picker.DirAllowed = false
 	picker.FileAllowed = true
 	picker.AutoHeight = false
@@ -59,33 +58,38 @@ func (model *Model) buildPickerStyles() filepicker.Styles {
 		// its room, so every other row is set to match it.
 		FileSize: plain.Foreground(theme.Muted).
 			Width(fileSizeWidth).Align(lipgloss.Right),
-		EmptyDirectory: plain.Foreground(theme.Muted).SetString("no supported files to import"),
+		EmptyDirectory: plain.Foreground(theme.Muted).SetString("no file of that kind here"),
 	}
 }
 
-// openFilePicker gives the import of this connection a picker, and returns the command that
+// openFilePicker gives this connection a picker of those files, and returns the command that
 // reads the directory it opens in.
-func (model *Model) openFilePicker(connectionID int) tea.Cmd {
-	if model.importPickers == nil {
-		model.importPickers = map[int]*filepicker.Model{}
+func (model *Model) openFilePicker(connectionID int, extensions []string) tea.Cmd {
+	if model.filePickers == nil {
+		model.filePickers = map[int]*filepicker.Model{}
 	}
-	picker := model.buildFilePicker()
-	model.importPickers[connectionID] = &picker
+	picker := model.buildFilePicker(extensions)
+	model.filePickers[connectionID] = &picker
 	return picker.Init()
 }
 
-// findFilePicker returns the picker of the import that is open on this connection, and
-// nothing where no import is picking a file.
+// findFilePicker returns the picker open on this connection, and nothing where no card is
+// picking a file.
 func (model *Model) findFilePicker(connectionID int) *filepicker.Model {
-	return model.importPickers[connectionID]
+	return model.filePickers[connectionID]
 }
 
-// readPickerMessage hands a message to the picker of the import that is picking a file, which
+// picksFile is true while the card of this connection is picking a file.
+func picksFile(overlay app.Overlay) bool {
+	return (overlay.Kind == app.OverlayImport && overlay.Import.Stage == app.ImportPick) ||
+		(overlay.Kind == app.OverlayDump && overlay.Dump.Stage == app.DumpPick)
+}
+
+// readPickerMessage hands a message to the picker of the card that is picking a file, which
 // reads a directory with a command of its own.
 func (model *Model) readPickerMessage(message tea.Msg) (tea.Model, tea.Cmd, bool) {
 	connection, id := model.Active(), model.ActiveID()
-	if connection == nil || connection.Overlay.Kind != app.OverlayImport ||
-		connection.Overlay.Import.Stage != app.ImportPick {
+	if connection == nil || !picksFile(connection.Overlay) {
 		return model, nil, false
 	}
 	picker := model.findFilePicker(id)
@@ -95,10 +99,15 @@ func (model *Model) readPickerMessage(message tea.Msg) (tea.Model, tea.Cmd, bool
 
 	held, command := picker.Update(message)
 	*picker = held
-	if chosen, path := held.DidSelectFile(message); chosen {
-		return model.readPickedFile(connection, id, path)
+	chosen, path := held.DidSelectFile(message)
+	if !chosen {
+		return model, command, true
 	}
-	return model, command, true
+	if connection.Overlay.Kind == app.OverlayDump {
+		model.readRestoreFile(connection, path)
+		return model, nil, true
+	}
+	return model.readPickedFile(connection, id, path)
 }
 
 // readPickedFile takes the file the user picked into the form, and reads it at once.

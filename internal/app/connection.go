@@ -176,6 +176,8 @@ type Connection struct {
 	// stopExport is the active export cancellation function.
 	stopExport func()
 	stopImport func()
+	// stopDump is the way to stop the dump or the restore that runs now.
+	stopDump func()
 
 	// The cached object tree and its input fingerprint.
 	treeAt     treeFingerprint
@@ -274,6 +276,22 @@ func (connection *Connection) StopImport() {
 	}
 	connection.stopImport()
 	connection.stopImport = nil
+}
+
+// BeginDump keeps the way to stop the dump or the restore that starts now, and ends the one
+// before it.
+func (connection *Connection) BeginDump(stop func()) {
+	connection.StopDump()
+	connection.stopDump = stop
+}
+
+// StopDump ends the dump or the restore that runs now, where one does.
+func (connection *Connection) StopDump() {
+	if connection.stopDump == nil {
+		return
+	}
+	connection.stopDump()
+	connection.stopDump = nil
 }
 
 // Show displays an informational notice.

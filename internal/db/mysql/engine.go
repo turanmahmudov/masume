@@ -22,6 +22,8 @@ var Dialect = &query.Dialect{
 	CountExpression:  "count(*)",
 	RowLockClause:    " for update",
 	// MySQL literals escape backslashes and quotes. Executed values use bound parameters.
+	// MySQL reads bytes as a hexadecimal literal.
+	RenderBytes: func(hex string) string { return "x'" + hex + "'" },
 	QuoteTextLiteral: func(text string) string {
 		return "'" + strings.ReplaceAll(strings.ReplaceAll(text, `\`, `\\`), "'", "''") + "'"
 	},
@@ -32,6 +34,10 @@ var Dialect = &query.Dialect{
 		core.KindBoolean: "boolean", core.KindTimestamp: "datetime",
 	},
 	IdentityColumn: "id bigint auto_increment primary key",
+	// A MySQL definition names no database, so a dump of one database selects it first.
+	SelectSchema: func(dialect *query.Dialect, schema string) string {
+		return "use " + dialect.QuoteIdentifier(schema) + ";"
+	},
 	// A MySQL schema is a database, so a drop removes the database.
 	DropSchema: func(dialect *query.Dialect, schema string) string {
 		return "drop database " + dialect.QuoteIdentifier(schema) + ";"

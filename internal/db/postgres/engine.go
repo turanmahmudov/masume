@@ -25,6 +25,8 @@ var Dialect = &query.Dialect{
 	CountExpression:  "count(*)::int8",
 	RowLockClause:    " for update",
 	// A backslash is a plain character in a Postgres literal, so only a quote is doubled.
+	// PostgreSQL reads bytes as a string of the hexadecimal form.
+	RenderBytes: func(hex string) string { return `'\x` + hex + `'` },
 	QuoteTextLiteral: func(text string) string {
 		return "'" + strings.ReplaceAll(text, "'", "''") + "'"
 	},
@@ -38,6 +40,20 @@ var Dialect = &query.Dialect{
 	IdentityColumn: "id bigserial primary key",
 	DropSchema: func(dialect *query.Dialect, schema string) string {
 		return "drop schema " + dialect.QuoteIdentifier(schema) + " restrict;"
+	},
+	// A PostgreSQL array is written as `{…}` inside a string, and each element that holds
+	// a comma, a quote or a backslash is quoted inside it.
+	RenderList: func(dialect *query.Dialect, texts []string) string {
+		written := make([]string, 0, len(texts))
+		for _, text := range texts {
+			if text == "NULL" {
+				written = append(written, text)
+				continue
+			}
+			held := strings.ReplaceAll(text, `\`, `\\`)
+			written = append(written, `"`+strings.ReplaceAll(held, `"`, `\"`)+`"`)
+		}
+		return dialect.QuoteTextLiteral("{" + strings.Join(written, ",") + "}")
 	},
 	DropTrigger: func(dialect *query.Dialect, schema, name, table string) string {
 		target := dialect.BuildQualifiedName(query.QualifiedName{Schema: schema, Name: table})

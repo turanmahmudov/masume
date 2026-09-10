@@ -2,6 +2,7 @@
 package core
 
 import (
+	"database/sql/driver"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -72,6 +73,14 @@ func FormatCell(value any, dataType string) string {
 		return string(held)
 	case fmt.Stringer:
 		return held.String()
+	case driver.Valuer:
+		// A driver type of its own, such as a PostgreSQL time or interval, holds the
+		// value the server sent and answers it here.
+		if inner, err := held.Value(); err == nil && inner != nil {
+			if _, again := inner.(driver.Valuer); !again {
+				return FormatCell(inner, dataType)
+			}
+		}
 	}
 
 	written, err := json.Marshal(value)
@@ -79,6 +88,19 @@ func FormatCell(value any, dataType string) string {
 		return fmt.Sprintf("%v", value)
 	}
 	return string(written)
+}
+
+// FormatTimeLiteral writes a moment for a statement: the date alone for a date column, and
+// the fraction of a second only where the moment holds one. A server whose column holds
+// whole seconds refuses a fraction it never stored.
+func FormatTimeLiteral(held time.Time, dataType string) string {
+	if strings.EqualFold(dataType, "date") {
+		return held.UTC().Format("2006-01-02")
+	}
+	if held.UTC().Nanosecond() == 0 {
+		return held.UTC().Format("2006-01-02 15:04:05")
+	}
+	return held.UTC().Format("2006-01-02 15:04:05.000")
 }
 
 // documentTypes is the set of JSON, document, and array column types.
@@ -91,10 +113,11 @@ func IsDocumentType(dataType string) bool {
 	return documentTypes[dataType]
 }
 
-// IsListValue is true for arrays and slices, excluding byte slices.
+// IsListValue is true for arrays and slices, excluding byte slices and the raw JSON of a
+// document, which are values of their own.
 func IsListValue(value any) bool {
 	switch value.(type) {
-	case nil, string, []byte:
+	case nil, string, []byte, json.RawMessage, DocumentValue:
 		return false
 	}
 	kind := reflect.TypeOf(value).Kind()

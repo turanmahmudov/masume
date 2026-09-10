@@ -33,6 +33,15 @@ var Dialect = &query.Dialect{
 	// A row lock is a table hint after the relation, not a trailing clause.
 	RowLockClause: "",
 	// An N prefix marks a literal the server reads as Unicode.
+	// SQL Server holds no boolean, so a bit column reads 1 and 0.
+	RenderBool: func(held bool) string {
+		if held {
+			return "1"
+		}
+		return "0"
+	},
+	// SQL Server reads bytes as a hexadecimal number.
+	RenderBytes: func(hex string) string { return "0x" + hex },
 	QuoteTextLiteral: func(text string) string {
 		return "N'" + strings.ReplaceAll(text, "'", "''") + "'"
 	},

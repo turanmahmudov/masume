@@ -256,7 +256,7 @@ var HelpSections = []HelpSection{
 			{Scope: cfg.ScopeList, Actions: []ActionID{ActionChooseRow}, Text: "take the row under the cursor"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionPreviousField, ActionNextField}, Text: "the row before or after, in a form"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionPreviousValue, ActionNextValue}, Text: "the value before or after, in a row of choices"},
-			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionApplyStep}, Text: "the next stage of an import"},
+			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionApplyStep}, Text: "the next stage of an import, or the run of a dump"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionStepBack}, Text: "back to the form, from the review of an import"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionOpenDirectory, ActionLeaveDirectory}, Text: "open a directory or go up, in a file picker"},
 			{Scope: cfg.ScopeDialog, Actions: []ActionID{ActionPreviousRow, ActionNextRow}, Text: "the row before or after, in the card of one row"},

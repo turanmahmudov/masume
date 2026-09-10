@@ -14,12 +14,64 @@ type StatementRange struct {
 	End   int
 }
 
-// SplitStatementRanges splits at semicolons outside literals, comments, and parentheses, preserving statement byte ranges.
-func SplitStatementRanges(sql string, flavour syntax.SyntaxFlavour) []StatementRange {
-	hits := syntax.FindTopLevelKeywords(sql, []string{";"}, flavour)
-	ranges := []StatementRange{}
-	start := 0
+// closingWords follow `end` where they close a construct that opened no block of its own,
+// such as `end if` and `end loop` inside a routine. `end case` closes the `case` that opened
+// one, so the word after it opens nothing either.
+var closingWords = map[string]bool{
+	"if": true, "loop": true, "while": true, "repeat": true, "case": true,
+}
 
+// blockState counts the blocks one statement holds while the words of a buffer are read
+// once. A trigger body and a stored routine hold their statements in a `begin` block, and
+// the semicolons inside it end no statement.
+type blockState struct {
+	depth int
+	// words is how many words the statement holds so far.
+	words        int
+	holdsBegin   bool
+	previousWord string
+	lastWord     string
+}
+
+// readWord takes one word of the statement.
+func (state *blockState) readWord(text string) {
+	switch {
+	case state.previousWord == "end" && closingWords[text]:
+		// `end if` and `end loop` close what opened no block. `end case` closed the
+		// `case` already, so this word opens none either.
+		if text != "case" {
+			state.depth++
+		}
+	case text == "begin":
+		// The first word of a statement is the `begin` of a transaction.
+		if state.words > 0 {
+			state.depth++
+			state.holdsBegin = true
+		}
+	case text == "case":
+		state.depth++
+	case text == "end":
+		if state.depth > 0 {
+			state.depth--
+		}
+	}
+	state.words++
+	state.previousWord, state.lastWord = text, text
+}
+
+// endsStatement is true where a semicolon here ends the statement.
+func (state *blockState) endsStatement() bool { return state.depth == 0 }
+
+// keepsTerminator is true for a statement whose body is a `begin` block: `end;` closes the
+// body, so the semicolon belongs to the statement.
+func (state *blockState) keepsTerminator() bool {
+	return state.holdsBegin && state.lastWord == "end"
+}
+
+// SplitStatementRanges splits at semicolons outside literals, comments, parentheses and
+// blocks, preserving statement byte ranges. It reads the buffer once.
+func SplitStatementRanges(sql string, flavour syntax.SyntaxFlavour) []StatementRange {
+	ranges := []StatementRange{}
 	push := func(from, to int) {
 		if from > to {
 			return
@@ -34,12 +86,51 @@ func SplitStatementRanges(sql string, flavour syntax.SyntaxFlavour) []StatementR
 		}
 	}
 
-	for _, hit := range hits {
-		push(start, hit.Start)
-		start = hit.Start + 1
-	}
+	start := 0
+	walkStatementEnds(sql, flavour, func(at int, keepsTerminator bool) {
+		end := at
+		if keepsTerminator {
+			end++
+		}
+		push(start, end)
+		start = at + 1
+	})
 	push(start, len(sql))
 	return ranges
+}
+
+// FindLastStatementEnd returns the offset after the last statement the text holds whole. A
+// reader that takes a file a block at a time keeps the text after it for the next read.
+func FindLastStatementEnd(sql string, flavour syntax.SyntaxFlavour) int {
+	cut := 0
+	walkStatementEnds(sql, flavour, func(at int, _ bool) { cut = at + 1 })
+	return cut
+}
+
+// walkStatementEnds reads the buffer once and reports every semicolon that ends a statement,
+// with whether that statement keeps the semicolon.
+func walkStatementEnds(
+	sql string, flavour syntax.SyntaxFlavour, onEnd func(at int, keepsTerminator bool),
+) {
+	tokens := syntax.ReadCodeTokens(sql, flavour)
+	hits := syntax.FindKeywordsIn(tokens, []string{";"})
+	state := blockState{}
+	at := 0
+
+	for _, token := range tokens {
+		if at < len(hits) && token.Start == hits[at].Start {
+			at++
+			if !state.endsStatement() {
+				continue
+			}
+			onEnd(token.Start, state.keepsTerminator())
+			state = blockState{}
+			continue
+		}
+		if syntax.IsWordKind(token.Kind) {
+			state.readWord(token.Text)
+		}
+	}
 }
 
 // SplitStatements returns the statements a buffer holds, in run order.

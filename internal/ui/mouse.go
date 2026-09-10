@@ -951,23 +951,31 @@ func (model *Model) pressOverlayFormRow(
 		answer, chosen := overlay.Answers.ID, overlay.Choices[row].ID
 		connection.Overlay = app.Overlay{}
 		return model, model.runIDAnswer(answer, chosen)
-	case app.OverlayExport:
+	case app.OverlayExport, app.OverlayDump:
 		overlay.Field = row
 	}
 	return model, nil
 }
 
-// pressExportChoice steps a field of the export card that runs through a list of values, and
-// reports whether the press landed on one of its marks.
+// pressExportChoice steps a field of the export card or of the dump card that runs through a
+// list of values, and reports whether the press landed on one of its marks.
 func (model *Model) pressExportChoice(
 	overlay *app.Overlay, mouse tea.Mouse,
 ) bool {
 	field, step, onMark := findChoiceMark(model.layout.formChoices, mouse.X, mouse.Y)
-	if !onMark || overlay.Kind != app.OverlayExport {
+	if !onMark {
 		return false
 	}
-	overlay.Field = field
-	StepExportField(overlay, step)
+	switch overlay.Kind {
+	case app.OverlayExport:
+		overlay.Field = field
+		StepExportField(overlay, step)
+	case app.OverlayDump:
+		overlay.Field = field
+		StepDumpChoice(overlay, step)
+	default:
+		return false
+	}
 	return true
 }
 

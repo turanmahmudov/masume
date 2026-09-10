@@ -167,9 +167,33 @@ Result JSON exports and copies preserve JSON nulls and native numeric and boolea
 
 Select a table in the object tree, press `m`, and choose Import a file. The schema menu imports into a new table. Select a file, adjust its format and column mapping, then press Enter for review. Enter from review starts the import. Esc returns from review to the form.
 
+While the import writes, the review draws a bar of the rows written against the rows the file holds.
+
 The review validates file values locally; the review does not test database constraints or permissions. Rejected rows are omitted. Import refuses an active transaction. Commit or roll back before importing.
 
 Import has its own review and transaction. Import does not use `write_plan` or create an `Alt+U` undo. See [import configuration](configuration.md#importing-a-file) for formats, sampled types, NULL handling, mappings, and limits.
+
+## Dump and restore
+
+Select a schema in the object tree, press `m`, and choose Dump the schema. The table menu dumps one table. The form asks for the file, the content, and the drop statement. Up and Down move between fields; Left and Right change choices. Enter writes the file. An existing file requires overwrite confirmation.
+
+| Content | What it does |
+| --- | --- |
+| `schema and rows` | Writes the definition of each table and one INSERT per row; the default |
+| `schema only` | Writes the definitions and reads no row |
+| `rows only` | Writes the INSERT statements alone |
+
+`drop first` writes a `DROP … IF EXISTS` for everything the dump makes, in the reverse of the write order.
+
+While a dump runs, the card draws a bar of the tables written, the table it is reading and the rows written so far. A restore counts the statements that ran. Esc ends either one.
+
+A dump holds the types, sequences and functions of the schema, then its tables and their rows, then the views over them, then its triggers. Every table stands after the tables its foreign keys name, and `drop first` writes the DROP statements in the reverse of that order. Roles, grants and owners are not written. The rows are read in batches, so a large table is never held whole. The file is written beside the target and moved over it at the end, and it is readable by its owner alone.
+
+The table menu dumps one table on its own, without the objects and the views of the schema.
+
+Select a schema, press `m`, and choose Restore a dump to run a `.sql` file. Pick the file, then press Enter. Every statement runs on the open connection, one at a time, in file order, the way a statement of the editor runs: with autocommit off masume opens one transaction and leaves it open for an explicit commit. A failure stops the run, the card names the statement that failed, and with autocommit on the server keeps what the statements before it wrote. Restore refuses an active transaction and a read-only connection. The statements of a restore are not written to the query history.
+
+Both entries need an engine that reports definitions. See [engine support](engines.md). `masume dump` and `masume restore` do the same without a screen; see [without a screen](headless.md#dump-and-restore).
 
 ## Query plans
 

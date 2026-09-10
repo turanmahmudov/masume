@@ -80,13 +80,17 @@ func (model *Model) renderImportForm(overlay app.Overlay, width int) string {
 			fitFieldLabel(field.Label, importLabelWidth-present.MeasureText(marker)))+written)
 	}
 
-	// The problem line is always counted, so the card keeps its height.
+	// The problem line is always counted, so the card keeps its height. A card that is
+	// writing draws how far it has come on that line instead.
 	text := FindImportProblem(overlay, model.readActiveDialect())
 	if text == "" {
 		text = overlay.Notice
 	}
-	lines = append(lines, model.styles.Error().Render(
-		present.TruncateText(text, width-4)))
+	line := model.styles.Error().Render(present.TruncateText(text, width-4))
+	if overlay.Import.Running && overlay.Import.Progress.IsStarted() {
+		line = model.renderProgress(overlay.Import.Progress, width-4)
+	}
+	lines = append(lines, line)
 
 	keys := model.buildCardKeys(app.OverlayImport, keyScene{overlay: overlay})
 	keyRow := present.TruncateText(keys.buildText(), width-4)
@@ -155,6 +159,10 @@ func (model *Model) renderImportReview(overlay app.Overlay, width int) string {
 		"",
 	}
 
+	if held.Running && held.Progress.IsStarted() {
+		lines = append(lines,
+			model.renderProgress(held.Progress, inner), "")
+	}
 	if held.Report.Refused > 0 {
 		lines = append(lines, model.styles.Error().Render(present.TruncateText(
 			present.FormatRowCount(int64(held.Report.Refused))+

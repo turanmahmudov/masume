@@ -15,7 +15,7 @@ import (
 // is never chosen by mistake.
 func TestBuildFilePickerOffersTheFilesAnImportReads(t *testing.T) {
 	model := NewModel(loadedConfigForTest("tokyonight"), nil, nil, nil)
-	picker := model.buildFilePicker()
+	picker := model.buildFilePicker(load.ListFileExtensions())
 
 	for _, extension := range []string{".csv", ".tsv", ".json", ".jsonl", ".ndjson"} {
 		if !slices.Contains(picker.AllowedTypes, extension) {
@@ -114,8 +114,8 @@ func TestFilePickersBelongToTheirConnection(t *testing.T) {
 	if model.findFilePicker(1) != nil {
 		t.Error("a connection with no import holds a picker")
 	}
-	model.openFilePicker(1)
-	model.openFilePicker(2)
+	model.openFilePicker(1, load.ListFileExtensions())
+	model.openFilePicker(2, load.ListFileExtensions())
 
 	first, second := model.findFilePicker(1), model.findFilePicker(2)
 	if first == nil || second == nil {

@@ -24,6 +24,8 @@ usage:
   masume                        open the client
   masume run [TARGET] STATEMENT run statements, write results, and exit
   masume nb run [TARGET] FILE   run a notebook, write results, and exit
+  masume dump [TARGET] FILE     write a schema as SQL and exit
+  masume restore [TARGET] FILE  run the statements of a SQL file and exit
   masume URL                    open a supported URL, for example postgres://you@host/shop
   masume FILE                   open an existing SQLite file, for example ./notes.db
   masume FILE.masume.md         open a notebook file
@@ -37,6 +39,7 @@ usage:
   masume --help                 print this help and exit
 
 Run masume run --help for headless options, and masume nb --help for notebooks.
+Run masume dump --help and masume restore --help for the SQL file commands.
 
 A command-line connection remains temporary until saved.
 Press Ctrl+N, then e, then Ctrl+S to save the selected profile.
@@ -54,6 +57,12 @@ func Run(argv []string) int {
 	}
 	if len(argv) > 0 && argv[0] == "nb" {
 		return runNotebookCommand(argv[1:])
+	}
+	if len(argv) > 0 && argv[0] == "dump" {
+		return runDumpCommand(argv[1:])
+	}
+	if len(argv) > 0 && argv[0] == "restore" {
+		return runRestoreCommand(argv[1:])
 	}
 	if slices.Contains(argv, "--help") || slices.Contains(argv, "-h") {
 		fmt.Println(usage)

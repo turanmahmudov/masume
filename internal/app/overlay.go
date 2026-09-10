@@ -6,6 +6,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
+	"github.com/turanmahmudov/masume/internal/dump"
 	"github.com/turanmahmudov/masume/internal/hist"
 	"github.com/turanmahmudov/masume/internal/load"
 	"github.com/turanmahmudov/masume/internal/notebook"
@@ -48,7 +49,9 @@ const (
 	OverlayChoice    OverlayKind = "choice"
 	OverlayExport    OverlayKind = "export"
 	OverlayImport    OverlayKind = "import"
-	OverlayPrompt    OverlayKind = "prompt"
+	// OverlayDump writes a dump file, or runs one back into the server.
+	OverlayDump   OverlayKind = "dump"
+	OverlayPrompt OverlayKind = "prompt"
 )
 
 // WholeRow is the row index a cell editor uses when it holds a whole new row.
@@ -160,6 +163,23 @@ type ExportRequest struct {
 	WholeRead bool
 }
 
+// Progress is how far a run of a card has come. A total of zero is a run whose size is not
+// known, which shows the count alone and no bar.
+type Progress struct {
+	Done  int64
+	Total int64
+	// Label names what is counted: rows, tables or statements.
+	Label string
+	// Detail names the part running now, such as the table being read.
+	Detail string
+}
+
+// HoldsBar is true where the size of the run is known, so a bar can show the share done.
+func (progress Progress) HoldsBar() bool { return progress.Total > 0 }
+
+// IsStarted is true once the run has reported anything.
+func (progress Progress) IsStarted() bool { return progress.Label != "" }
+
 // ImportStage is where an import stands.
 type ImportStage string
 
@@ -186,6 +206,41 @@ type ImportRequest struct {
 	Statements      []string
 	Running         bool
 	Written         int
+	// How far the write of the rows has come.
+	Progress Progress
+}
+
+// DumpMode is what the card of a dump file does.
+type DumpMode string
+
+const (
+	// DumpWrite writes the tables to a file.
+	DumpWrite DumpMode = "dump"
+	// DumpRestore runs the statements of a file.
+	DumpRestore DumpMode = "restore"
+)
+
+// DumpStage is where a dump or a restore stands.
+type DumpStage string
+
+const (
+	// DumpPick is the stage that picks the file out of a directory.
+	DumpPick DumpStage = "pick"
+	// DumpForm is the stage that asks for the file and the settings.
+	DumpForm DumpStage = "form"
+)
+
+// DumpRequest is the dump or the restore the form is building.
+type DumpRequest struct {
+	Mode  DumpMode
+	Stage DumpStage
+	Path  string
+	// The title of the card: the schema or the table the dump was opened on.
+	Target  string
+	Options dump.Options
+	Running bool
+	// How far the dump or the restore has come.
+	Progress Progress
 }
 
 // AnswerCommand is a deferred command returned to the UI loop.
@@ -231,9 +286,11 @@ type Overlay struct {
 	// What the form of a chart cell holds.
 	Chart ChartRequest
 	// What the write of the card would do.
-	Plan    writeplan.Plan
-	Export  ExportRequest
-	Import  ImportRequest
+	Plan   writeplan.Plan
+	Export ExportRequest
+	Import ImportRequest
+	// What the form of a dump or of a restore holds.
+	Dump    DumpRequest
 	Answers OverlayAnswers
 
 	// The content height fixed when the dialog opens.
@@ -332,6 +389,9 @@ const (
 	ObjectErDiagram      = "er-diagram"
 	ObjectImportFile     = "import-file"
 	ObjectImportNewTable = "import-new-table"
+	ObjectDumpTable      = "dump-table"
+	ObjectDumpSchema     = "dump-schema"
+	ObjectRestoreFile    = "restore-file"
 	ObjectTruncate       = "truncate"
 	ObjectDropRelation   = "drop-relation"
 	ObjectDropSchema     = "drop-schema"
@@ -357,6 +417,10 @@ var tableActions = []MenuAction{
 	},
 	{
 		ID: ObjectImportFile, Label: "Import a file…", Detail: "a CSV or a JSON file",
+		Icon: cfg.IconTable,
+	},
+	{
+		ID: ObjectDumpTable, Label: "Dump the table…", Detail: "definition and rows as SQL",
 		Icon: cfg.IconTable,
 	},
 	{ID: ObjectAddColumn, Label: "Add column…", Detail: "ALTER TABLE into the editor", Icon: cfg.IconColumn},
@@ -391,6 +455,14 @@ var schemaActions = []MenuAction{
 	{
 		ID: ObjectImportNewTable, Label: "Import a file…", Detail: "into a new table",
 		Icon: cfg.IconTable,
+	},
+	{
+		ID: ObjectDumpSchema, Label: "Dump the schema…", Detail: "every table as SQL",
+		Icon: cfg.IconTable,
+	},
+	{
+		ID: ObjectRestoreFile, Label: "Restore a dump…", Detail: "runs a SQL file",
+		Icon: cfg.IconQuery, Destructive: true,
 	},
 	{
 		ID: ObjectCreateTable, Label: "Create table…", Detail: "into the editor",

@@ -161,10 +161,10 @@ func (model *Model) buildCardKeys(kind app.OverlayKind, scene keyScene) *KeyLine
 	return model.buildKeyLineOf(listCardSpecs(kind, scene), scene)
 }
 
-// listCardSpecs returns the specs of a card. The import card reads a set of its own at each
-// stage.
+// listCardSpecs returns the specs of a card. The import card and the dump card read a set of
+// their own at each stage.
 func listCardSpecs(kind app.OverlayKind, scene keyScene) []keySpec {
-	if kind == app.OverlayImport {
+	if kind == app.OverlayImport || kind == app.OverlayDump {
 		return keyGroups[describeOverlayGroup(scene.overlay)]
 	}
 	return cardKeySpecs[kind]
@@ -346,6 +346,12 @@ const (
 	importReviewGroup = "import-review"
 )
 
+// The names of the key groups of the dump card: the file picker of a restore, and the form.
+const (
+	dumpPickGroup = "dump-pick"
+	dumpFormGroup = "dump"
+)
+
 // The keys of the three stages of an import: the file picker, the form, and the review.
 var (
 	importPickKeySpecs = []keySpec{
@@ -366,6 +372,17 @@ var (
 		keyOf(cfg.ScopeDialog, ActionStepBack, "back to the form"),
 	}
 )
+
+// The keys of the form of a dump and of a restore. The picker of a restore reads the keys of
+// the picker of an import.
+var dumpFormKeySpecs = []keySpec{
+	pairOf(cfg.ScopeDialog, ActionPreviousField, ActionNextField, "field", "").
+		onlyWhen(dumpsTables),
+	pairOf(cfg.ScopeDialog, ActionPreviousValue, ActionNextValue, "change", "").
+		onlyWhen(dumpsTables),
+	keyOf(cfg.ScopeDialog, ActionApplyStep, "").withLabel(describeDumpStepOf),
+	keyOf(cfg.ScopeDialog, ActionClose, "cancel"),
+}
 
 // The keys of the two screens that have no connection: the picker of the profiles, and the
 // field the password is typed into.
@@ -490,6 +507,15 @@ func describeImportStepOf(scene keyScene) string {
 
 func describeImportRunOf(scene keyScene) string {
 	return describeImportRun(scene.overlay.Import)
+}
+
+func describeDumpStepOf(scene keyScene) string {
+	return describeDumpStep(scene.overlay)
+}
+
+// dumpsTables is true for the card of a dump, which has rows a restore has not.
+func dumpsTables(scene keyScene) bool {
+	return scene.overlay.Dump.Mode == app.DumpWrite
 }
 
 func asksToRun(scene keyScene) bool {
@@ -627,6 +653,8 @@ var keyGroups = func() map[string][]keySpec {
 		importPickGroup:   importPickKeySpecs,
 		importFormGroup:   importFormKeySpecs,
 		importReviewGroup: importReviewKeySpecs,
+		dumpPickGroup:     importPickKeySpecs,
+		dumpFormGroup:     dumpFormKeySpecs,
 	}
 	for kind, specs := range cardKeySpecs {
 		groups[string(kind)] = specs
@@ -670,9 +698,15 @@ func ListDialogNames() []string {
 	return names
 }
 
-// describeOverlayGroup returns the name of the key group of this card. The import card reads
-// a set of its own at each stage, so each stage is a group.
+// describeOverlayGroup returns the name of the key group of this card. The import card and
+// the dump card read a set of their own at each stage, so each stage is a group.
 func describeOverlayGroup(overlay app.Overlay) string {
+	if overlay.Kind == app.OverlayDump {
+		if overlay.Dump.Stage == app.DumpPick {
+			return dumpPickGroup
+		}
+		return dumpFormGroup
+	}
 	if overlay.Kind != app.OverlayImport {
 		return string(overlay.Kind)
 	}

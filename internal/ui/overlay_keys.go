@@ -12,6 +12,7 @@ import (
 	"github.com/turanmahmudov/masume/internal/cfg"
 	"github.com/turanmahmudov/masume/internal/core"
 	"github.com/turanmahmudov/masume/internal/db"
+	"github.com/turanmahmudov/masume/internal/dump"
 	"github.com/turanmahmudov/masume/internal/hist"
 	"github.com/turanmahmudov/masume/internal/present"
 	"github.com/turanmahmudov/masume/internal/query/build"
@@ -25,11 +26,10 @@ func (model *Model) readOverlayKey(
 	overlay := &connection.Overlay
 	tab := connection.Active()
 
-	// The picker of an import reads every key of its own stage, so its own list keys
-	// work as they do everywhere else it is used.
-	if overlay.Kind == app.OverlayImport && overlay.Import.Stage == app.ImportPick &&
-		key.Code != tea.KeyEscape {
-		if held, command, taken := model.readImportPickerKey(*overlay, key); taken {
+	// The picker of a card reads every key of its own stage, so its own list keys work as
+	// they do everywhere else it is used.
+	if picksFile(*overlay) && key.Code != tea.KeyEscape {
+		if held, command, taken := model.readFilePickerKey(*overlay, key); taken {
 			return held, command
 		}
 	}
@@ -87,6 +87,8 @@ func stepOverlayField(model *Model, tab *app.Tab, overlay *app.Overlay, step int
 		StepChartField(overlay, step)
 	case app.OverlayExport:
 		StepExportField(overlay, step)
+	case app.OverlayDump:
+		StepDumpField(overlay, step)
 	default:
 		return false
 	}
@@ -109,6 +111,12 @@ func stepOverlayValue(model *Model, tab *app.Tab, overlay *app.Overlay, step int
 			return false
 		}
 		StepExportChoice(overlay, step)
+	case app.OverlayDump:
+		fields := BuildDumpFields(*overlay)
+		if overlay.Field >= len(fields) || len(fields[overlay.Field].Choices) == 0 {
+			return false
+		}
+		StepDumpChoice(overlay, step)
 	default:
 		return false
 	}
@@ -125,14 +133,15 @@ var pickerKeyOfAction = map[ActionID]rune{
 	ActionChooseRow:      tea.KeyEnter,
 }
 
-// readImportPickerKey hands a press to the file picker of an import. A press bound to one of
-// the keys of the picker reaches it as that key.
-func (model *Model) readImportPickerKey(
+// readFilePickerKey hands a press to the file picker of a card. A press bound to one of the
+// keys of the picker reaches it as that key.
+func (model *Model) readFilePickerKey(
 	overlay app.Overlay, key tea.Key,
 ) (tea.Model, tea.Cmd, bool) {
 	held := key
 	if match, matched := model.keymap.MatchOnly(key,
-		FindDialogActions(importPickGroup), cfg.ScopeDialog, cfg.ScopeList); matched {
+		FindDialogActions(describeOverlayGroup(overlay)), cfg.ScopeDialog,
+		cfg.ScopeList); matched {
 		if code, known := pickerKeyOfAction[match.Action]; known {
 			held = tea.Key{Code: code}
 		}
@@ -148,7 +157,8 @@ func takesListKeys(overlay app.Overlay) bool {
 	case app.OverlayCellEdit:
 		// A cell picked from a list is a list; a cell written into is a field.
 		return len(overlay.Cell.Choices) > 0
-	case app.OverlayParameters, app.OverlayExport, app.OverlayImport, app.OverlayPrompt,
+	case app.OverlayParameters, app.OverlayExport, app.OverlayImport, app.OverlayDump,
+		app.OverlayPrompt,
 		app.OverlayChart, app.OverlayChoice, app.OverlayMessage, app.OverlayConfirm,
 		app.OverlayAiChat:
 		return false
@@ -158,9 +168,13 @@ func takesListKeys(overlay app.Overlay) bool {
 
 // cancelOverlay closes what is open without an answer, and puts back what a preview changed.
 func (model *Model) cancelOverlay(connection *app.Connection, overlay *app.Overlay) {
-	// An import that writes now is ended with the card that started it.
+	// An import that writes now is ended with the card that started it, and so is a dump
+	// or a restore.
 	if overlay.Kind == app.OverlayImport {
 		connection.StopImport()
+	}
+	if overlay.Kind == app.OverlayDump {
+		connection.StopDump()
 	}
 	if overlay.Kind == app.OverlayThemePicker && overlay.Body != "" &&
 		overlay.Body != model.styles.Theme.Name {
@@ -691,6 +705,9 @@ func (model *Model) chooseOverlayRow(
 	case app.OverlayImport:
 		return model.stepImport(connection, overlay)
 
+	case app.OverlayDump:
+		return model.stepDump(connection, overlay)
+
 	case app.OverlayHistory:
 		entries := model.filterHistory(*overlay)
 		if overlay.List.Cursor >= len(entries) {
@@ -1165,6 +1182,16 @@ func (model *Model) runObjectAction(
 		return model.openImport(connection, db.TableRef{
 			Schema: row.Node.Schema, Name: "",
 		}, intoNewTable)
+	case app.ObjectDumpTable:
+		table := row.Node.Table
+		return model.openDump(connection, table.Name, dump.Options{
+			Schema: table.Schema, Tables: []db.TableRef{table},
+		})
+	case app.ObjectDumpSchema:
+		return model.openDump(connection, row.Node.Schema,
+			dump.Options{Schema: row.Node.Schema})
+	case app.ObjectRestoreFile:
+		return model.openRestore(connection)
 
 	case app.ObjectTruncate:
 		statement = build.GenerateTruncate(row.Node.Table.Qualified(), dialect)
@@ -1276,21 +1303,11 @@ func (model *Model) readOverlayField(
 	case tea.KeyBackspace:
 		buffer.DeleteBackward()
 		model.resetOverlayCursor(connection, overlay)
-		if overlay.Kind == app.OverlayExport {
-			ReadExportField(overlay, buffer.Text)
-		}
-		if overlay.Kind == app.OverlayImport {
-			ReadImportField(overlay, buffer.Text)
-		}
+		readFormField(overlay, buffer.Text)
 		return model, nil
 	case tea.KeyDelete:
 		buffer.DeleteForward()
-		if overlay.Kind == app.OverlayExport {
-			ReadExportField(overlay, buffer.Text)
-		}
-		if overlay.Kind == app.OverlayImport {
-			ReadImportField(overlay, buffer.Text)
-		}
+		readFormField(overlay, buffer.Text)
 		return model, nil
 	case tea.KeyLeft:
 		buffer.MoveCaret(-1, false)
@@ -1330,13 +1347,20 @@ func (model *Model) readOverlayField(
 		buffer.Insert(key.Text)
 		model.resetOverlayCursor(connection, overlay)
 	}
-	if overlay.Kind == app.OverlayExport {
-		ReadExportField(overlay, buffer.Text)
-	}
-	if overlay.Kind == app.OverlayImport {
-		ReadImportField(overlay, buffer.Text)
-	}
+	readFormField(overlay, buffer.Text)
 	return model, nil
+}
+
+// readFormField writes what the field under the cursor holds back into the card.
+func readFormField(overlay *app.Overlay, written string) {
+	switch overlay.Kind {
+	case app.OverlayExport:
+		ReadExportField(overlay, written)
+	case app.OverlayImport:
+		ReadImportField(overlay, written)
+	case app.OverlayDump:
+		ReadDumpField(overlay, written)
+	}
 }
 
 // takesLineBreaks is true for a card whose field holds more than one line. A field of one
@@ -1361,12 +1385,7 @@ func (model *Model) pasteIntoOverlay(
 	}
 	overlay.Draft.Insert(written)
 	model.resetOverlayCursor(connection, overlay)
-	if overlay.Kind == app.OverlayExport {
-		ReadExportField(overlay, overlay.Draft.Text)
-	}
-	if overlay.Kind == app.OverlayImport {
-		ReadImportField(overlay, overlay.Draft.Text)
-	}
+	readFormField(overlay, overlay.Draft.Text)
 	return model, nil
 }
 
